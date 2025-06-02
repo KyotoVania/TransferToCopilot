@@ -43,6 +43,13 @@ public abstract class Unit : MonoBehaviour, ITileReservationObserver
         public float DurationRemaining;
         public Coroutine ExpiryCoroutine;
     }
+    public bool IsSpawning { get; private set; } = true;
+    public void SetSpawningState(bool isCurrentlySpawning)
+    {
+        IsSpawning = isCurrentlySpawning;
+      
+    }
+
     public int Health { get; protected set; }
     public int MovementDelay => unitStats?.MovementDelay ?? 1;
     public virtual int Attack
@@ -248,7 +255,11 @@ public abstract class Unit : MonoBehaviour, ITileReservationObserver
         if (IsMoving || currentState == UnitState.Capturing) return;
         if (!TargetPosition.HasValue) { SetState(UnitState.Idle); return; }
         if (IsAtTargetLocation()) { SetState(UnitState.Idle); return; }
-
+        if (IsSpawning)
+        {
+            if (debugUnitMovement) Debug.Log($"[{name}] HandleMovementOnBeat: Skipped due to IsSpawning = true.");
+            return;
+        }
         _beatCounter++;
         if (_beatCounter < MovementDelay) return;
         _beatCounter = 0;
