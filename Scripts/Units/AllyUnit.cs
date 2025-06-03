@@ -228,9 +228,14 @@ public class AllyUnit : Unit, IBannerObserver
 
         // Si l'objectif initial n'a pas encore été fixé pour cette unité (durant sa vie actuelle)
         if (!hasInitialObjectiveBeenSetThisLife)
-        {
-            SetInitialObjectiveFromPosition(newBannerPosition);
-        }
+    	{
+        	LogAlly($"Définition de l'objectif initial à la position de la bannière: ({newBannerPosition.x},{newBannerPosition.y})");
+        	SetInitialObjectiveFromPosition(newBannerPosition);
+    	}
+    	else
+		{
+        	LogAlly($"Bannière déplacée vers ({newBannerPosition.x},{newBannerPosition.y}) mais objectif déjà fixé - ignoré.");
+    	}
         // Si l'objectif initial a déjà été fixé, le Behavior Graph décidera s'il doit
         // abandonner l'objectif initial pour suivre la nouvelle position de la bannière.
         // Pour l'instant, FindSmartStepNode utilise toujours FinalDestinationPosition,
