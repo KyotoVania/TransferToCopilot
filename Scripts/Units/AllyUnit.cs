@@ -44,6 +44,9 @@ public class AllyUnit : Unit, IBannerObserver
     //FEEDBACKS
     private UnitSpawnFeedback spawnFeedbackPlayer; // Référence au composant de feedback
 
+	  // Variables pour le système de réserves
+    private PlayerBuilding currentReserveBuilding;
+    private Tile currentReserveTile;
 
     protected override IEnumerator Start()
     {
@@ -509,15 +512,14 @@ public class AllyUnit : Unit, IBannerObserver
     }
 
 
-// De même pour StopCapturing() dans AllyUnit.cs
-public override void StopCapturing()
-{
-    if (currentState == UnitState.Capturing || buildingBeingCaptured != null)
-    {
-        if (enableVerboseLogging) Debug.Log($"[{name}] StopCapturing called. Was capturing: '{(buildingBeingCaptured != null ? buildingBeingCaptured.name : "N/A")}'");
+	public override void StopCapturing()
+	{
+    	if (currentState == UnitState.Capturing || buildingBeingCaptured != null)
+    	{
+        	if (enableVerboseLogging) Debug.Log($"[{name}] StopCapturing called. Was capturing: '{(buildingBeingCaptured != null ? buildingBeingCaptured.name : "N/A")}'");
 
-        Building buildingWeWereCapturing = this.buildingBeingCaptured;
-
+	        Building buildingWeWereCapturing = this.buildingBeingCaptured;
+	
         if (buildingWeWereCapturing != null)
         {
             // Important: S'assurer que buildingWeWereCapturing est bien un NeutralBuilding avant de caster
@@ -527,7 +529,7 @@ public override void StopCapturing()
                 nb.StopCapturing(this); // Notifier le bâtiment
             }
             else
-            {
+    	        {
                 Debug.LogWarning($"[{name}] Attempted to stop capturing a building '{buildingWeWereCapturing.name}' that is not a NeutralBuilding type.");
             }
         }
@@ -547,14 +549,8 @@ public override void StopCapturing()
         }
         // isInteractingWithBuilding = false; // Laisser le graph gérer cela aussi
 
-    }
-}
-
-    public override void OnMovementComplete()
-    {
-        base.OnMovementComplete();
-        if (enableVerboseLogging) Debug.Log($"[{name}] Movement Complete - Graph will now check interactions.");
-    }
+    	}
+	}
 
     public override void OnDestroy()
     {
@@ -568,9 +564,42 @@ public override void StopCapturing()
         }
 
         UnsubscribeFromInitialBuildingEvents(); // Ensure cleanup
+        ClearCurrentReservePosition();
         initialObjectiveBuildingInstance = null;
         base.OnDestroy();
 
     }
+	
+	public void SetReservePosition(PlayerBuilding building, Tile reserveTile)
+    {
+        // Nettoyer l'ancienne position de réserve si elle existe
+        ClearCurrentReservePosition();
+        
+        currentReserveBuilding = building;
+        currentReserveTile = reserveTile;
+    }
 
+    public void ClearCurrentReservePosition()
+    {
+        if (currentReserveBuilding != null && currentReserveTile != null)
+        {
+            currentReserveBuilding.ReleaseReserveTile(currentReserveTile, this);
+        }
+        
+        currentReserveBuilding = null;
+        currentReserveTile = null;
+    }
+
+    // Override de OnMovementComplete pour gérer les réserves
+    public override void OnMovementComplete()
+    {
+        base.OnMovementComplete();
+        
+        // Si on arrive sur une case de réserve, s'assurer qu'elle est bien assignée
+        if (currentReserveTile != null && occupiedTile == currentReserveTile)
+        {
+            if (enableVerboseLogging) 
+                Debug.Log($"[{name}] Arrived at reserve position ({currentReserveTile.column},{currentReserveTile.row})");
+        }
+    }
 }

@@ -40,6 +40,19 @@ public class PlayerBuilding : Building
     // Audio source for SFX
     private AudioSource audioSource;
 
+    // NOUVEAU: Système de cases de réserves
+    [Header("Reserve System")]
+    [Tooltip("Tiles linked to this building where units can be positioned in defensive mode")]
+    [SerializeField] private List<Tile> reserveTiles = new List<Tile>();
+    
+    [Tooltip("Visual indicator for reserve tiles in scene view")]
+    [SerializeField] private bool showReserveTilesGizmos = true;
+    
+    [SerializeField] private Color reserveTileGizmoColor = Color.cyan;
+
+    // Dictionnaire pour tracker quelles cases de réserves sont occupées
+    private Dictionary<Tile, Unit> occupiedReserveTiles = new Dictionary<Tile, Unit>();
+
     private void OnEnable()
     {
         RhythmManager.OnBeat += HandleBeat;
@@ -75,8 +88,127 @@ public class PlayerBuilding : Building
         // Call base implementation to handle tile attachment, etc.
         yield return StartCoroutine(base.Start());
 
-        Debug.Log($"[PLAYER BUILDING] {gameObject.name} initialized as {Team} team!");
+        // Initialize reserve tiles system
+        InitializeReserveTiles();
+
+        Debug.Log($"[ALLY BUILDING] {gameObject.name} initialized as {Team} team with {reserveTiles.Count} reserve tiles!");
     }
+
+    #region Reserve Tiles System
+
+    private void InitializeReserveTiles()
+    {
+        // Nettoyer le dictionnaire au démarrage
+        occupiedReserveTiles.Clear();
+        
+        // Initialiser le dictionnaire avec toutes les cases de réserves comme libres
+        foreach (Tile tile in reserveTiles)
+        {
+            if (tile != null)
+            {
+                occupiedReserveTiles[tile] = null;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Trouve une case de réserve libre pour une unité
+    /// </summary>
+    /// <returns>Une case de réserve libre, ou null si aucune n'est disponible</returns>
+    public Tile GetAvailableReserveTile()
+    {
+        foreach (Tile tile in reserveTiles)
+        {
+            if (tile != null && IsReserveTileAvailable(tile))
+            {
+                return tile;
+            }
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// Vérifie si une case de réserve est disponible
+    /// </summary>
+    public bool IsReserveTileAvailable(Tile tile)
+    {
+        if (tile == null || !reserveTiles.Contains(tile))
+            return false;
+
+        // Vérifier si la tile n'est pas occupée par une unité et n'est pas dans notre dictionnaire comme occupée
+        return !tile.IsOccupied && (occupiedReserveTiles.ContainsKey(tile) && occupiedReserveTiles[tile] == null);
+    }
+
+    /// <summary>
+    /// Assigne une unité à une case de réserve
+    /// </summary>
+    public bool AssignUnitToReserveTile(Unit unit, Tile reserveTile)
+    {
+        if (unit == null || reserveTile == null || !reserveTiles.Contains(reserveTile))
+            return false;
+
+        if (!IsReserveTileAvailable(reserveTile))
+            return false;
+
+        occupiedReserveTiles[reserveTile] = unit;
+        return true;
+    }
+
+    /// <summary>
+    /// Libère une case de réserve
+    /// </summary>
+    public void ReleaseReserveTile(Tile reserveTile, Unit unit)
+    {
+        if (reserveTile != null && occupiedReserveTiles.ContainsKey(reserveTile) && occupiedReserveTiles[reserveTile] == unit)
+        {
+            occupiedReserveTiles[reserveTile] = null;
+        }
+    }
+
+    /// <summary>
+    /// Vérifie s'il y a des cases de réserves disponibles
+    /// </summary>
+    public bool HasAvailableReserveTiles()
+    {
+        return GetAvailableReserveTile() != null;
+    }
+
+    /// <summary>
+    /// Retourne toutes les cases de réserves
+    /// </summary>
+    public List<Tile> GetReserveTiles()
+    {
+        return new List<Tile>(reserveTiles);
+    }
+
+    /// <summary>
+    /// Ajoute une case de réserve via script
+    /// </summary>
+    public void AddReserveTile(Tile tile)
+    {
+        if (tile != null && !reserveTiles.Contains(tile))
+        {
+            reserveTiles.Add(tile);
+            occupiedReserveTiles[tile] = null;
+        }
+    }
+
+    /// <summary>
+    /// Supprime une case de réserve
+    /// </summary>
+    public void RemoveReserveTile(Tile tile)
+    {
+        if (tile != null && reserveTiles.Contains(tile))
+        {
+            reserveTiles.Remove(tile);
+            if (occupiedReserveTiles.ContainsKey(tile))
+            {
+                occupiedReserveTiles.Remove(tile);
+            }
+        }
+    }
+
+    #endregion
 
     private void HandleBeat()
     {
@@ -218,7 +350,7 @@ public class PlayerBuilding : Building
 
         if (debugBuildingCombat)
         {
-            Debug.Log($"[PLAYER BUILDING] {gameObject.name} repaired for {actualRepair}. Health: {CurrentHealth}/{MaxHealth}");
+            Debug.Log($"[ALLY BUILDING] {gameObject.name} repaired for {actualRepair}. Health: {CurrentHealth}/{MaxHealth}");
         }
 
         // Play repair effects
@@ -269,6 +401,26 @@ public class PlayerBuilding : Building
                     Color tintedColor = Color.Lerp(originalColor, Color.blue, 0.3f);
                     material.color = tintedColor;
                 }
+            }
+        }
+    }
+
+    // Gizmos pour visualiser les cases de réserves dans l'éditeur
+    private void OnDrawGizmosSelected()
+    {
+        if (!showReserveTilesGizmos || reserveTiles == null) return;
+
+        Gizmos.color = reserveTileGizmoColor;
+        
+        foreach (Tile tile in reserveTiles)
+        {
+            if (tile != null)
+            {
+                // Dessiner une sphère wireframe pour chaque case de réserve
+                Gizmos.DrawWireSphere(tile.transform.position + Vector3.up * 0.5f, 0.3f);
+                
+                // Dessiner une ligne entre le bâtiment et la case de réserve
+                Gizmos.DrawLine(transform.position + Vector3.up, tile.transform.position + Vector3.up * 0.5f);
             }
         }
     }
