@@ -28,67 +28,13 @@ public class UnitSpawnFeedback : MonoBehaviour
     private bool hasPlayedSpawnFeedback = false;
     private Coroutine spawnSequenceCoroutine;
     private Unit _unit; // Référence au composant Unit
+    public System.Action OnSpawnCompleted;
 
     /// <summary>
     /// Déclenche la séquence de spawn
     /// </summary>
-    public void PlaySpawnFeedback()
-    {
-        if (hasPlayedSpawnFeedback)
-        {
-            if (enableDebugLogs)
-                Debug.LogWarning($"[UnitSpawnFeedback] Séquence déjà jouée pour {gameObject.name}");
-            return;
-        }
-
-        if (SyncWithRhythm && RhythmManager.Instance != null)
-        {
-            StartCoroutine(WaitForNextBeatAndPlay());
-        }
-        else if (DelayBeforeSpawn > 0f)
-        {
-            StartCoroutine(PlayAfterDelay());
-        }
-        else
-        {
-            StartSpawnSequence();
-        }
-    }
-
-    private IEnumerator WaitForNextBeatAndPlay()
-    {
-        bool beatReceived = false;
-        RhythmManager.BeatAction onBeat = () => beatReceived = true;
-        RhythmManager.OnBeat += onBeat;
-        
-        yield return new WaitUntil(() => beatReceived);
-        
-        RhythmManager.OnBeat -= onBeat;
-        StartSpawnSequence();
-    }
-
-    private IEnumerator PlayAfterDelay()
-    {
-        yield return new WaitForSeconds(DelayBeforeSpawn);
-        StartSpawnSequence();
-    }
-
-    private void StartSpawnSequence()
-    {
-        if (spawnSequenceCoroutine != null)
-        {
-            StopCoroutine(spawnSequenceCoroutine);
-        }
-        
-        spawnSequenceCoroutine = StartCoroutine(ExecuteSpawnSequence());
-    }
-
-    /// <summary>
-    /// Séquence simplifiée : CHARGE seulement
-    /// </summary>
     private IEnumerator ExecuteSpawnSequence()
     {
-        // 🔥 CORRECTION : Récupérer la référence Unit au début
         if (_unit == null)
         {
             _unit = GetComponent<Unit>();
@@ -100,7 +46,7 @@ public class UnitSpawnFeedback : MonoBehaviour
 
         if (_unit != null)
         {
-            _unit.SetSpawningState(true); // Notifier que le spawn COMMENCE
+            _unit.SetSpawningState(true);
         }
         
         hasPlayedSpawnFeedback = true;
@@ -121,11 +67,33 @@ public class UnitSpawnFeedback : MonoBehaviour
 
         if (_unit != null)
         {
-            _unit.SetSpawningState(false); // Notifier que le spawn est TERMINÉ
+            _unit.SetSpawningState(false);
             if (enableDebugLogs) Debug.Log($"[UnitSpawnFeedback] {gameObject.name} _unit.IsSpawning set to false.");
         }
 
+        // 🔥 NOUVEAU: Notifier AllyUnit que c'est terminé
+        OnSpawnCompleted?.Invoke();
+        
         spawnSequenceCoroutine = null;
+    }
+
+    /// <summary>
+    /// Déclenche la séquence de feedback de spawn (public pour AllyUnit)
+    /// </summary>
+    public void PlaySpawnFeedback()
+    {
+        if (hasPlayedSpawnFeedback)
+        {
+            if (enableDebugLogs)
+                Debug.LogWarning($"[UnitSpawnFeedback] Séquence déjà jouée pour {gameObject.name}");
+            return;
+        }
+
+        if (spawnSequenceCoroutine != null)
+        {
+            StopCoroutine(spawnSequenceCoroutine);
+        }
+        spawnSequenceCoroutine = StartCoroutine(ExecuteSpawnSequence());
     }
 
     /// <summary>
@@ -141,7 +109,11 @@ public class UnitSpawnFeedback : MonoBehaviour
 
         ChargeFeedbacks?.StopFeedbacks();
     }
-
+    private void OnDestroy()
+    {
+        StopSpawnFeedback();
+        OnSpawnCompleted = null; // Cleanup des événements
+    }
     /// <summary>
     /// Remet à zéro pour réutilisation
     /// </summary>
@@ -191,38 +163,7 @@ public class UnitSpawnFeedback : MonoBehaviour
         }
     }
 
-    private void OnDestroy()
-    {
-        StopSpawnFeedback();
-    }
+    
 
-    #if UNITY_EDITOR
-    [Header("Editor Tools")]
-    [Space(10)]
-    [SerializeField] private bool testCharge = false;
-    [SerializeField] private bool checkUnitLink = false;
-
-    private void OnValidate()
-    {
-        if (!Application.isPlaying) return;
-
-        if (testCharge)
-        {
-            testCharge = false;
-            ResetForReuse();
-            PlaySpawnFeedback();
-        }
-        else if (checkUnitLink)
-        {
-            checkUnitLink = false;
-            
-            // Vérifier le lien Unit
-            var unit = GetComponent<Unit>();
-            Debug.Log($"[UnitSpawnFeedback] Vérification Unit sur {gameObject.name}:");
-            Debug.Log($"  Unit trouvé: {(unit != null ? "✅ OUI" : "❌ NON")}");
-            Debug.Log($"  _unit assigné: {(_unit != null ? "✅ OUI" : "❌ NON")}");
-            Debug.Log($"  Même référence: {(unit == _unit ? "✅ OUI" : "❌ NON")}");
-        }
-    }
-    #endif
+   
 }

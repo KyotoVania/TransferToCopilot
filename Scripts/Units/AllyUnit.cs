@@ -47,68 +47,130 @@ public class AllyUnit : Unit, IBannerObserver
 
     protected override IEnumerator Start()
     {
-        yield return StartCoroutine(base.Start()); // base.Start() gère l'attachement à la tuile, etc.
+        yield return StartCoroutine(base.Start()); // Gère l'attachement à la tuile, etc.
 
-        // Enregistrement auprès du AllyUnitRegistry APRÈS que l'unité soit initialisée et potentiellement attachée
+        // Récupérer les composants nécessaires
+        if (m_Agent == null) m_Agent = GetComponent<BehaviorGraphAgent>();
+        spawnFeedbackPlayer = GetComponent<UnitSpawnFeedback>(); // Assurez-vous que cette variable est déclarée dans la classe
+
+        if (m_Agent == null)
+        {
+            Debug.LogError($"[{name}] BehaviorGraphAgent component not found on {gameObject.name}! AI will not run.", gameObject);
+            SetSpawningState(false); // Assurer que l'unité n'est pas bloquée si l'IA ne peut pas démarrer
+            // Initialisation minimale sans IA si nécessaire ici
+            yield break;
+        }
+
+        // --- DÉBUT DE LA MODIFICATION ---
+
+        if (spawnFeedbackPlayer != null)
+        {
+            LogAlly($"SpawnFeedbackPlayer trouvé. Désactivation de l'agent '{m_Agent.name}' pour la séquence de spawn.");
+            m_Agent.enabled = false; // Désactiver l'agent AVANT de lancer le feedback
+
+            bool localSpawnCompletedSignal = false; // Flag local pour la coroutine Start
+            spawnFeedbackPlayer.OnSpawnCompleted += () => {
+                localSpawnCompletedSignal = true;
+                LogAlly("Signal OnSpawnCompleted reçu de UnitSpawnFeedback.");
+            };
+
+            LogAlly("Lancement de PlaySpawnFeedback...");
+            spawnFeedbackPlayer.PlaySpawnFeedback(); // Lance la séquence de feedback
+
+            LogAlly("En attente de la fin de la séquence de spawn (WaitUntil)...");
+            yield return new WaitUntil(() => localSpawnCompletedSignal); // Attend que le feedback soit terminé
+            LogAlly("Fin de la séquence de spawn signalée.");
+            // UnitSpawnFeedback devrait déjà avoir appelé SetSpawningState(false)
+        }
+        else
+        {
+            LogAlly("UnitSpawnFeedback non trouvé. Passage direct à l'initialisation de l'IA.", true); // isWarning = true
+            SetSpawningState(false); // Pas de feedback, donc pas en spawn
+        }
+
+        // Réactiver l'agent et initialiser le Blackboard MAINTENANT que le spawn est terminé (ou skippé)
+        LogAlly($"Réactivation de l'agent '{m_Agent.name}'.");
+        m_Agent.enabled = true;
+
+        // C'est SEULEMENT MAINTENANT que l'on initialise le Blackboard pour l'IA
+        if (m_Agent.BlackboardReference == null)
+        {
+            Debug.LogError($"[{name}] BlackboardReference est null sur BehaviorGraphAgent APRES l'avoir réactivé! AI pourrait mal fonctionner.", gameObject);
+            // Pas de yield break ici, car le reste de l'initialisation pourrait être utile
+        }
+        else
+        {
+            LogAlly("Mise en cache des variables Blackboard...");
+            CacheBlackboardVariables(); // Doit être appelé quand l'agent est actif
+            InitializeBlackboardFlags(); // Initialise les flags du BB
+        }
+
+        // --- FIN DE LA MODIFICATION ---
+
+        // Le reste de votre logique Start (enregistrement, abonnement bannière, etc.)
         if (AllyUnitRegistry.Instance != null)
         {
             AllyUnitRegistry.Instance.RegisterUnit(this);
-            if (enableVerboseLogging) Debug.Log($"[{name}] s'est enregistré auprès de AllyUnitRegistry.");
+            LogAlly($"Enregistré auprès de AllyUnitRegistry.");
         }
         else
         {
             Debug.LogWarning($"[{name}] AllyUnitRegistry.Instance non trouvé. Impossible de s'enregistrer.");
         }
-        // S'assurer que m_Agent est assigné (crucial avant d'accéder au Blackboard)
-        if (m_Agent == null) m_Agent = GetComponent<BehaviorGraphAgent>();
-        if (m_Agent == null)
-        {
-            Debug.LogError($"[{name}] BehaviorGraphAgent component not found on {gameObject.name}!", gameObject);
-            yield break; // Arrêter si l'agent n'est pas là
-        }
-        if (m_Agent.BlackboardReference == null)
-        {
-            Debug.LogError($"[{name}] BlackboardReference is null on BehaviorGraphAgent for {gameObject.name}!", gameObject);
-            yield break; // Arrêter si le blackboard n'est pas là
-        }
 
-        // Mettre en cache toutes les variables Blackboard nécessaires
-        CacheBlackboardVariables();
-
-        // Initialiser les flags du Blackboard au démarrage de l'unité
-        if (bbHasBannerTarget != null) bbHasBannerTarget.Value = false;
-        if (bbHasInitialObjectiveSet != null) bbHasInitialObjectiveSet.Value = false;
-        if (bbIsAttacking != null) bbIsAttacking.Value = false;
-        if (bbIsCapturing != null) bbIsCapturing.Value = false;
-        if (bbIsObjectiveCompleted != null) bbIsObjectiveCompleted.Value = false;
-        // Laisser FinalDestinationPosition non initialisée ici, ou la mettre à une position "nulle"
-        // si nécessaire (par exemple, (-1,-1) si 0,0 est une position valide).
-        // Elle sera définie par SetInitialObjectiveFromPosition ou plus tard par le graph.
-
-        // S'abonner aux événements de la bannière
         if (BannerController.Exists)
         {
             BannerController.Instance.AddObserver(this);
-            // Si une bannière est déjà active au spawn de l'unité, la prendre comme objectif initial
+            LogAlly("Abonné à BannerController.");
             if (BannerController.Instance.HasActiveBanner && !hasInitialObjectiveBeenSetThisLife)
+            {
+                LogAlly("Bannière active détectée au spawn, définition de l'objectif initial.");
                 SetInitialObjectiveFromPosition(BannerController.Instance.CurrentBannerPosition);
-        }
-        spawnFeedbackPlayer = GetComponent<UnitSpawnFeedback>();
-
-        if (spawnFeedbackPlayer != null)
-        {
-            spawnFeedbackPlayer.PlaySpawnFeedback();
+            }
         }
         else
         {
-            // Optionnel : Log si le composant de feedback est attendu mais non trouvé
-            Debug.LogWarning($"[{name}] UnitSpawnFeedback component non trouvé. Aucun feedback de spawn ne sera joué.");
+            LogAlly("BannerController n'existe pas. Pas d'abonnement ni d'objectif initial via bannière.", true);
         }
 
-        // Appeler la méthode Start de la classe de base (Unit)
-        // Ceci gère l'attachement à la tuile et l'abonnement à RhythmManager.OnBeat
-        //yield return StartCoroutine(base.Start()); // base.Start() devrait appeler OnRhythmBeatInternal qui appelle OnRhythmBeat
+        LogAlly("Initialisation de AllyUnit terminée. L'IA devrait prendre le relais.");
     }
+    
+    private void InitializeBlackboardFlags()
+    {
+        if(m_Agent == null || m_Agent.BlackboardReference == null) {
+            LogAlly("Impossible d'initialiser les flags du Blackboard, agent ou référence null.", true);
+            return;
+        }
+        LogAlly("Initialisation des flags du Blackboard...");
+        if (bbHasBannerTarget != null) bbHasBannerTarget.Value = false;
+        else LogAlly("bbHasBannerTarget non mis en cache.", true);
+
+        if (bbHasInitialObjectiveSet != null) bbHasInitialObjectiveSet.Value = false;
+        else LogAlly("bbHasInitialObjectiveSet non mis en cache.", true);
+
+        if (bbIsAttacking != null) bbIsAttacking.Value = false;
+        else LogAlly("bbIsAttacking non mis en cache.", true);
+
+        if (bbIsCapturing != null) bbIsCapturing.Value = false;
+        else LogAlly("bbIsCapturing non mis en cache.", true);
+
+        if (bbIsObjectiveCompleted != null) bbIsObjectiveCompleted.Value = false;
+        else LogAlly("bbIsObjectiveCompleted non mis en cache.", true);
+        LogAlly("Flags du Blackboard initialisés.");
+    }
+
+    // Méthode utilitaire pour les logs
+    private void LogAlly(string message, bool isWarning = false)
+    {
+        if (enableVerboseLogging || isWarning)
+        {
+            string logMessage = $"[{name}] {message}";
+            if (isWarning) Debug.LogWarning(logMessage, gameObject);
+            else Debug.Log(logMessage, gameObject);
+        }
+    }
+
 
     private void CacheBlackboardVariables()
     {
