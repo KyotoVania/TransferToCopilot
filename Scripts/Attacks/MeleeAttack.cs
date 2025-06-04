@@ -94,9 +94,8 @@ public class MeleeAttack : MonoBehaviour, IAttack
             else if (targetBuilding != null)
             {
                 if (showAttackLogs) Debug.Log($"[{attacker.name}] MeleeAttack: Applying {damage} damage to Building {targetBuilding.name}.");
-                targetBuilding.TakeDamage(damage); //
-                // De même pour OnUnitAttackedBuilding
-                // Unit.OnUnitAttackedBuilding?.Invoke(attacker.GetComponent<Unit>(), targetBuilding, damage);
+                targetBuilding.TakeDamage(damage, attacker.GetComponent<Unit>()); //
+               
             }
             else
             {

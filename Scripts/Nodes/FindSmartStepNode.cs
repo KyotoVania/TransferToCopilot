@@ -21,6 +21,7 @@ public partial class FindSmartStepNode : Unity.Behavior.Action
     private const string CURRENT_PATH_VAR = "CurrentPath";
     private const string MOVEMENT_TARGET_POS_VAR = "MovementTargetPosition";
     private const string PATHFINDING_FAILED_VAR = "PathfindingFailed";
+    private const string SELECTED_ACTION_TYPE_VAR = "SelectedActionType";
 
 
     // --- Cache pour les variables du Blackboard ---
@@ -29,6 +30,7 @@ public partial class FindSmartStepNode : Unity.Behavior.Action
     private BlackboardVariable<List<Vector2Int>> bbCurrentPath;
     private BlackboardVariable<Vector2Int> bbMovementTargetPosition;
     private BlackboardVariable<bool> bbPathfindingFailed;
+    private BlackboardVariable<AIActionType> bbSelectedActionType; 
 
     private bool blackboardVariablesCached = false;
     private Unit selfUnitInstance;
@@ -39,7 +41,7 @@ public partial class FindSmartStepNode : Unity.Behavior.Action
     [Header("Node Debug Options")] // Pourrait être mis dans une section Odin si vous l'utilisez
     [SerializeField] private bool debugStandableCheckLog = false;
     [SerializeField] private bool debugEngagementTileSearchLog = false;
-
+    [SerializeField] private bool debugAStarStepsLog = false; 
 
     private class PathNode : IComparable<PathNode>
     {
@@ -67,7 +69,7 @@ public partial class FindSmartStepNode : Unity.Behavior.Action
     // Méthode de log améliorée
     private void LogNodeMessage(string message, bool isError = false, bool isVerboseOverride = false)
     {
-        /*
+        
         Unit unitForLog = selfUnitInstance ?? bbSelfUnit?.Value;
         string unitName = unitForLog != null ? unitForLog.name : (GameObject != null ? GameObject.name : "FindSmartStepNode");
         bool enableGeneralVerboseLogging = false;
@@ -81,7 +83,7 @@ public partial class FindSmartStepNode : Unity.Behavior.Action
             if (isError) Debug.LogError($"{logPrefix} {message}", GameObject);
             else Debug.Log($"{logPrefix} {message}", GameObject);
         }
-        */
+        
     }
 
     protected override Status OnStart()
@@ -146,8 +148,10 @@ public partial class FindSmartStepNode : Unity.Behavior.Action
 
         float attackRange = selfUnitInstance.AttackRange;
         LogNodeMessage($"--- Début FindSmartPath depuis ({startTile.column},{startTile.row}) vers entité sur tuile {finalTargetEntityTile.name} ({finalDestCoords.x},{finalDestCoords.y}) avec portée {attackRange} ---", isVerboseOverride: true);
+        AIActionType currentAction = bbSelectedActionType?.Value ?? AIActionType.None; // Lire l'action en cours
+        LogNodeMessage($"Action demandée: {currentAction}. Portée d'attaque unité: {attackRange}.", isVerboseOverride: true);
 
-        List<Vector2Int> path = CalculateAStarPathToEngagement(startTile, finalTargetEntityTile, attackRange);
+        List<Vector2Int> path = CalculateAStarPathToEngagement(startTile, finalTargetEntityTile, attackRange, currentAction);
 
         if (path != null && path.Count > 0)
         {
@@ -170,10 +174,10 @@ public partial class FindSmartStepNode : Unity.Behavior.Action
         }
     }
 
-    private List<Vector2Int> CalculateAStarPathToEngagement(Tile startTile, Tile finalTargetEntityTile, float unitAttackRange)
+    private List<Vector2Int> CalculateAStarPathToEngagement(Tile startTile, Tile finalTargetEntityTile, float unitAttackRange, AIActionType currentAction)
     {
         LogNodeMessage($"CalculateAStarPathToEngagement: start=({startTile.column},{startTile.row}), targetEntityTile=({finalTargetEntityTile.column},{finalTargetEntityTile.row}), range={unitAttackRange}", isVerboseOverride: debugEngagementTileSearchLog);
-        List<Tile> engagementTiles = GetValidEngagementTiles(finalTargetEntityTile, unitAttackRange);
+        List<Tile> engagementTiles = GetValidEngagementTiles(finalTargetEntityTile, unitAttackRange, currentAction);
 
         if (engagementTiles.Count == 0)
         {
@@ -233,16 +237,17 @@ public partial class FindSmartStepNode : Unity.Behavior.Action
             foreach (Tile neighborTile in currentNode.TileNode.Neighbors)
             {
                 if (neighborTile == null || closedSet.Contains(neighborTile)) continue;
+				bool isStandable = IsTileStandableForUnit(neighborTile, selfUnitInstance);
+                bool isAnEngagementTile = engagementTiles.Contains(neighborTile);
 
-                if (!IsTileStandableForUnit(neighborTile, selfUnitInstance) && !engagementTiles.Contains(neighborTile)) // Si c'est une tuile d'engagement, on peut vouloir s'y arrêter même si on ne peut pas la "traverser" ensuite.
+               	if (!isStandable && !isAnEngagementTile) // Ne peut pas traverser une case non praticable SAUF si c'est la destination finale d'engagement.
                 {
-                    //  LogNodeMessage($"Voisin ({neighborTile.column},{neighborTile.row}) non praticable pour A* pathing (sauf si c'est une tuile d'engagement finale).", false, debugAStarStepLog);
+                     if (debugAStarStepsLog) LogNodeMessage($"A* Skip: Voisin ({neighborTile.column},{neighborTile.row}) non praticable et pas une tuile d'engagement.", isVerboseOverride: true);
                     continue;
                 }
 
-
-                PathNode neighborPathNode = GetPathNode(neighborTile, allNodes);
-                float tentativeGCost = currentNode.GCost + 1; // Coût de 1 par tuile
+                 PathNode neighborPathNode = GetPathNode(neighborTile, allNodes);
+                float tentativeGCost = currentNode.GCost + 1; 
 
                 if (tentativeGCost < neighborPathNode.GCost)
                 {
@@ -252,6 +257,7 @@ public partial class FindSmartStepNode : Unity.Behavior.Action
                     if (!openList.Contains(neighborPathNode))
                     {
                         openList.Add(neighborPathNode);
+                         if (debugAStarStepsLog) LogNodeMessage($"A* Add/Update: Voisin ({neighborPathNode.Coords.x},{neighborPathNode.Coords.y}) ajouté/mis à jour dans openList. New F={neighborPathNode.FCost}", isVerboseOverride: true);
                     }
                 }
             }
@@ -271,12 +277,37 @@ public partial class FindSmartStepNode : Unity.Behavior.Action
 
 
     // AMÉLIORATION : Logique plus claire pour trouver les tuiles d'où attaquer.
-    private List<Tile> GetValidEngagementTiles(Tile actualTargetEntityTile, float unitAttackRange)
+    private List<Tile> GetValidEngagementTiles(Tile actualTargetEntityTile, float unitAttackRange, AIActionType currentAction)
     {
         List<Tile> validStandpoints = new List<Tile>();
         if (actualTargetEntityTile == null || gridManager == null || selfUnitInstance == null) {
             LogNodeMessage("GetValidEngagementTiles: Préconditions non remplies (cible, grille ou unité null).", true, true);
             return validStandpoints;
+        }
+		 if (currentAction == AIActionType.MoveToBuilding) // Vous pourriez ajouter un AIActionType.MoveToReserveTile pour plus de clarté
+        {
+             bool isAllyUnit = selfUnitInstance is AllyUnit;
+       		 bool isAllyBuilding = actualTargetEntityTile.currentBuilding is PlayerBuilding;
+        	bool isEnemyBuilding = actualTargetEntityTile.currentBuilding is EnemyBuilding;
+        	bool isNeutralBuilding = actualTargetEntityTile.currentBuilding != null && actualTargetEntityTile.currentBuilding.Team == TeamType.Neutral;
+
+        	bool isDirectStandableDestination = IsTileStandableForUnit(actualTargetEntityTile, selfUnitInstance) &&
+            (actualTargetEntityTile.currentBuilding == null ||
+             (isAllyUnit && (isAllyBuilding || isNeutralBuilding)) ||
+             (!isAllyUnit && (isEnemyBuilding || isNeutralBuilding))) &&
+            (actualTargetEntityTile.currentUnit == null || actualTargetEntityTile.currentUnit == selfUnitInstance);
+
+            if (isDirectStandableDestination)
+            {
+                LogNodeMessage($"GetValidEngagementTiles (Action: {currentAction}): La destination ({actualTargetEntityTile.column},{actualTargetEntityTile.row}) est une cible de mouvement direct. C'est la seule tuile d'engagement.", isVerboseOverride: debugEngagementTileSearchLog || true);
+                validStandpoints.Add(actualTargetEntityTile);
+                return validStandpoints;
+            }
+            else
+            {
+                 LogNodeMessage($"GetValidEngagementTiles (Action: {currentAction}): La destination ({actualTargetEntityTile.column},{actualTargetEntityTile.row}) n'est PAS une cible de mouvement direct (ex: occupée par ennemi). Utilisation de la logique d'engagement standard.", isVerboseOverride: debugEngagementTileSearchLog || true);
+                 // Tomber dans la logique standard ci-dessous si la cible de MoveToBuilding n'est pas directement praticable pour "se tenir dessus"
+            }
         }
 
         int attackRangeInTiles = Mathf.Max(0, Mathf.FloorToInt(unitAttackRange)); // Assurer une portée positive ou nulle.
@@ -329,35 +360,43 @@ public partial class FindSmartStepNode : Unity.Behavior.Action
         return validStandpoints;
     }
 
-    // AMÉLIORATION : Logique plus claire pour savoir si une tuile est praticable.
-    private bool IsTileStandableForUnit(Tile tileToStandOn, Unit attacker)
-    {
-        if (tileToStandOn == null || attacker == null) return false;
+   private bool IsTileStandableForUnit(Tile tileToStandOn, Unit unit)
+{
+    if (tileToStandOn == null || unit == null) return false;
+    string reason = "";
+    bool isStandable = true;
 
-        string reason = "";
-        bool isStandable = true;
+    if (tileToStandOn.tileType != TileType.Ground) {
+        isStandable = false; reason = $"Not Ground (Type: {tileToStandOn.tileType})";
+    } else if (tileToStandOn.currentEnvironment != null && tileToStandOn.currentEnvironment.IsBlocking) {
+        isStandable = false; reason = $"Env Block '{tileToStandOn.currentEnvironment.EnvironmentName}'";
+    } else if (tileToStandOn.currentUnit != null && tileToStandOn.currentUnit != unit) {
+        isStandable = false; reason = $"Occupied by OTHER unit '{tileToStandOn.currentUnit.name}'";
+    } else if (tileToStandOn.currentBuilding != null) {
+        bool isAllyUnit = unit is AllyUnit;
+        bool isAllyBuilding = tileToStandOn.currentBuilding is PlayerBuilding;
+        bool isEnemyBuilding = tileToStandOn.currentBuilding is EnemyBuilding;
+        bool isNeutralBuilding = tileToStandOn.currentBuilding.Team == TeamType.Neutral;
 
-        if (tileToStandOn.tileType != TileType.Ground) {
-            isStandable = false; reason = $"Not Ground (Type: {tileToStandOn.tileType})";
-        } else if (tileToStandOn.currentEnvironment != null && tileToStandOn.currentEnvironment.IsBlocking) {
-            isStandable = false; reason = $"Blocking env '{tileToStandOn.currentEnvironment.EnvironmentName}'";
-        } else if (tileToStandOn.currentUnit != null && tileToStandOn.currentUnit != attacker) {
-            isStandable = false; reason = $"Occupied by OTHER unit '{tileToStandOn.currentUnit.name}'";
-        } else if (tileToStandOn.currentBuilding != null) {
-            // On ne peut généralement pas se tenir sur une tuile qui a un bâtiment pour attaquer une *autre* cible.
-            // Si la cible finale EST ce bâtiment, c'est géré par GetValidEngagementTiles (on se mettra à côté).
-            isStandable = false; reason = $"Has building '{tileToStandOn.currentBuilding.name}'";
-        } else {
-            Vector2Int tilePos = new Vector2Int(tileToStandOn.column, tileToStandOn.row);
-            if (TileReservationController.Instance != null &&
-                TileReservationController.Instance.IsTileReservedByOtherUnit(tilePos, attacker)) {
-                isStandable = false; reason = $"Reserved by OTHER unit";
+        if (isEnemyBuilding && isAllyUnit && !isNeutralBuilding) {
+            isStandable = false; reason = $"Has ENEMY building '{tileToStandOn.currentBuilding.name}'";
+        } else if (isAllyBuilding && isAllyUnit) {
+            AIActionType currentActionForLog = bbSelectedActionType?.Value ?? AIActionType.None;
+            if (currentActionForLog != AIActionType.MoveToBuilding || gridManager.GetTileAt(bbFinalDestinationPosition.Value.x, bbFinalDestinationPosition.Value.y) != tileToStandOn) {
+                isStandable = false; reason = $"Has ALLIED building '{tileToStandOn.currentBuilding.name}' (not target of MoveToBuilding)";
             }
         }
-
-        return isStandable;
+    } else {
+        Vector2Int tilePos = new Vector2Int(tileToStandOn.column, tileToStandOn.row);
+        if (TileReservationController.Instance != null &&
+            TileReservationController.Instance.IsTileReservedByOtherUnit(tilePos, unit)) {
+            isStandable = false; reason = $"Reserved by OTHER unit";
+        }
     }
-
+    if (debugStandableCheckLog && !isStandable) LogNodeMessage($"IsTileStandableForUnit ({tileToStandOn.column},{tileToStandOn.row}): False. Reason: {reason}", isVerboseOverride: true);
+    else if (debugStandableCheckLog && isStandable) LogNodeMessage($"IsTileStandableForUnit ({tileToStandOn.column},{tileToStandOn.row}): True", isVerboseOverride: true);
+    return isStandable;
+}
     // ... (ReconstructPath, GetPathNode, CalculateMinHeuristicToEngagementTiles, SetPathfindingOutputs, CacheBlackboardVariables) ...
     // Assurez-vous que ces méthodes utilisent LogNodeMessage pour la verbosité contrôlée.
 
@@ -425,26 +464,29 @@ public partial class FindSmartStepNode : Unity.Behavior.Action
         LogNodeMessage("OnEnd", isVerboseOverride: true);
     }
 
-    private bool CacheBlackboardVariables()
+     private bool CacheBlackboardVariables()
     {
         if (blackboardVariablesCached) return true;
         var agent = GameObject.GetComponent<BehaviorGraphAgent>();
         if (agent == null || agent.BlackboardReference == null) {
-            Debug.LogError($"[{GameObject?.name} - FindSmartStepNode] Critical: Agent or BlackboardRef missing.", GameObject);
+            LogNodeMessage("Agent ou BlackboardRef manquant pour Cache.", isError:true, isVerboseOverride: true);
             return false;
         }
         var blackboard = agent.BlackboardReference;
         bool success = true;
 
-        if (!blackboard.GetVariable(SELF_UNIT_VAR, out bbSelfUnit)) { LogNodeMessage($"BBVar IN '{SELF_UNIT_VAR}' (type Unit) missing.", true, isVerboseOverride:true); success = false; }
-        if (!blackboard.GetVariable(FINAL_DESTINATION_POS_VAR, out bbFinalDestinationPosition)) { LogNodeMessage($"BBVar IN '{FINAL_DESTINATION_POS_VAR}' missing.", true, isVerboseOverride:true); success = false; }
+        // Inputs
+        if (!blackboard.GetVariable(SELF_UNIT_VAR, out bbSelfUnit)) { LogNodeMessage($"BBVar IN '{SELF_UNIT_VAR}' manquant.", true, isVerboseOverride:true); success = false; }
+        if (!blackboard.GetVariable(FINAL_DESTINATION_POS_VAR, out bbFinalDestinationPosition)) { LogNodeMessage($"BBVar IN '{FINAL_DESTINATION_POS_VAR}' manquant.", true, isVerboseOverride:true); success = false; }
+        if (!blackboard.GetVariable(SELECTED_ACTION_TYPE_VAR, out bbSelectedActionType)) { LogNodeMessage($"BBVar IN '{SELECTED_ACTION_TYPE_VAR}' manquant.", true, isVerboseOverride:true); success = false; } // NOUVEAU
 
-        if (!blackboard.GetVariable(CURRENT_PATH_VAR, out bbCurrentPath)) { LogNodeMessage($"BBVar OUT '{CURRENT_PATH_VAR}' missing.", true, isVerboseOverride:true); success = false; }
-        if (!blackboard.GetVariable(MOVEMENT_TARGET_POS_VAR, out bbMovementTargetPosition)) { LogNodeMessage($"BBVar OUT '{MOVEMENT_TARGET_POS_VAR}' missing.", true, isVerboseOverride:true); success = false; }
-        if (!blackboard.GetVariable(PATHFINDING_FAILED_VAR, out bbPathfindingFailed)) { LogNodeMessage($"BBVar OUT '{PATHFINDING_FAILED_VAR}' missing.", true, isVerboseOverride:true); success = false; }
+        // Outputs
+        if (!blackboard.GetVariable(CURRENT_PATH_VAR, out bbCurrentPath)) { LogNodeMessage($"BBVar OUT '{CURRENT_PATH_VAR}' manquant.", true, isVerboseOverride:true); success = false; }
+        if (!blackboard.GetVariable(MOVEMENT_TARGET_POS_VAR, out bbMovementTargetPosition)) { LogNodeMessage($"BBVar OUT '{MOVEMENT_TARGET_POS_VAR}' (prochain pas) manquant.", true, isVerboseOverride:true); success = false; }
+        if (!blackboard.GetVariable(PATHFINDING_FAILED_VAR, out bbPathfindingFailed)) { LogNodeMessage($"BBVar OUT '{PATHFINDING_FAILED_VAR}' manquant.", true, isVerboseOverride:true); success = false; }
 
         blackboardVariablesCached = success;
-        if (!success) Debug.LogError($"[{GameObject?.name} - FindSmartStepNode] CRITICAL Blackboard variable(s) missing during cache. Check full log.", GameObject);
+        if (!success) Debug.LogError($"[{GameObject?.name} - FindSmartStepNode] Variables Blackboard CRITIQUES manquantes. Vérifiez les logs.", GameObject);
         return success;
     }
 }

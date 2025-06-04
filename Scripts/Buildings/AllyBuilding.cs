@@ -94,14 +94,11 @@ public class PlayerBuilding : Building
         Debug.Log($"[ALLY BUILDING] {gameObject.name} initialized as {Team} team with {reserveTiles.Count} reserve tiles!");
     }
 
-    #region Reserve Tiles System
+#region Reserve Tiles System
 
     private void InitializeReserveTiles()
     {
-        // Nettoyer le dictionnaire au démarrage
         occupiedReserveTiles.Clear();
-        
-        // Initialiser le dictionnaire avec toutes les cases de réserves comme libres
         foreach (Tile tile in reserveTiles)
         {
             if (tile != null)
@@ -112,104 +109,154 @@ public class PlayerBuilding : Building
     }
 
     /// <summary>
-    /// Trouve une case de réserve libre pour une unité
+    /// Trouve une case de réserve libre pour une unité spécifique.
+    /// Si l'unité occupe déjà une case de réserve de ce bâtiment, cette case est retournée.
     /// </summary>
-    /// <returns>Une case de réserve libre, ou null si aucune n'est disponible</returns>
-    public Tile GetAvailableReserveTile()
+    public Tile GetAvailableReserveTileForUnit(Unit unitSeekingReserve)
     {
+        if (unitSeekingReserve == null) return null;
+
+        // 1. Vérifier si l'unité occupe déjà une des cases de réserve de CE bâtiment
+        foreach (var kvp in occupiedReserveTiles)
+        {
+            if (kvp.Value == unitSeekingReserve && kvp.Key != null && reserveTiles.Contains(kvp.Key))
+            {
+                // L'unité est déjà sur une de nos cases de réserve, elle est "disponible" pour elle-même.
+                return kvp.Key;
+            }
+        }
+
+        // 2. Sinon, chercher une case de réserve réellement libre.
         foreach (Tile tile in reserveTiles)
         {
+            // IsReserveTileAvailable vérifie si la tuile est dans reserveTiles,
+            // n'est pas occupée physiquement (par une autre unité sur Tile.currentUnit),
+            // et est marquée comme libre dans notre dictionnaire occupiedReserveTiles.
             if (tile != null && IsReserveTileAvailable(tile))
             {
                 return tile;
             }
         }
-        return null;
+        return null; // Aucune case de réserve disponible pour cette unité.
     }
 
     /// <summary>
-    /// Vérifie si une case de réserve est disponible
+    /// Vérifie si une case de réserve spécifique est disponible de manière générale (non assignée et non occupée physiquement).
     /// </summary>
     public bool IsReserveTileAvailable(Tile tile)
     {
-        if (tile == null || !reserveTiles.Contains(tile))
+        if (tile == null || !reserveTiles.Contains(tile)) // Doit être une de nos cases de réserve connues
             return false;
 
-        // Vérifier si la tile n'est pas occupée par une unité et n'est pas dans notre dictionnaire comme occupée
-        return !tile.IsOccupied && (occupiedReserveTiles.ContainsKey(tile) && occupiedReserveTiles[tile] == null);
+        // Vérifier l'occupation physique sur la tuile elle-même (par une *autre* unité que celle qui pourrait être dans notre dictionnaire)
+        if (tile.currentUnit != null && (!occupiedReserveTiles.ContainsKey(tile) || occupiedReserveTiles[tile] != tile.currentUnit) )
+        {
+            return false; // Occupée physiquement par une unité non enregistrée ici ou une autre unité
+        }
+        if (tile.currentBuilding != null && tile.currentBuilding != this) // Occupée par un autre bâtiment
+        {
+            return false;
+        }
+        if (tile.currentEnvironment != null && tile.currentEnvironment.IsBlocking) // Environnement bloquant
+        {
+            return false;
+        }
+
+
+        // Vérifier notre suivi interne : la case doit exister dans le dictionnaire et être marquée comme non occupée (null)
+        return occupiedReserveTiles.ContainsKey(tile) && occupiedReserveTiles[tile] == null;
     }
 
     /// <summary>
-    /// Assigne une unité à une case de réserve
+    /// Assigne une unité à une case de réserve. S'assure de libérer l'ancienne case de l'unité si elle en avait une sur CE bâtiment.
     /// </summary>
-    public bool AssignUnitToReserveTile(Unit unit, Tile reserveTile)
+    public bool AssignUnitToReserveTile(Unit unit, Tile newReserveTile)
     {
-        if (unit == null || reserveTile == null || !reserveTiles.Contains(reserveTile))
+        if (unit == null || newReserveTile == null || !reserveTiles.Contains(newReserveTile))
+        {
+            Debug.LogWarning($"[PlayerBuilding:{name}] AssignUnitToReserveTile: Conditions non remplies (Unit, newReserveTile ou tile pas dans la liste). Unit: {unit?.name}, Tile: {newReserveTile?.name}", this);
             return false;
+        }
 
-        if (!IsReserveTileAvailable(reserveTile))
+        // Vérifier si l'unité était déjà assignée à une *autre* case de réserve de CE bâtiment.
+        Tile previousTileForThisUnit = null;
+        foreach(var kvp in occupiedReserveTiles)
+        {
+            if (kvp.Value == unit && kvp.Key != newReserveTile) // Trouvé l'unité sur une autre case
+            {
+                previousTileForThisUnit = kvp.Key;
+                break;
+            }
+        }
+
+        // Si elle était sur une autre case de ce bâtiment, la libérer.
+        if (previousTileForThisUnit != null)
+        {
+            occupiedReserveTiles[previousTileForThisUnit] = null;
+            Debug.Log($"[PlayerBuilding:{name}] Unit {unit.name} a libéré son ancienne case de réserve {previousTileForThisUnit.name} sur ce bâtiment.", this);
+        }
+
+        // Maintenant, vérifier si la nouvelle case est disponible ou déjà assignée à cette même unité.
+        if (occupiedReserveTiles.ContainsKey(newReserveTile))
+        {
+            if (occupiedReserveTiles[newReserveTile] == null || occupiedReserveTiles[newReserveTile] == unit)
+            {
+                // La case est libre OU déjà assignée à cette unité (parfait, on confirme/réassigne).
+                occupiedReserveTiles[newReserveTile] = unit;
+                Debug.Log($"[PlayerBuilding:{name}] Unit {unit.name} assignée à la case de réserve ({newReserveTile.column},{newReserveTile.row}).", this);
+                return true;
+            }
+            else
+            {
+                // La case est occupée par une AUTRE unité.
+                Debug.LogWarning($"[PlayerBuilding:{name}] AssignUnitToReserveTile: La nouvelle case {newReserveTile.name} est déjà occupée par {occupiedReserveTiles[newReserveTile].name}. Impossible d'assigner {unit.name}.", this);
+                return false;
+            }
+        }
+        else
+        {
+            // La tuile de réserve n'était même pas dans notre dictionnaire, ce qui est étrange si reserveTiles.Contains(newReserveTile) est vrai.
+            // Cela peut arriver si InitializeReserveTiles n'a pas inclus toutes les tuiles de la liste reserveTiles.
+            Debug.LogError($"[PlayerBuilding:{name}] AssignUnitToReserveTile: La case {newReserveTile.name} est dans reserveTiles mais pas dans occupiedReserveTiles. Problème d'initialisation probable.", this);
             return false;
-
-        occupiedReserveTiles[reserveTile] = unit;
-        return true;
+        }
     }
 
     /// <summary>
-    /// Libère une case de réserve
+    /// Libère une case de réserve si l'unité spécifiée l'occupait.
     /// </summary>
     public void ReleaseReserveTile(Tile reserveTile, Unit unit)
     {
-        if (reserveTile != null && occupiedReserveTiles.ContainsKey(reserveTile) && occupiedReserveTiles[reserveTile] == unit)
+        if (unit == null || reserveTile == null) return;
+
+        if (occupiedReserveTiles.ContainsKey(reserveTile) && occupiedReserveTiles[reserveTile] == unit)
         {
             occupiedReserveTiles[reserveTile] = null;
+            Debug.Log($"[PlayerBuilding:{name}] Case de réserve ({reserveTile.column},{reserveTile.row}) explicitement libérée par/pour {unit.name}.", this);
         }
     }
 
     /// <summary>
-    /// Vérifie s'il y a des cases de réserves disponibles
+    /// Vérifie s'il y a au moins une case de réserve globalement disponible.
+    /// C'EST ICI QU'ÉTAIT L'ERREUR CS7036.
     /// </summary>
     public bool HasAvailableReserveTiles()
     {
-        return GetAvailableReserveTile() != null;
-    }
-
-    /// <summary>
-    /// Retourne toutes les cases de réserves
-    /// </summary>
-    public List<Tile> GetReserveTiles()
-    {
-        return new List<Tile>(reserveTiles);
-    }
-
-    /// <summary>
-    /// Ajoute une case de réserve via script
-    /// </summary>
-    public void AddReserveTile(Tile tile)
-    {
-        if (tile != null && !reserveTiles.Contains(tile))
+        foreach (Tile tile in reserveTiles)
         {
-            reserveTiles.Add(tile);
-            occupiedReserveTiles[tile] = null;
-        }
-    }
-
-    /// <summary>
-    /// Supprime une case de réserve
-    /// </summary>
-    public void RemoveReserveTile(Tile tile)
-    {
-        if (tile != null && reserveTiles.Contains(tile))
-        {
-            reserveTiles.Remove(tile);
-            if (occupiedReserveTiles.ContainsKey(tile))
+            // Utilise la vérification générale IsReserveTileAvailable
+            if (tile != null && IsReserveTileAvailable(tile))
             {
-                occupiedReserveTiles.Remove(tile);
+                return true;
             }
         }
+        return false;
     }
 
-    #endregion
-
+    public List<Tile> GetReserveTiles()
+    {
+        return new List<Tile>(reserveTiles); // Retourne une copie
+    }
     private void HandleBeat()
     {
         beatCounter++;
@@ -222,7 +269,7 @@ public class PlayerBuilding : Building
             beatCounter = 0;
         }
     }
-    
+    #endregion
     /*
     private void OnSequenceExecuted(Sequence executedSequence, int perfectCount)
     {
@@ -434,5 +481,35 @@ public class PlayerBuilding : Building
 
         // Call base implementation
         base.OnDestroy();
+    }
+
+    // Ajout : Notifier explicitement les unités en réserve lors d'une attaque
+    public override void TakeDamage(int damage, Unit attacker = null)
+    {
+        base.TakeDamage(damage, attacker);
+
+        if (attacker != null)
+        {
+            AlertReserveUnitsOfAttack(attacker);
+        }
+    }
+
+    /// <summary>
+    /// Notifie toutes les unités présentes dans les cases de réserve que ce bâtiment est attaqué.
+    /// </summary>
+    private void AlertReserveUnitsOfAttack(Unit attacker)
+    {
+        foreach (var kvp in occupiedReserveTiles)
+        {
+            Unit unit = kvp.Value;
+            if (unit != null)
+            {
+                // Appel direct à la méthode d'alerte sur l'unité (si elle existe)
+                if (unit is AllyUnit ally)
+                {
+                    ally.OnDefendedBuildingAttacked(this, attacker);
+                }
+            }
+        }
     }
 }

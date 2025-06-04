@@ -86,6 +86,7 @@ public class MoveToTargetNode_WithInternalBeatWait : Unity.Behavior.Action
 
     protected override Status OnUpdate()
     {
+        LogNodeMessage("OnUpdate BEGIN", false, true);
         if (selfUnitInstanceInternal == null) // Sécurité si l'unité a été détruite pendant que le nœud tournait
             return Status.Failure;
 
@@ -94,7 +95,7 @@ public class MoveToTargetNode_WithInternalBeatWait : Unity.Behavior.Action
         {
             return Status.Running; // On attend que OnBeatReceived mette delayPhaseComplete à true
         }
-
+        
         // --- Phase 2: Exécution de l'action de mouvement (si pas encore démarrée) ---
         if (!movementActionStarted)
             return AttemptMovementStep();
@@ -184,10 +185,18 @@ public class MoveToTargetNode_WithInternalBeatWait : Unity.Behavior.Action
         Tile currentUnitTile = selfUnitInstanceInternal.GetOccupiedTile();
 
         if (currentUnitTile == null)
+        {
+            LogNodeMessage($"AttemptMovementStep: L'unité {selfUnitInstanceInternal.name} n'est pas sur une tuile valide. Échec.", true, true);
             return Status.Failure;
+        }
         // Vérification (redondante si OnStart l'a fait, mais bonne sécurité si délai=0)
         if (currentUnitTile.column == finalDestination.x && currentUnitTile.row == finalDestination.y)
+        {
+            LogNodeMessage(
+                $"AttemptMovementStep: L'unité {selfUnitInstanceInternal.name} est déjà sur la destination finale ({finalDestination.x},{finalDestination.y}).",
+                false, true);
             return Status.Success;
+        }
 
         if (HexGridManager.Instance == null)
             return Status.Failure;
@@ -195,8 +204,13 @@ public class MoveToTargetNode_WithInternalBeatWait : Unity.Behavior.Action
         Tile nextStepTile = selfUnitInstanceInternal.GetNextTileTowardsDestinationForBG(finalDestination);
 
         if (nextStepTile == null)
-            return Status.Failure; // Pas de chemin trouvé pour ce pas, le nœud échoue pour cette tentative.
-
+        {
+            // Si GetNextTile... retourne null, cela signifie soit qu'on EST sur la cible (déjà géré au-dessus),
+            // soit qu'aucun chemin n'est possible vers la tuile finale.
+            LogNodeMessage($"AttemptMovementStep: GetNextTileTowardsDestinationForBG n'a retourné aucun pas valide vers ({finalDestination.x},{finalDestination.y}) depuis ({currentUnitTile.column},{currentUnitTile.row}). Échec du pathfinding pour ce pas.", true, true);
+            return Status.Failure; // Pas de chemin trouvé pour ce pas.
+        }
+        LogNodeMessage($"AttemptMovementStep: Prochain pas vers ({finalDestination.x},{finalDestination.y}) est la tuile ({nextStepTile.column},{nextStepTile.row}).", false, true);
 
         // Démarrer la coroutine de mouvement sur l'instance de l'unité.
         // Unit.MoveToTile est responsable de mettre Unit.IsMoving = true au début et false à la fin.
@@ -278,6 +292,24 @@ public class MoveToTargetNode_WithInternalBeatWait : Unity.Behavior.Action
             {
                 bbIsMoving.Value = value;
             }
+        }
+    }
+    private void LogNodeMessage(string message, bool isError = false, bool forceLog = false)
+    {
+        if(!blackboardVariablesAreValid && !isError) return; // Ne pas logger les messages normaux si BB pas prêt
+
+        string unitName = selfUnitInstanceInternal != null ? selfUnitInstanceInternal.name : (bbSelfUnit?.Value != null ? bbSelfUnit.Value.name : "NoUnit");
+        // string log = $"[{nodeInstanceId} | {unitName} | MoveToTargetNode] {message}";
+        string logPrefix = $"<color=orange>[{nodeInstanceId} | {unitName} | MoveToTargetNode]</color>";
+
+
+        if (isError)
+        {
+            Debug.LogError($"{logPrefix} {message}", this.GameObject);
+        }
+        else if (forceLog || (selfUnitInstanceInternal != null /* && selfUnitInstanceInternal.enableVerboseLogging // Adaptez si vous avez un tel flag */))
+        {
+            Debug.Log($"{logPrefix} {message}", this.GameObject);
         }
     }
 }

@@ -10,5 +10,6 @@ public enum AIActionType
 	AttackUnit,
 	AttackBuilding,
 	CaptureBuilding,
-	CheerAndDespawn
+	CheerAndDespawn,
+	DefendPosition 
 }

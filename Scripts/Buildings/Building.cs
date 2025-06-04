@@ -32,6 +32,7 @@ public abstract class Building : MonoBehaviour
     // Event for building damage and destruction
     public delegate void BuildingHealthChangedHandler(Building building, int newHealth, int damage);
     public static event BuildingHealthChangedHandler OnBuildingDamaged;
+    public static event System.Action<Building, Unit> OnBuildingAttackedByUnit; // Building attaqué, par quelle Unit
 
     public delegate void BuildingDestroyedHandler(Building building);
     public static event BuildingDestroyedHandler OnBuildingDestroyed;
@@ -81,7 +82,7 @@ public abstract class Building : MonoBehaviour
     }
 
     // Method to handle incoming damage
-    public virtual void TakeDamage(int damage)
+    public virtual void TakeDamage(int damage, Unit attacker = null)
     {
         // Calculate damage after defense
         int actualDamage = Mathf.Max(1, damage - Defense);
@@ -90,16 +91,21 @@ public abstract class Building : MonoBehaviour
         if (debugBuildingCombat)
         {
             Debug.Log($"[BUILDING] {gameObject.name} took {actualDamage} damage (after {Defense} defense). Health: {_currentHealth}/{MaxHealth}");
+            Debug.Log($"[BUILDING] Attacker: {attacker?.name ?? "None"}");  
         }
 
         // Trigger the damage event
         OnBuildingDamaged?.Invoke(this, _currentHealth, actualDamage);
-
+        if (attacker != null)
+        {
+            OnBuildingAttackedByUnit?.Invoke(this, attacker);
+        }
         // Check if building is destroyed
         if (_currentHealth <= 0)
         {
             Die();
         }
+        
     }
 
     public virtual void SetTeam(TeamType newTeam)

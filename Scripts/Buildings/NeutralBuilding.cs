@@ -293,7 +293,7 @@ public class NeutralBuilding : Building
     }
 
     // Logique de dégâts pour les bâtiments neutres (peut être recapturé au lieu d'être détruit)
-    public override void TakeDamage(int damage)
+    public override void TakeDamage(int damage,  Unit attacker = null)
     {
         if (!IsTargetable) return;
 

@@ -21,6 +21,7 @@ public class AllyUnit : Unit, IBannerObserver
     private const string BB_HAS_INITIAL_OBJECTIVE_SET = "HasInitialObjectiveSet";
     private const string BB_IS_ATTACKING = "IsAttacking";
     private const string BB_IS_CAPTURING = "IsCapturing";
+    private const string BB_IS_DEFENDING = "IsDefending"; 
     private const string BB_IS_OBJECTIVE_COMPLETED = "IsObjectiveCompleted"; // Pour signaler la fin de l'objectif
 
     // Variables Blackboard mises en cache
@@ -32,6 +33,9 @@ public class AllyUnit : Unit, IBannerObserver
     private BlackboardVariable<bool> bbIsAttacking;
     private BlackboardVariable<bool> bbIsCapturing;
     private BlackboardVariable<bool> bbIsObjectiveCompleted;
+    private BlackboardVariable<bool> bbIsDefending; 
+    // Nouvelle variable Blackboard pour la défense
+    private BlackboardVariable<bool> bbDefendedBuildingIsUnderAttack;
 
     [Header("Ally Settings")]
     [SerializeField] public bool enableVerboseLogging = true; // Public pour que les nœuds puissent vérifier
@@ -45,8 +49,8 @@ public class AllyUnit : Unit, IBannerObserver
     private UnitSpawnFeedback spawnFeedbackPlayer; // Référence au composant de feedback
 
 	  // Variables pour le système de réserves
-    private PlayerBuilding currentReserveBuilding;
-    private Tile currentReserveTile;
+      public PlayerBuilding currentReserveBuilding;
+    public Tile currentReserveTile;
 
     protected override IEnumerator Start()
     {
@@ -64,7 +68,6 @@ public class AllyUnit : Unit, IBannerObserver
             yield break;
         }
 
-        // --- DÉBUT DE LA MODIFICATION ---
 
         if (spawnFeedbackPlayer != null)
         {
@@ -106,6 +109,9 @@ public class AllyUnit : Unit, IBannerObserver
             LogAlly("Mise en cache des variables Blackboard...");
             CacheBlackboardVariables(); // Doit être appelé quand l'agent est actif
             InitializeBlackboardFlags(); // Initialise les flags du BB
+
+            // S'abonner à l'événement d'attaque sur bâtiment si on défend un bâtiment
+            Building.OnBuildingAttackedByUnit += HandleBuildingAttackedByUnit;
         }
 
         // --- FIN DE LA MODIFICATION ---
@@ -158,6 +164,9 @@ public class AllyUnit : Unit, IBannerObserver
         if (bbIsCapturing != null) bbIsCapturing.Value = false;
         else LogAlly("bbIsCapturing non mis en cache.", true);
 
+        if (bbIsDefending != null) bbIsDefending.Value = false; // Ajouté
+        else LogAlly("bbIsDefending non mis en cache.", true); // Ajouté
+
         if (bbIsObjectiveCompleted != null) bbIsObjectiveCompleted.Value = false;
         else LogAlly("bbIsObjectiveCompleted non mis en cache.", true);
         LogAlly("Flags du Blackboard initialisés.");
@@ -186,12 +195,21 @@ public class AllyUnit : Unit, IBannerObserver
         blackboardRef.GetVariable(BB_FINAL_DESTINATION_POSITION, out bbFinalDestinationPosition);
         blackboardRef.GetVariable(BB_INITIAL_TARGET_BUILDING, out bbInitialTargetBuilding);
         blackboardRef.GetVariable(BB_HAS_INITIAL_OBJECTIVE_SET, out bbHasInitialObjectiveSet);
-
+        if (!blackboardRef.GetVariable(BB_IS_DEFENDING, out bbIsDefending))
+        {
+            LogAlly($"La variable Blackboard '{BB_IS_DEFENDING}' est manquante. La logique de défense pourrait ne pas fonctionner.", true);
+        }
+        // Nouvelle variable Blackboard pour la défense du bâtiment
+        if (!blackboardRef.GetVariable("DefendedBuildingIsUnderAttack", out bbDefendedBuildingIsUnderAttack))
+        {
+            LogAlly("Blackboard variable 'DefendedBuildingIsUnderAttack' is missing. Defensive alert logic may not work.", true);
+        }
         // Variables d'état de l'unité
         blackboardRef.GetVariable(BB_IS_ATTACKING, out bbIsAttacking);
         blackboardRef.GetVariable(BB_IS_CAPTURING, out bbIsCapturing);
         blackboardRef.GetVariable(BB_IS_OBJECTIVE_COMPLETED, out bbIsObjectiveCompleted);
-
+        
+        
     }
 
     protected override Vector2Int? TargetPosition
@@ -234,6 +252,8 @@ public class AllyUnit : Unit, IBannerObserver
     	}
     	else
 		{
+            //Log ally la valeur dans le BB
+            LogAlly($"bbHasInitialObjectiveSet : {bbHasInitialObjectiveSet.Value}, bbInitialTargetBuilding : {bbInitialTargetBuilding.Value?.name ?? "null"}");
         	LogAlly($"Bannière déplacée vers ({newBannerPosition.x},{newBannerPosition.y}) mais objectif déjà fixé - ignoré.");
     	}
         // Si l'objectif initial a déjà été fixé, le Behavior Graph décidera s'il doit
@@ -273,6 +293,7 @@ public class AllyUnit : Unit, IBannerObserver
             }
             else
             {
+                Debug.LogWarning($"[{name}] Building '{buildingAtPos.name}' has no occupied tile. Setting FinalDestinationPosition to an invalid position.");
                 // Fallback: ne pas définir de FinalDestinationPosition ou la mettre à une position invalide
                 bbHasInitialObjectiveSet.Value = false; // Marquer comme échec
                 hasInitialObjectiveBeenSetThisLife = false;
@@ -284,6 +305,7 @@ public class AllyUnit : Unit, IBannerObserver
         {
             bbInitialTargetBuilding.Value = null;
             bbHasInitialObjectiveSet.Value = false;
+            LogAlly("Aucun bâtiment trouvé à la position de la bannière. Objectif initial non défini.", true);
             // Laisser FinalDestinationPosition telle quelle ou la mettre à la position actuelle de l'unité si pas d'autre cible.
             // Si bbFinalDestinationPosition n'a pas de valeur valide, FindSmartStepNode devrait échouer proprement.
         }
@@ -557,6 +579,37 @@ public class AllyUnit : Unit, IBannerObserver
     	}
 	}
 
+    // Handler pour l'événement d'attaque sur bâtiment
+    private void HandleBuildingAttackedByUnit(Building building, Unit attacker)
+    {
+        // Si cette unité défend ce bâtiment, on met à jour la variable Blackboard
+        if (currentReserveBuilding != null && building == currentReserveBuilding)
+        {
+            if (bbDefendedBuildingIsUnderAttack != null)
+            {
+                bbDefendedBuildingIsUnderAttack.Value = true;
+                if (enableVerboseLogging)
+                    Debug.Log($"[{name}] Defended building '{building.name}' is under attack! Blackboard flag set.");
+            }
+        }
+    }
+
+    /// <summary>
+    /// Appelée directement par le PlayerBuilding lorsqu'il est attaqué, pour notifier cette unité si elle défend ce bâtiment.
+    /// </summary>
+    public void OnDefendedBuildingAttacked(Building building, Unit attacker)
+    {
+        if (currentReserveBuilding != null && building == currentReserveBuilding)
+        {
+            if (bbDefendedBuildingIsUnderAttack != null)
+            {
+                bbDefendedBuildingIsUnderAttack.Value = true;
+                if (enableVerboseLogging)
+                    Debug.Log($"[{name}] (Direct) Defended building '{building.name}' is under attack by '{attacker?.name ?? "Unknown"}'. Blackboard flag set.");
+            }
+        }
+    }
+
     public override void OnDestroy()
     {
         if (AllyUnitRegistry.Instance != null)
@@ -571,17 +624,46 @@ public class AllyUnit : Unit, IBannerObserver
         UnsubscribeFromInitialBuildingEvents(); // Ensure cleanup
         ClearCurrentReservePosition();
         initialObjectiveBuildingInstance = null;
+
+        // Désabonnement de l'événement d'attaque sur bâtiment
+        Building.OnBuildingAttackedByUnit -= HandleBuildingAttackedByUnit;
+
         base.OnDestroy();
 
     }
 	
-	public void SetReservePosition(PlayerBuilding building, Tile reserveTile)
+     public void SetReservePosition(PlayerBuilding building, Tile reserveTile)
     {
-        // Nettoyer l'ancienne position de réserve si elle existe
-        ClearCurrentReservePosition();
-        
+        // 1. Si on avait une ancienne position de réserve (différente ou sur un autre bâtiment), la libérer.
+        if (currentReserveBuilding != null && currentReserveTile != null)
+        {
+            // Si le nouveau bâtiment est différent OU si la nouvelle tuile est différente dans le même bâtiment
+            if (currentReserveBuilding != building || currentReserveTile != reserveTile)
+            {
+                currentReserveBuilding.ReleaseReserveTile(currentReserveTile, this);
+                LogAlly($"Ancienne position de réserve ({currentReserveTile.column},{currentReserveTile.row}) chez {currentReserveBuilding.name} libérée.");
+            }
+        }
+
+        // 2. Assigner la nouvelle position de réserve
         currentReserveBuilding = building;
         currentReserveTile = reserveTile;
+
+        if (currentReserveBuilding != null && currentReserveTile != null)
+        {
+            // L'assignation effective sur le bâtiment est importante
+            bool success = currentReserveBuilding.AssignUnitToReserveTile(this, currentReserveTile);
+            if (success) {
+                LogAlly($"Nouvelle position de réserve assignée : ({currentReserveTile.column},{currentReserveTile.row}) chez {currentReserveBuilding.name}.");
+            } else {
+                LogAlly($"ÉCHEC de l'assignation à la position de réserve ({currentReserveTile.column},{currentReserveTile.row}) chez {currentReserveBuilding.name}.", true);
+                // Si l'assignation échoue, on devrait peut-être nullifier currentReserveTile/Building pour éviter des états incohérents
+                this.currentReserveBuilding = null;
+                this.currentReserveTile = null;
+            }
+        } else {
+            LogAlly("Tentative de SetReservePosition avec building ou tile null.", true);
+        }
     }
 
     public void ClearCurrentReservePosition()
@@ -607,4 +689,5 @@ public class AllyUnit : Unit, IBannerObserver
                 Debug.Log($"[{name}] Arrived at reserve position ({currentReserveTile.column},{currentReserveTile.row})");
         }
     }
+
 }

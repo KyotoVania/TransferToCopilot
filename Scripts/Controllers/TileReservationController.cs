@@ -14,10 +14,10 @@ public class TileReservationController : MonoBehaviour
     public static TileReservationController Instance { get; private set; }
 
     // Map of tile positions to their reserving units
-    private Dictionary<Vector2Int, Unit> reservations = new Dictionary<Vector2Int, Unit>();
+    public Dictionary<Vector2Int, Unit> reservations = new Dictionary<Vector2Int, Unit>();
 
     // List of observers
-    private List<ITileReservationObserver> observers = new List<ITileReservationObserver>();
+    public List<ITileReservationObserver> observers = new List<ITileReservationObserver>();
 
     // Debug flag
     [SerializeField] private bool enableDebugLogs = false;
