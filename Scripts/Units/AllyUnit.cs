@@ -134,7 +134,7 @@ public class AllyUnit : Unit, IBannerObserver
             if (BannerController.Instance.HasActiveBanner && !hasInitialObjectiveBeenSetThisLife)
             {
                 LogAlly("Bannière active détectée au spawn, définition de l'objectif initial.");
-                SetInitialObjectiveFromPosition(BannerController.Instance.CurrentBannerPosition);
+                //SetInitialObjectiveFromPosition(BannerController.Instance.CurrentBannerPosition);
             }
         }
         else
@@ -248,7 +248,7 @@ public class AllyUnit : Unit, IBannerObserver
         if (!hasInitialObjectiveBeenSetThisLife)
     	{
         	LogAlly($"Définition de l'objectif initial à la position de la bannière: ({newBannerPosition.x},{newBannerPosition.y})");
-        	SetInitialObjectiveFromPosition(newBannerPosition);
+        	//SetInitialObjectiveFromPosition(newBannerPosition);
     	}
     	else
 		{
