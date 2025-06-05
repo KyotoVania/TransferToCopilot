@@ -74,7 +74,7 @@ public class ScanForNearbyTargetsNode : Unity.Behavior.Action // Nom de classe g
 
     private void LogNodeMessage(string message, bool isError = false, bool forceLog = false)
     {
-        /*
+        
         // Utilise selfAllyUnitCache pour le nom et le flag de log
         string unitName = selfAllyUnitCache != null ? selfAllyUnitCache.name : (GameObject != null ? GameObject.name : "ScanNode");
         bool enableLogging = selfAllyUnitCache != null ? selfAllyUnitCache.enableVerboseLogging : false;
@@ -83,7 +83,7 @@ public class ScanForNearbyTargetsNode : Unity.Behavior.Action // Nom de classe g
 
         if (isError) Debug.LogError($"{logPrefix} {message}", GameObject);
         else if (forceLog || enableLogging) Debug.Log($"{logPrefix} {message}", GameObject);
-        */
+        
     }
 
 

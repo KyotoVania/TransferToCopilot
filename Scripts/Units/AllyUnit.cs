@@ -36,6 +36,8 @@ public class AllyUnit : Unit, IBannerObserver
     private BlackboardVariable<bool> bbIsDefending; 
     // Nouvelle variable Blackboard pour la défense
     private BlackboardVariable<bool> bbDefendedBuildingIsUnderAttack;
+    // Nouvelle variable Blackboard pour l'ennemi détecté
+    private BlackboardVariable<Unit> bbDetectedEnemyUnit;
 
     [Header("Ally Settings")]
     [SerializeField] public bool enableVerboseLogging = true; // Public pour que les nœuds puissent vérifier
@@ -203,6 +205,11 @@ public class AllyUnit : Unit, IBannerObserver
         if (!blackboardRef.GetVariable("DefendedBuildingIsUnderAttack", out bbDefendedBuildingIsUnderAttack))
         {
             LogAlly("Blackboard variable 'DefendedBuildingIsUnderAttack' is missing. Defensive alert logic may not work.", true);
+        }
+        // Nouvelle variable Blackboard pour l'ennemi détecté
+        if (!blackboardRef.GetVariable("DetectedEnemyUnit", out bbDetectedEnemyUnit))
+        {
+            LogAlly("Blackboard variable 'DetectedEnemyUnit' is missing. Enemy detection logic may not work.", true);
         }
         // Variables d'état de l'unité
         blackboardRef.GetVariable(BB_IS_ATTACKING, out bbIsAttacking);
@@ -606,6 +613,13 @@ public class AllyUnit : Unit, IBannerObserver
                 bbDefendedBuildingIsUnderAttack.Value = true;
                 if (enableVerboseLogging)
                     Debug.Log($"[{name}] (Direct) Defended building '{building.name}' is under attack by '{attacker?.name ?? "Unknown"}'. Blackboard flag set.");
+                //on va devoir aussi faire en sorte d'enregistrer l'attaquant dans le BB, on peut utiliser bbDetectedEnemyUnit 
+                if (bbDetectedEnemyUnit != null && attacker != null && IsValidUnitTarget(attacker))
+                {
+                    bbDetectedEnemyUnit.Value = attacker; // Enregistrer l'attaquant dans le BB
+                    if (enableVerboseLogging)
+                        Debug.Log($"[{name}] Detected enemy unit '{attacker.name}' attacking defended building '{building.name}'.");
+                }
             }
         }
     }

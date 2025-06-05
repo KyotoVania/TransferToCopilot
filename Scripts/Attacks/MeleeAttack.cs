@@ -73,7 +73,6 @@ public class MeleeAttack : MonoBehaviour, IAttack
 
         // --- APPLICATION DES DÉGÂTS ---
         // Vérifier à nouveau si la cible est valide avant d'appliquer les dégâts
-        // (elle aurait pu être détruite par une autre source pendant l'animation)
         if (target != null && target.gameObject.activeInHierarchy)
         {
             Unit targetUnit = target.GetComponent<Unit>(); //
@@ -85,11 +84,8 @@ public class MeleeAttack : MonoBehaviour, IAttack
             if (targetUnit != null)
             {
                 if (showAttackLogs) Debug.Log($"[{attacker.name}] MeleeAttack: Applying {damage} damage to Unit {targetUnit.name}.");
-                targetUnit.TakeDamage(damage); //
-                // L'événement OnUnitAttacked devrait être déclenché DANS Unit.TakeDamage ou après l'appel si nécessaire.
-                // Mais pour centraliser, il est mieux qu'il soit dans TakeDamage.
-                // Si Unit.TakeDamage ne déclenche pas OnUnitAttacked, faites-le ici :
-                // Unit.OnUnitAttacked?.Invoke(attacker.GetComponent<Unit>(), targetUnit, damage);
+                targetUnit.TakeDamage(damage, attacker.GetComponent<Unit>()); 
+                
             }
             else if (targetBuilding != null)
             {

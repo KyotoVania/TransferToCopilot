@@ -81,19 +81,19 @@ public partial class IsInUnitInteractionRangeCondition : Unity.Behavior.Conditio
 
         if (selfUnit == null)
         {
-            // Debug.LogWarning("[IsInUnitInteractionRangeCondition] SelfUnit is null on Blackboard in IsTrue.");
+             Debug.LogWarning("[IsInUnitInteractionRangeCondition] SelfUnit is null on Blackboard in IsTrue.");
             return false;
         }
 
         if (targetUnit == null)
         {
-            // Debug.LogWarning("[IsInUnitInteractionRangeCondition] InteractionTargetUnit is null on Blackboard in IsTrue.");
+             Debug.LogWarning("[IsInUnitInteractionRangeCondition] InteractionTargetUnit is null on Blackboard in IsTrue.");
             return false;
         }
         
         bool isInRange = selfUnit.IsUnitInRange(targetUnit);
-        // if(isInRange) Debug.Log($"[IsInUnitInteractionRangeCondition] Unit '{selfUnit.name}' IS in range of unit '{targetUnit.name}'. Result: true");
-        // else Debug.Log($"[IsInUnitInteractionRangeCondition] Unit '{selfUnit.name}' is NOT in range of unit '{targetUnit.name}'. Result: false");
+        if(isInRange) Debug.Log($"[IsInUnitInteractionRangeCondition] Unit '{selfUnit.name}' IS in range of unit '{targetUnit.name}'. Result: true");
+         else Debug.Log($"[IsInUnitInteractionRangeCondition] Unit '{selfUnit.name}' is NOT in range of unit '{targetUnit.name}'. Result: false");
         return isInRange;
     }
 

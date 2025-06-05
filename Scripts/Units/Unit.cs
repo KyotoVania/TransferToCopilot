@@ -623,8 +623,17 @@ public abstract class Unit : MonoBehaviour, ITileReservationObserver
     }
 
 
-    public virtual void TakeDamage(int damage)
+    public virtual void TakeDamage(int damage, Unit attacker = null)
     {
+        if (debugUnitCombat) Debug.Log($"[{name}] TakeDamage called with {damage} damage from {attacker?.name ?? "unknown attacker"}.");
+        if (damage <= 0) return; // Pas de dégâts négatifs ou nuls
+
+        if (attacker != null && OnUnitAttacked != null)
+        {
+            OnUnitAttacked(attacker, this, damage);
+        }
+
+        // Appliquer les dégâts en 
         int actualDamage = Mathf.Max(0, damage - Defense);
         Health -= actualDamage;
         if (debugUnitCombat) Debug.Log($"[{name}] took {actualDamage} damage. Health: {Health}/{Stats?.Health ?? 0}");
