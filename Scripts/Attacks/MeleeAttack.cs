@@ -75,12 +75,18 @@ public class MeleeAttack : MonoBehaviour, IAttack
         // Vérifier à nouveau si la cible est valide avant d'appliquer les dégâts
         if (target != null && target.gameObject.activeInHierarchy)
         {
-            Unit targetUnit = target.GetComponent<Unit>(); //
-            if (targetUnit == null) targetUnit = target.GetComponentInParent<Unit>(); //
+            Unit targetUnit = target.GetComponent<Unit>(); 
+            if (targetUnit == null) targetUnit = target.GetComponentInParent<Unit>(); 
 
-            Building targetBuilding = target.GetComponent<Building>(); //
-            if (targetBuilding == null) targetBuilding = target.GetComponentInParent<Building>(); //
-
+            Building targetBuilding = target.GetComponent<Building>(); 
+            if (targetBuilding == null) targetBuilding = target.GetComponentInParent<Building>(); 
+            
+            if ((targetUnit != null && targetUnit.Health <= 0) || 
+                (targetBuilding != null && targetBuilding.CurrentHealth <= 0))
+            {
+                if (showAttackLogs) Debug.LogWarning($"[{attacker.name}] MeleeAttack: Target {target.name} is dead, cancelling damage application.");
+                yield break; 
+            }
             if (targetUnit != null)
             {
                 if (showAttackLogs) Debug.Log($"[{attacker.name}] MeleeAttack: Applying {damage} damage to Unit {targetUnit.name}.");
@@ -90,7 +96,7 @@ public class MeleeAttack : MonoBehaviour, IAttack
             else if (targetBuilding != null)
             {
                 if (showAttackLogs) Debug.Log($"[{attacker.name}] MeleeAttack: Applying {damage} damage to Building {targetBuilding.name}.");
-                targetBuilding.TakeDamage(damage, attacker.GetComponent<Unit>()); //
+                targetBuilding.TakeDamage(damage, attacker.GetComponent<Unit>()); 
                
             }
             else

@@ -92,100 +92,106 @@ public class CheckDefensiveThreatsNode : Unity.Behavior.Condition
     }
 
     public override bool IsTrue()
+{
+    Debug.Log("[CheckDefensiveThreatsNode] Checking defensive threats...");
+    
+    if (!CacheBlackboardVariables()) 
     {
-        Debug.Log("[CheckDefensiveThreatsNode] Checking defensive threats...");
-        
-        if (!CacheBlackboardVariables()) 
-        {
-            Debug.LogError("[CheckDefensiveThreatsNode] Failed to cache blackboard variables");
-            return false;
-        }
-        
-        Debug.Log("[CheckDefensiveThreatsNode] Blackboard variables cached successfully.");
-        
-        AllyUnit selfUnit = bbSelfUnit?.Value as AllyUnit;
-        if (selfUnit == null) 
-        {
-            Debug.LogWarning("[CheckDefensiveThreatsNode] SelfUnit is null or not AllyUnit");
-            return false;
-        }
-        
-        Debug.Log($"[CheckDefensiveThreatsNode] Self unit: {selfUnit.name}");
-
-        // Priorité 1: Bâtiment défendu sous attaque
-        bool buildingUnderAttack = bbDefendedBuildingUnderAttack?.Value ?? false;
-        Debug.Log($"[CheckDefensiveThreatsNode] Building under attack: {buildingUnderAttack}");
-        Unit detectedEnemy = bbDetectedEnemyUnit?.Value;
-        if (buildingUnderAttack)
-        {
-            Debug.Log($"[CheckDefensiveThreatsNode] Building under attack detected for {selfUnit.name}");
-            //on set FinalDestinationPosition avec la position de l'ennemi
-
-            if (bbDetectedEnemyUnit != null)
-            {
-                if (bbFinalDestinationPosition != null)
-                {
-                    //pour avoir la position de l'ennemi on use GetOccupiedTile
-                    Tile enemyTile = detectedEnemy.GetOccupiedTile();
-                    if (enemyTile != null)
-                    {
-                        //MoveToBuilding pour le I
-                        if (bbSelectedActionType != null)
-                        {
-                            bbSelectedActionType.Value = AIActionType.MoveToUnit;
-                            bbFinalDestinationPosition.Value = new Vector2Int(enemyTile.column, enemyTile.row);
-                            if (bbInteractionTargetUnit != null)
-                                bbInteractionTargetUnit.Value = detectedEnemy; // <-- Set interaction target
-                        }
-                    }
-                    else
-                        Debug.LogWarning(
-                            $"[CheckDefensiveThreatsNode] Detected enemy {detectedEnemy.name} has no occupied tile.");
-                }
-
-                Debug.Log($"[CheckDefensiveThreatsNode] Detected enemy set for {selfUnit.name}: {detectedEnemy.name}");
-            }
-            return true;
-        }
-
-        // Priorité 2: Ennemi dans le périmètre ET à portée d'attaque
-        Debug.Log($"[CheckDefensiveThreatsNode] Detected enemy: {detectedEnemy?.name ?? "null"}");
-        
-        if (detectedEnemy != null && detectedEnemy.Health > 0)
-        {
-            Debug.Log($"[CheckDefensiveThreatsNode] Threat detected: {detectedEnemy.name} is in range of {selfUnit.name}");
-            //on set FinalDestinationPosition avec la position de l'ennemi
-            if (bbDetectedEnemyUnit != null)
-            {
-                bbDetectedEnemyUnit.Value = detectedEnemy;
-                if (bbFinalDestinationPosition != null)
-                {
-                    //pour avoir la position de l'ennemi on use GetOccupiedTile
-                    Tile enemyTile = detectedEnemy.GetOccupiedTile();
-                    if (enemyTile != null)
-                    {
-                        //MoveToBuilding pour le I
-                        if (bbSelectedActionType != null)
-                        {
-                            bbSelectedActionType.Value = AIActionType.MoveToUnit;
-                            bbFinalDestinationPosition.Value = new Vector2Int(enemyTile.column, enemyTile.row);
-                            if (bbInteractionTargetUnit != null)
-                                bbInteractionTargetUnit.Value = detectedEnemy; // <-- Set interaction target
-                        }
-                    }
-                    else
-                        Debug.LogWarning($"[CheckDefensiveThreatsNode] Detected enemy {detectedEnemy.name} has no occupied tile.");
-                }
-                Debug.Log($"[CheckDefensiveThreatsNode] Detected enemy set for {selfUnit.name}: {detectedEnemy.name}");
-            }
-            return true;
-        }
-
-        // Aucune menace immédiate
-        Debug.Log("[CheckDefensiveThreatsNode] No immediate threats detected.");
+        Debug.LogError("[CheckDefensiveThreatsNode] Failed to cache blackboard variables");
         return false;
     }
+    
+    AllyUnit selfUnit = bbSelfUnit?.Value as AllyUnit;
+    if (selfUnit == null) 
+    {
+        Debug.LogWarning("[CheckDefensiveThreatsNode] SelfUnit is null or not AllyUnit");
+        return false;
+    }
+    
+    Debug.Log($"[CheckDefensiveThreatsNode] Self unit: {selfUnit.name}");
 
+    // Récupérer l'ennemi détecté et vérifier s'il est encore valide
+    Unit detectedEnemy = bbDetectedEnemyUnit?.Value;
+    bool buildingUnderAttack = bbDefendedBuildingUnderAttack?.Value ?? false;
+
+    // NOUVELLE LOGIQUE : Nettoyer les flags si l'ennemi est mort ou invalide
+    if (detectedEnemy == null || detectedEnemy.Health <= 0)
+    {
+        Debug.Log($"[CheckDefensiveThreatsNode] Enemy is dead or null, cleaning flags for {selfUnit.name}");
+        
+        // Nettoyer tous les flags de menace
+        if (bbDetectedEnemyUnit != null)
+            bbDetectedEnemyUnit.Value = null;
+        if (bbDefendedBuildingUnderAttack != null)
+            bbDefendedBuildingUnderAttack.Value = false;
+        
+        Debug.Log("[CheckDefensiveThreatsNode] Threat flags cleared - no immediate threats detected.");
+        return false;  // Pas de menace active
+    }
+
+    // Priorité 1: Bâtiment défendu sous attaque
+    Debug.Log($"[CheckDefensiveThreatsNode] Building under attack: {buildingUnderAttack}");
+    
+    if (buildingUnderAttack)
+    {
+        Debug.Log($"[CheckDefensiveThreatsNode] Building under attack detected for {selfUnit.name}");
+        
+        // Vérifier que l'ennemi est encore valide avant d'accéder à GetOccupiedTile()
+        Tile enemyTile = detectedEnemy.GetOccupiedTile();
+        if (enemyTile != null)
+        {
+            if (bbSelectedActionType != null)
+            {
+                bbSelectedActionType.Value = AIActionType.MoveToUnit;
+                bbFinalDestinationPosition.Value = new Vector2Int(enemyTile.column, enemyTile.row);
+                if (bbInteractionTargetUnit != null)
+                    bbInteractionTargetUnit.Value = detectedEnemy;
+            }
+            Debug.Log($"[CheckDefensiveThreatsNode] Detected enemy set for {selfUnit.name}: {detectedEnemy.name}");
+            return true;
+        }
+        else
+        {
+            Debug.LogWarning($"[CheckDefensiveThreatsNode] Enemy {detectedEnemy.name} has no occupied tile - cleaning flags");
+            // Nettoyer les flags si l'ennemi n'a plus de tile
+            if (bbDetectedEnemyUnit != null)
+                bbDetectedEnemyUnit.Value = null;
+            if (bbDefendedBuildingUnderAttack != null)
+                bbDefendedBuildingUnderAttack.Value = false;
+            return false;
+        }
+    }
+
+    // Priorité 2: Ennemi dans le périmètre ET à portée d'attaque
+    if (detectedEnemy != null && detectedEnemy.Health > 0)
+    {
+        Debug.Log($"[CheckDefensiveThreatsNode] Threat detected: {detectedEnemy.name} is in range of {selfUnit.name}");
+        
+        Tile enemyTile = detectedEnemy.GetOccupiedTile();
+        if (enemyTile != null)
+        {
+            if (bbSelectedActionType != null)
+            {
+                bbSelectedActionType.Value = AIActionType.MoveToUnit;
+                bbFinalDestinationPosition.Value = new Vector2Int(enemyTile.column, enemyTile.row);
+                if (bbInteractionTargetUnit != null)
+                    bbInteractionTargetUnit.Value = detectedEnemy;
+            }
+            Debug.Log($"[CheckDefensiveThreatsNode] Detected enemy set for {selfUnit.name}: {detectedEnemy.name}");
+            return true;
+        }
+        else
+        {
+            Debug.LogWarning($"[CheckDefensiveThreatsNode] Enemy {detectedEnemy.name} has no occupied tile");
+            return false;
+        }
+    }
+
+    // Aucune menace immédiate
+    Debug.Log("[CheckDefensiveThreatsNode] No immediate threats detected.");
+    return false;
+}
+    
     public override void OnEnd()
     {
         blackboardVariablesCached = false;

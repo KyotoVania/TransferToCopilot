@@ -32,7 +32,7 @@ public class DefensiveAttackNode : Unity.Behavior.Action
     protected override Status OnStart()
     {
         if (GameObject != null) agent = GameObject.GetComponent<BehaviorGraphAgent>();
-        
+    
         if (!CacheBlackboardVariables())
         {
             Debug.LogError("[DefensiveAttackNode] Failed to cache blackboard variables.", GameObject);
@@ -46,21 +46,36 @@ public class DefensiveAttackNode : Unity.Behavior.Action
             return Status.Failure;
         }
 
-        // Nettoyer le flag d'attaque du bâtiment
-        if (bbDefendedBuildingUnderAttack != null) 
+        // Vérifier si l'ennemi est encore valide
+        Unit enemy = bbDetectedEnemyUnit?.Value;
+        if (enemy == null || enemy.Health <= 0)
         {
-            bbDefendedBuildingUnderAttack.Value = false;
-            Debug.Log("[DefensiveAttackNode] Cleared building under attack flag.", GameObject);
+            Debug.Log("[DefensiveAttackNode] Enemy is dead or null, cleaning threat flags.", GameObject);
+        
+            // Nettoyer TOUS les flags de menace
+            if (bbDetectedEnemyUnit != null)
+                bbDetectedEnemyUnit.Value = null;
+            if (bbDefendedBuildingUnderAttack != null)
+                bbDefendedBuildingUnderAttack.Value = false;
+            
+            return Status.Success; // Mission accomplie, menace éliminée
         }
 
-        // Configurer la cible pour l'attaque
-        Unit enemy = bbDetectedEnemyUnit?.Value;
-        if (enemy != null && enemy.Health > 0 && selfUnit.IsUnitInRange(enemy))
+        // Si l'ennemi est vivant, configurer l'attaque
+        if (selfUnit.IsUnitInRange(enemy))
         {
             Debug.Log($"[DefensiveAttackNode] Valid enemy detected for defensive attack: {enemy.name}.", GameObject);
+        
+            // Nettoyer le flag d'attaque du bâtiment car on prend en charge la menace
+            if (bbDefendedBuildingUnderAttack != null) 
+            {
+                bbDefendedBuildingUnderAttack.Value = false;
+                Debug.Log("[DefensiveAttackNode] Cleared building under attack flag.", GameObject);
+            }
+        
             return Status.Success; // L'AttackUnitNode prendra le relais
         }
-        
+    
         Debug.LogWarning("[DefensiveAttackNode] No valid target for defensive attack.", GameObject);
         return Status.Failure;
     }

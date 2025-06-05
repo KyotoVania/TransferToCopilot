@@ -643,12 +643,13 @@ public abstract class Unit : MonoBehaviour, ITileReservationObserver
     protected virtual void Die()
     {
         if (debugUnitCombat) Debug.Log($"[{name}] Died.");
+        StopAllCoroutines();
         if (TileReservationController.Instance != null && occupiedTile != null)
         {
             TileReservationController.Instance.ReleaseTileReservation(new Vector2Int(occupiedTile.column, occupiedTile.row), this);
         }
         if (occupiedTile != null) occupiedTile.RemoveUnit();
-
+       
         if (useAnimations && animator != null)
         {
             SetState(UnitState.Idle);
