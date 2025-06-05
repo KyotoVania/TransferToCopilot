@@ -94,22 +94,22 @@ public partial class IsInBuildingInteractionRangeCondition : Unity.Behavior.Cond
 
         if (selfUnit == null)
         {
-            // Debug.LogWarning("[IsInBuildingInteractionRangeCondition] SelfUnit is null on Blackboard in IsTrue.");
+             Debug.LogWarning("[IsInBuildingInteractionRangeCondition] SelfUnit is null on Blackboard in IsTrue.");
             return false;
         }
 
         if (targetBuilding == null)
         {
             // No building targeted, so not in range of "no building".
-            // Debug.LogWarning("[IsInBuildingInteractionRangeCondition] InteractionTargetBuilding is null on Blackboard in IsTrue.");
+             Debug.LogWarning("[IsInBuildingInteractionRangeCondition] InteractionTargetBuilding is null on Blackboard in IsTrue.");
             return false;
         }
 
         // Your AllyUnit or Unit class should have IsBuildingInRange.
         // Ensure it's public or protected internal and accessible.
         bool isInRange = selfUnit.IsBuildingInRange(targetBuilding);
-        // if(isInRange) Debug.Log($"[IsInBuildingInteractionRangeCondition] Unit '{selfUnit.name}' IS in range of building '{targetBuilding.name}'. Result: true");
-        // else Debug.Log($"[IsInBuildingInteractionRangeCondition] Unit '{selfUnit.name}' is NOT in range of building '{targetBuilding.name}'. Result: false");
+        if(isInRange) Debug.Log($"[IsInBuildingInteractionRangeCondition] Unit '{selfUnit.name}' IS in range of building '{targetBuilding.name}'. Result: true");
+        else Debug.Log($"[IsInBuildingInteractionRangeCondition] Unit '{selfUnit.name}' is NOT in range of building '{targetBuilding.name}'. Result: false");
         return isInRange;
     }
 
