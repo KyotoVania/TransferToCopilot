@@ -69,7 +69,27 @@ public class MeleeAttack : MonoBehaviour, IAttack
         }
 
         // Attendre la durée de l'animation d'attaque (ou jusqu'au point d'impact)
-        yield return new WaitForSeconds(animationTime);
+        // Wait for the duration, but check if the target is dead during the wait
+        float elapsed = 0f;
+        while (elapsed < animationTime)
+        {
+            // Check if the target or the attacker is still valid, il faudrait check la vie
+            if (target == null || !target.gameObject.activeInHierarchy)
+            {
+                if (showAttackLogs) Debug.LogWarning($"[{attacker.name}] MeleeAttack: Target became null or inactive during attack animation. Cancelling attack.");
+                if (vfxInstance != null) Destroy(vfxInstance);
+                yield break; // Cible invalide, annuler l'attaque
+            }
+            if (attacker == null || !attacker.gameObject.activeInHierarchy)
+            {
+                if (showAttackLogs) Debug.LogWarning($"[{attacker.name}] MeleeAttack: Attacker became null or inactive during attack animation. Cancelling attack.");
+                if (vfxInstance != null) Destroy(vfxInstance);
+                yield break; // Attaquant invalide, annuler l'attaque
+            }
+
+            elapsed += Time.deltaTime;
+            yield return null;
+        }
 
         // --- APPLICATION DES DÉGÂTS ---
         // Vérifier à nouveau si la cible est valide avant d'appliquer les dégâts

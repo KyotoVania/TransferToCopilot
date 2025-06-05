@@ -654,13 +654,19 @@ public abstract class Unit : MonoBehaviour, ITileReservationObserver
         {
             SetState(UnitState.Idle);
             _isAttacking = false;
-            animator.SetTrigger(DieTriggerId);
-            float destroyDelay = 2.0f;
+        	/* 
+		   animator.SetTrigger(DieTriggerId);
+         
+		   float destroyDelay = 2.0f;
             foreach (var clip in animator.runtimeAnimatorController.animationClips)
             {
                 if (clip.name.ToLower().Contains("die")) { destroyDelay = clip.length; break; }
             }
             Destroy(gameObject, destroyDelay);
+
+			*/
+            Destroy(gameObject);
+
         }
         else Destroy(gameObject);
     }

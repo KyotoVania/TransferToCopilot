@@ -105,12 +105,18 @@ public class AttackUnitNode : Unity.Behavior.Action
             return Status.Failure;
         }
 
-        if (currentTargetUnitForThisNode == null || currentTargetUnitForThisNode.Health <= 0)
+        if (currentTargetUnitForThisNode == null|| !currentTargetUnitForThisNode.gameObject.activeInHierarchy)
         {
-            LogNodeMessage($"OnUpdate: Target Unit '{(currentTargetUnitForThisNode?.name ?? "Unknown/Dead")}' is null or dead. Node SUCCESS.", isVerbose: true, forceLog: true);
+            LogNodeMessage($"OnUpdate: Target UnitUnknown/Dead is null or dead. Node SUCCESS.", isVerbose: true, forceLog: true);
             // Le flag bbIsAttacking sera géré dans OnEnd(), qui sera appelé après ce Success.
             return Status.Success;
         }
+        if ( currentTargetUnitForThisNode.Health <= 0 )
+        {
+            LogNodeMessage($"OnUpdate: Target Unit '{(currentTargetUnitForThisNode?.name ?? "Unknown/Dead")}' is null or dead. Node SUCCESS.", isVerbose: true, forceLog: true);
+        // Le flag bbIsAttacking sera géré dans OnEnd(), qui sera appelé après ce Success.
+        return Status.Success;
+        }   
         // Optionnel : revérifier la portée ici si la cible peut bouger pendant le délai d'attaque.
         // Si l'ennemi sort de la portée pendant qu'on attend le délai, on devrait peut-être retourner Failure
         // pour que SelectTargetNode choisisse MoveToUnit.
