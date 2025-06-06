@@ -135,6 +135,16 @@ protected override IEnumerator Start()
         // Vous pourriez envisager de le désactiver explicitement ici en cas d'échec d'attachement :
         // if (m_Agent != null) m_Agent.enabled = false;
     }
+    
+    if (unitStats.UnitType == UnitType.Boss)
+    {
+        // Si c'est un boss, on peut déclencher des événements ou des changements de musique. il nous faut call UpdateGameState de gameStateManager
+        if (enableVerboseLogging) Debug.Log($"[{name}] EnemyUnit.Start: Boss unit detected. Notifying GameManager and switching music state to 'Boss'.");
+        // Assurez-vous que GameManager.Instance est accessible et que NotifyBossAppeared est implémenté.
+        
+        GameManager.Instance.NotifyBossAppeared(); 
+        AudioManager.Instance.SwitchMusicState("Boss"); 
+    }
 
     if (enableVerboseLogging)
         Debug.Log($"[{name}] EnemyUnit.Start: Processus d'initialisation terminé. Agent Actif: {(m_Agent != null && m_Agent.enabled ? "OUI" : "NON ou Agent NULL")}. Mode initial depuis BB: {(bbCurrentBehaviorMode?.Value.ToString() ?? "NON DÉFINI/TROUVÉ")}. Graph: {(m_Agent?.Graph != null ? m_Agent.Graph.name : "PAS D'AGENT/GRAPH")}");

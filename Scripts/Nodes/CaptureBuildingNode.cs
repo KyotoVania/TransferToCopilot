@@ -20,6 +20,9 @@ public class CaptureBuildingNode : Unity.Behavior.Action
     private const string SELF_UNIT_VAR = "SelfUnit";
     private const string TARGET_BUILDING_VAR = "InteractionTargetBuilding";
     private const string IS_CAPTURING_VAR = "IsCapturing";
+    private const string BB_INITIAL_TARGET_BUILDING = "InitialTargetBuilding"; 
+    private const string BB_IS_OBJECTIVE_COMPLETED = "IsObjectiveCompleted";   
+
     // La variable IS_OBJECTIVE_COMPLETED_VAR n'est plus gérée directement par ce noeud.
 
     // --- Node State ---
@@ -31,8 +34,9 @@ public class CaptureBuildingNode : Unity.Behavior.Action
     private BlackboardVariable<Unit> bbSelfUnit;
     private BlackboardVariable<Building> bbTargetBuilding;
     private BlackboardVariable<bool> bbIsCapturingBlackboard;
-    // private BlackboardVariable<bool> bbIsObjectiveCompleted; // Supprimé de ce noeud
-
+    
+    private BlackboardVariable<Building> bbInitialTargetBuilding; 
+    private BlackboardVariable<bool> bbIsObjectiveCompleted; 
     private string nodeInstanceIdForLog;
     private bool captureSuccessfullyInitiated = false;
 
@@ -124,16 +128,25 @@ public class CaptureBuildingNode : Unity.Behavior.Action
 
         if (!currentTargetBuildingInstance.gameObject.activeInHierarchy || currentTargetBuildingInstance.CurrentHealth <= 0) { // Vérifier si le GO du bâtiment est encore actif
             LogNodeMessage($"Target '{currentTargetBuildingInstance.name}' destroyed or inactive. Capture ended. Node SUCCESS.", false, true);
-            // AllyUnit.OnCaptureComplete (ou une logique similaire si le bâtiment est détruit) devrait gérer bbIsObjectiveCompleted.
-            // Le SetIsCapturingBlackboardVar(false) sera fait dans OnEnd.
+            
             return Status.Success;
         }
 
         if (currentTargetBuildingInstance.Team == TeamType.Player)
         {
-            LogNodeMessage($"Target '{currentTargetBuildingInstance.name}' has been captured by Player. Node SUCCESS.", false, true);
-            // AllyUnit.OnCaptureComplete gérera bbIsObjectiveCompleted.
-            // Le SetIsCapturingBlackboardVar(false) sera fait dans OnEnd.
+            LogNodeMessage($"Target '{currentTargetBuildingInstance.name}' has been captured by Player. Capture SUCCESS.", false, true);
+
+
+            var initialObjective = bbInitialTargetBuilding?.Value;
+            if (initialObjective != null && initialObjective == currentTargetBuildingInstance)
+            {
+                if (bbIsObjectiveCompleted != null)
+                {
+                    LogNodeMessage($"L'objectif principal '{initialObjective.name}' est complété. Mise à jour du Blackboard.", false, true);
+                    bbIsObjectiveCompleted.Value = true;
+                }
+            }
+
             return Status.Success;
         }
 
@@ -218,10 +231,17 @@ public class CaptureBuildingNode : Unity.Behavior.Action
         if (!blackboard.GetVariable(IS_CAPTURING_VAR, out bbIsCapturingBlackboard))
         { LogNodeMessage($"BBVar Output '{IS_CAPTURING_VAR}' missing.", true); success = false; }
 
-        // IS_OBJECTIVE_COMPLETED_VAR n'est plus directement utilisé par ce nœud pour l'écriture.
-        // Il est lu par SelectTargetNode, et écrit par AllyUnit.
-        // blackboard.GetVariable(IS_OBJECTIVE_COMPLETED_VAR, out bbIsObjectiveCompleted); // Optionnel si on voulait le lire ici.
+        if (!blackboard.GetVariable(BB_INITIAL_TARGET_BUILDING, out bbInitialTargetBuilding))
+        { 
+            // Ce n'est pas une erreur fatale, car on peut capturer un bâtiment qui n'est pas l'objectif principal
+            LogNodeMessage($"BBVar '{BB_INITIAL_TARGET_BUILDING}' manquant (optionnel).", false); 
+        }
 
+        if (!blackboard.GetVariable(BB_IS_OBJECTIVE_COMPLETED, out bbIsObjectiveCompleted))
+        { 
+            LogNodeMessage($"BBVar '{BB_IS_OBJECTIVE_COMPLETED}' manquant.", true); 
+            success = false; // C'est critique, car on ne peut pas signaler la fin de la mission
+        }
         blackboardVariablesCached = success;
         if (!success)
         {

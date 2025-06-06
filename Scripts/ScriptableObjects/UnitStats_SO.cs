@@ -1,6 +1,14 @@
 using UnityEngine;
 using Sirenix.OdinInspector; 
 
+//enum for type of unit 
+public enum UnitType
+{
+    Regular,
+    Elite,
+    Boss
+}
+
 [CreateAssetMenu(fileName = "UnitStats_New", menuName = "GameData/Unit Stats")]
 public class UnitStats_SO : ScriptableObject
 {
@@ -26,4 +34,9 @@ public class UnitStats_SO : ScriptableObject
 
     [MinValue(0)] // La détection peut être 0 (ne voit rien)
     public int DetectionRange = 3; // En nombre de tuiles
+    
+    [Title("Unit Type")]
+    [EnumToggleButtons] // Permet de choisir le type de manière plus visuelle
+    public UnitType Type = UnitType.Regular; // Type de l'unité, peut être Regular, Elite ou Boss
+    
 }
