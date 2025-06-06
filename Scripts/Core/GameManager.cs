@@ -17,6 +17,7 @@ public class GameManager : SingletonPersistent<GameManager>
     [Header("Scene Data")]
     [SerializeField] private LevelData_SO mainMenuSceneData;
     [SerializeField] private LevelData_SO hubSceneData;
+    
     public static LevelData_SO CurrentLevelToLoad { get; private set; }
     
     protected override void Awake()
@@ -26,6 +27,48 @@ public class GameManager : SingletonPersistent<GameManager>
 
     private void Start()
     {
+        bool launchedFromDebug = PlayerPrefs.GetInt("DebugMode_LaunchedFromDebug", 0) == 1;
+
+        if (launchedFromDebug)
+        {
+            Debug.Log("[GameManager] Lancement en mode DEBUG détecté.");
+
+            // Récupérer l'ID du niveau à charger
+            string levelIDToLoad = PlayerPrefs.GetString("DebugMode_SelectedLevelID", "");
+
+            // Nettoyer les PlayerPrefs immédiatement
+            PlayerPrefs.DeleteKey("DebugMode_LaunchedFromDebug");
+            PlayerPrefs.DeleteKey("DebugMode_SelectedLevelID");
+            PlayerPrefs.Save();
+
+            if (string.IsNullOrEmpty(levelIDToLoad))
+            {
+                Debug.LogError("[GameManager] Mode debug détecté, mais aucun ID de niveau trouvé. Chargement du menu principal.");
+                LoadMainMenu();
+                return;
+            }
+
+            // --- ÉTAPE CLÉ : Retrouver l'asset LevelData_SO à partir de son ID ---
+            LevelData_SO levelToLoad = FindLevelDataByID(levelIDToLoad);
+
+            if (levelToLoad != null)
+            {
+                Debug.Log($"[GameManager] LevelData '{levelToLoad.DisplayName}' trouvé. Lancement du niveau...");
+                // Maintenant, on appelle la méthode standard pour charger un niveau
+                LoadLevel(levelToLoad);
+            }
+            else
+            {
+                Debug.LogError($"[GameManager] Impossible de trouver le LevelData_SO avec l'ID '{levelIDToLoad}'. Assurez-vous qu'il est dans un dossier 'Resources'. Chargement du menu principal.");
+                LoadMainMenu();
+            }
+        }
+        else
+        {
+            // Comportement normal si on ne vient pas de la scène de debug
+            Debug.Log("[GameManager] Lancement en mode NORMAL. Chargement du menu principal.");
+            LoadMainMenu();
+        }
         string sceneToLoad = "MainMenu"; // Default fallback
         if (mainMenuSceneData != null && !string.IsNullOrEmpty(mainMenuSceneData.SceneName))
         {
@@ -83,6 +126,30 @@ public class GameManager : SingletonPersistent<GameManager>
         LoadSceneByName(sceneToLoad, GameState.MainMenu);
     }
 
+    /// <summary>
+    /// Trouve un asset LevelData_SO dans les dossiers Resources du projet en utilisant son ID.
+    /// </summary>
+    /// <param name="levelID">L'ID du niveau à rechercher.</param>
+    /// <returns>L'asset LevelData_SO ou null si non trouvé.</returns>
+    private LevelData_SO FindLevelDataByID(string levelID)
+    {
+        // Charge tous les LevelData_SO depuis tous les sous-dossiers de "Resources".
+        // Assurez-vous que le chemin est correct. Par exemple, "Data/Levels"
+        LevelData_SO[] allLevels = Resources.LoadAll<LevelData_SO>("Data/Levels"); 
+
+        Debug.Log($"[GameManager] Recherche de '{levelID}' parmi {allLevels.Length} niveaux trouvés dans Resources/Data/Levels.");
+
+        foreach (LevelData_SO levelData in allLevels)
+        {
+            if (levelData.LevelID == levelID)
+            {
+                return levelData;
+            }
+        }
+
+        // Si on ne trouve rien, on retourne null.
+        return null;
+    }
     private void LoadSceneByName(string sceneName, GameState targetStateAfterLoad)
     {
         if (string.IsNullOrEmpty(sceneName))
