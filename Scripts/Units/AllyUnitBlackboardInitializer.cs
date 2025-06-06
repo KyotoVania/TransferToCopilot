@@ -1,7 +1,5 @@
 using UnityEngine;
-using Unity.Behavior; // Tu pourrais avoir besoin de Unity.Behavior.GraphFramework aussi
-// using Unity.Behavior.GraphFramework; // Ajoute ceci si BlackboardVariable n'est pas trouvé
-
+using Unity.Behavior;
 public class AllyUnitBlackboardInitializer : MonoBehaviour
 {
     private BehaviorGraphAgent m_Agent;
