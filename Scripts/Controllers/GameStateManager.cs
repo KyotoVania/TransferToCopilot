@@ -27,7 +27,17 @@ public class GameStateManager : MonoBehaviour
         // Initialiser l'état de départ
         UpdateGameState(currentState);
     }
-
+    private void OnEnable()
+    {
+        // S'abonner à l'événement du nouveau registre
+        EnemyRegistry.OnBossSpawned += HandleBossSpawn;
+    }
+    
+    private void HandleBossSpawn(EnemyUnit bossUnit)
+    {
+        Debug.Log($"[GameStateManager] Événement OnBossSpawned reçu pour '{bossUnit.name}'. Changement d'état vers Boss.");
+        UpdateGameState(GameState.Boss);
+    }
     private void Update()
     {
         // Debug controls

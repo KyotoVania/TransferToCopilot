@@ -162,6 +162,12 @@ public abstract class Unit : MonoBehaviour, ITileReservationObserver
         }
     }
 
+//public getter to get the unitStats.UnitType
+    public UnitType GetUnitType()
+    {
+        return unitStats?.Type ?? UnitType.Null; 
+    }
+
     private IEnumerator AttachToNearestTile()
     {
         while (!isAttached)

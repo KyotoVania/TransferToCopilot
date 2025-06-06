@@ -6,7 +6,8 @@ public enum UnitType
 {
     Regular,
     Elite,
-    Boss
+    Boss,
+    Null
 }
 
 [CreateAssetMenu(fileName = "UnitStats_New", menuName = "GameData/Unit Stats")]

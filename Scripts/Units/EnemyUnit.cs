@@ -136,15 +136,14 @@ protected override IEnumerator Start()
         // if (m_Agent != null) m_Agent.enabled = false;
     }
     
-    if (unitStats.UnitType == UnitType.Boss)
+    if (EnemyRegistry.Instance != null)
     {
-        // Si c'est un boss, on peut déclencher des événements ou des changements de musique. il nous faut call UpdateGameState de gameStateManager
-        if (enableVerboseLogging) Debug.Log($"[{name}] EnemyUnit.Start: Boss unit detected. Notifying GameManager and switching music state to 'Boss'.");
-        // Assurez-vous que GameManager.Instance est accessible et que NotifyBossAppeared est implémenté.
-        
-        GameManager.Instance.NotifyBossAppeared(); 
-        AudioManager.Instance.SwitchMusicState("Boss"); 
+        EnemyRegistry.Instance.Register(this);
     }
+    else
+    {
+        Debug.LogError($"[{name}] EnemyRegistry.Instance est introuvable. L'unité ne peut pas s'enregistrer !");
+    } 
 
     if (enableVerboseLogging)
         Debug.Log($"[{name}] EnemyUnit.Start: Processus d'initialisation terminé. Agent Actif: {(m_Agent != null && m_Agent.enabled ? "OUI" : "NON ou Agent NULL")}. Mode initial depuis BB: {(bbCurrentBehaviorMode?.Value.ToString() ?? "NON DÉFINI/TROUVÉ")}. Graph: {(m_Agent?.Graph != null ? m_Agent.Graph.name : "PAS D'AGENT/GRAPH")}");
@@ -307,19 +306,15 @@ private void CacheBlackboardVariables()
         }
     }
 
-    // OnCaptureComplete et StopCapturing de Unit.cs devraient suffire.
-    // La logique de mise à jour de bbIsObjectiveCompleted devra être gérée par le graph
-    // ou par un système qui observe la capture des objectifs.
-
-    // La méthode OnRhythmBeat est héritée de Unit.cs.
-    // Le Behavior Graph utilisera probablement son propre nœud "WaitForBeat"
-    // pour séquencer les actions au rythme.
-    // La logique de HandleMovementOnBeat et HandleAttackOnBeat de Unit.cs
-    // sera déclenchée par les nœuds d'action (MoveToTarget, AttackUnit/Building).
 
     public override void OnDestroy()
     {
         // Se désabonner des événements si nécessaire
+        if (EnemyRegistry.Instance != null)
+        {
+            EnemyRegistry.Instance.Unregister(this);
+        }
         base.OnDestroy();
+
     }
 }
