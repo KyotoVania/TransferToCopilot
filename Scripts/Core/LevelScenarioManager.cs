@@ -137,10 +137,7 @@ public class LevelScenarioManager : MonoBehaviour
                 GameManager.Instance.LoadHub();
                 break;
             case ActionType.StartWave:
-                //log :
-                    Debug.Log($"[LevelScenarioManager] Démarrage de la vague: {scenarioEvent.actionParameter_Wave?.waveName ?? "Aucune vague spécifiée"}", this);
-                 // TODO: Implémenter la logique de spawn de vague. 
-                 // Cela pourrait impliquer de trouver des spawners et de leur passer le Wave_SO.
+                CommandWaveToSpawners(scenarioEvent.actionParameter_BuildingTag, scenarioEvent.actionParameter_Wave);
                 break;
         }
     }
@@ -156,7 +153,6 @@ public class LevelScenarioManager : MonoBehaviour
 
         foreach (var spawnerGO in spawners)
         {
-            // CORRIGÉ: Utilise .BlackboardReference au lieu de .blackboard
             var agent = spawnerGO.GetComponent<BehaviorGraphAgent>();
             if (agent != null && agent.BlackboardReference != null)
             {
@@ -164,6 +160,32 @@ public class LevelScenarioManager : MonoBehaviour
                 {
                     bbIsActive.Value = isActive;
                     Debug.Log($"[LevelScenarioManager] Bâtiment spawner '{spawnerGO.name}' mis à IsActive = {isActive}.", this);
+                }
+            }
+        }
+    }
+    private void CommandWaveToSpawners(string tag, Wave_SO wave)
+    {
+        if (wave == null || string.IsNullOrEmpty(tag)) return;
+        GameObject[] spawners = GameObject.FindGameObjectsWithTag(tag);
+        if (spawners.Length == 0)
+        {
+            Debug.LogWarning($"[LevelScenarioManager] No spawner with tag '{tag}' found for StartWave action.");
+            return;
+        }
+
+        Debug.Log($"[LevelScenarioManager] Commanding wave '{wave.waveName}' to {spawners.Length} spawner(s) with tag '{tag}'.");
+
+        foreach (var spawnerGO in spawners)
+        {
+            var agent = spawnerGO.GetComponent<BehaviorGraphAgent>();
+            if (agent != null && agent.BlackboardReference != null)
+            {
+                // This assumes your BT has a "CommandedWave" variable of type Wave_SO.
+                if (agent.BlackboardReference.GetVariable("CommandedWave", out BlackboardVariable<Wave_SO> bbCommandedWave))
+                {
+                    bbCommandedWave.Value = wave;
+                    Debug.Log($"[LevelScenarioManager] Sent wave '{wave.waveName}' to spawner '{spawnerGO.name}' blackboard.");
                 }
             }
         }
