@@ -47,8 +47,10 @@ public class LevelData_SO : ScriptableObject
     [Title("Gameplay Settings")]
     [Range(1, 5)] public int Difficulty = 1; // Exemple d'échelle
     public float RhythmBPM = 120f; // Remplacé speed par BPM pour être clair
-    // public List<EnemySpawnData> EnemyWaves; // Tu auras peut-être besoin d'un autre SO pour ça
 
+    [Header("Scenario Configuration")]
+    [Tooltip("Scénario à exécuter pour ce niveau")]
+    public LevelScenario_SO scenario;
     [Title("Audio (Wwise)")]
     public AK.Wwise.Event BackgroundMusic; // Décommenté
     public AK.Wwise.Switch MusicStateSwitch; // Potentiel Switch Wwise pour ce niveau

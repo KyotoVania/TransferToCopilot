@@ -37,9 +37,7 @@ public class MouseManager : MonoBehaviour
     private bool isHoveringValidTarget = false; // Track if we're hovering over a valid target
     private bool arePreabsInitialized = false; // Track if the persistent prefabs are initialized
 
-    // --- AJOUT POUR L'OUTLINE ---
     private BuildingOutlineFeedback currentlyHoveredBuildingOutline;
-    // --- FIN AJOUT ---
 
     // Structure to store building information
     private struct BuildingInfo

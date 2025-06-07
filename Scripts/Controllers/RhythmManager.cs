@@ -24,6 +24,7 @@ public class RhythmManager : MonoBehaviour
     // Événement pour notifier d'autres scripts quand un battement se produit.
     // WaitForBeatNode s'abonne à cet événement.
     public delegate void BeatAction();
+
     public static event BeatAction OnBeat;
 
     // (Optionnel) Événement pour une notification anticipée avant le battement.
@@ -107,7 +108,7 @@ public class RhythmManager : MonoBehaviour
         // if (!AkSoundEngine.IsInitialized() && rhythmBank != null) return; // Arrêter si Wwise n'est pas prêt
 
         float currentTime = Time.time;
-        timer += Time.deltaTime;
+        timer += Time.unscaledDeltaTime;
 
         // Logique pour le PreBeat (notification anticipée)
         if (OnPreBeat != null)
@@ -125,34 +126,24 @@ public class RhythmManager : MonoBehaviour
             }
         }
 
-
-        // Détection de battement principal
-        if (currentTime >= nextBeatTime) // Utiliser currentTime pour plus de précision
+        if (currentTime >= nextBeatTime)
         {
-            LastBeatWasProcessed = false; // Réinitialiser avant d'invoquer, pour que les nouveaux auditeurs le voient false.
-
-            // Invoquer l'événement OnBeat. Les abonnés (comme WaitForBeatNode) réagiront.
+            LastBeatWasProcessed = false;
             OnBeat?.Invoke();
-            if(debugLogBeats) Debug.Log($"[{Time.frameCount}] RhythmManager: Beat {beatCount + 1} invoked at {Time.time:F3}. Delta from expected: {(Time.time - nextBeatTime):F4}s");
+            if(debugLogBeats) Debug.Log($"[{Time.frameCount}] RhythmManager: Beat {beatCount + 1} invoked at {Time.time:F3}. Delta from expected: {(Time.time - nextBeatTime):F4}s. Time.timeScale: {Time.timeScale}");
 
-
-            HandleWwiseBeatEvents(); // Gérer les événements sonores Wwise.
+            HandleWwiseBeatEvents();
             beatCount++;
-
-            // Mettre à jour nextBeatTime pour le prochain battement.
-            // Ajouter 'interval' à 'nextBeatTime' précédent pour éviter la dérive due au temps de frame.
             nextBeatTime += interval;
 
-            // Si, à cause d'un lag important, nous avons dépassé plusieurs intervalles de battement :
             while (nextBeatTime < currentTime) {
                 nextBeatTime += interval;
-                 if(debugLogBeats) Debug.LogWarning($"[{Time.frameCount}] RhythmManager: Lag detected or BPM too high. Skipped one or more beat calculations to catch up.");
+                if(debugLogBeats) Debug.LogWarning($"[{Time.frameCount}] RhythmManager: Lag detected or BPM too high. Skipped one or more beat calculations to catch up.");
             }
 
-
-            timer = currentTime - (nextBeatTime - interval); // Réinitialiser le timer par rapport au dernier battement réel pour plus de précision.
-
-            LastBeatWasProcessed = true; // Mettre à true APRES l'invocation.
+            // Le recalcul de timer utilise déjà currentTime (unscaled) et nextBeatTime (basé sur unscaled)
+            timer = currentTime - (nextBeatTime - interval);
+            LastBeatWasProcessed = true;
         }
     }
 
@@ -213,9 +204,10 @@ public class RhythmManager : MonoBehaviour
         if (newBPM <= 0) return;
         bpm = newBPM;
         interval = 60f / bpm;
+        // timer est maintenant basé sur unscaledDeltaTime
         float currentProgressRatio = (timer % interval) / interval;
-        nextBeatTime = Time.time + (interval * (1 - currentProgressRatio));
-        timer = interval * currentProgressRatio;
+        nextBeatTime = Time.time + (interval * (1 - currentProgressRatio)); // Time.time est unscaled
+        // timer = interval * currentProgressRatio; // Cette ligne pourrait être redondante si le timer est recalculé dans Update
 
         if(debugLogBeats) Debug.Log($"[RhythmManager] BPM set to {newBPM}. Interval: {interval:F3}s. Next beat in: {(nextBeatTime - Time.time):F3}s");
     }

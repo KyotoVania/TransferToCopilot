@@ -16,7 +16,6 @@ public class HasDetectedEnemyUnitCondition : Unity.Behavior.Condition
 {
     private const string DETECTED_ENEMY_UNIT_VAR = "DetectedEnemyUnit";
     private BlackboardVariable<Unit> bbDetectedEnemyUnit;
-    private bool blackboardVariableCached = false;
     private BehaviorGraphAgent agent;
     private bool blackboardVariablesCached = false;
 
@@ -68,7 +67,7 @@ public class HasDetectedEnemyUnitCondition : Unity.Behavior.Condition
 
     public override void OnEnd()
     {
-        blackboardVariableCached = false;
+        blackboardVariablesCached = false;
         bbDetectedEnemyUnit = null;
         base.OnEnd();
     }

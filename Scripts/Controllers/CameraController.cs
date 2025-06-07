@@ -1,5 +1,6 @@
 using UnityEngine;
-using Sirenix.OdinInspector;
+using Sirenix.OdinInspector; // Si tu utilises Odin Inspector
+using System.Collections; // Pour les coroutines si tu veux un dezoom animé
 
 /// <summary>
 /// Camera controller for a rhythm game that supports right-click drag panning in 3D space,
@@ -24,10 +25,10 @@ public class RhythmGameCameraController : MonoBehaviour
     [Tooltip("Speed of camera zooming with mouse wheel")]
     [SerializeField] private float zoomSpeed = 5f;
 
-    [Tooltip("Minimum allowed zoom level (smaller value = closer zoom)")]
+    [Tooltip("Minimum allowed zoom level (smaller value = closer zoom for Orthographic, closer Y for Perspective)")]
     [SerializeField] private float minZoom = 2f;
 
-    [Tooltip("Maximum allowed zoom level (larger value = further zoom)")]
+    [Tooltip("Maximum allowed zoom level (larger value = further zoom for Orthographic, further Y for Perspective)")]
     [SerializeField] private float maxZoom = 20f;
 
     [Tooltip("Whether to invert mouse wheel zoom direction")]
@@ -54,12 +55,12 @@ public class RhythmGameCameraController : MonoBehaviour
     [SerializeField] private float maxZ = 50f;
 
     [ShowIf("useBounds")]
-    [Tooltip("Minimum Y position the camera can move to")]
-    [SerializeField] private float minY = 2f;
+    [Tooltip("Minimum Y position the camera can move to (used for perspective zoom limit)")]
+    [SerializeField] private float minY = 2f; // Renommé pour clarté
 
     [ShowIf("useBounds")]
-    [Tooltip("Maximum Y position the camera can move to")]
-    [SerializeField] private float maxY = 50f;
+    [Tooltip("Maximum Y position the camera can move to (used for perspective zoom limit)")]
+    [SerializeField] private float maxY = 50f; // Renommé pour clarté
 
     [TitleGroup("Debug")]
     [ReadOnly]
@@ -71,17 +72,19 @@ public class RhythmGameCameraController : MonoBehaviour
     [ReadOnly]
     [SerializeField] private bool isDragging = false;
 
-    // The initial camera position when starting
+    [TitleGroup("Locking Mechanism")]
+    [ReadOnly]
+    [SerializeField] private bool controlsLocked = false; // Pour verrouiller tous les contrôles
+    [ReadOnly] // NOUVEAU : Pour voir l'état du verrouillage du zoom
+    [SerializeField] private bool zoomLocked = false;    // Pour verrouiller uniquement le zoom
+
     private Vector3 initialPosition;
+    private float initialZoomValue;
 
-    // The initial orthographic size (for orthographic cameras) or field of view (for perspective cameras)
-    private float initialZoom;
-
-    // Reference to the camera component
     private Camera cameraComponent;
-
-    // Is this an orthographic camera?
     private bool isOrthographic;
+
+    private Coroutine _zoomCoroutine;
 
     private void Awake()
     {
@@ -98,24 +101,26 @@ public class RhythmGameCameraController : MonoBehaviour
 
         if (isOrthographic)
         {
-            initialZoom = cameraComponent.orthographicSize;
+            initialZoomValue = cameraComponent.orthographicSize;
         }
         else
         {
-            initialZoom = cameraComponent.fieldOfView;
+            initialZoomValue = cameraComponent.fieldOfView;
         }
     }
 
     private void Update()
     {
+        if (controlsLocked) // Si tous les contrôles sont verrouillés, ne rien faire
+            return;
+        // Les autres inputs sont traités même si seul le zoom est verrouillé
         HandleMouseInput();
         HandleKeyboardInput();
-        HandleZoomInput();
+        HandleZoomInput(); // Cette méthode vérifiera zoomLocked en interne
     }
 
     private void HandleMouseInput()
     {
-        // Detect right mouse button down
         if (Input.GetMouseButtonDown(1))
         {
             isRightMouseDown = true;
@@ -123,103 +128,78 @@ public class RhythmGameCameraController : MonoBehaviour
             isDragging = true;
         }
 
-        // Detect right mouse button up
         if (Input.GetMouseButtonUp(1))
         {
             isRightMouseDown = false;
             isDragging = false;
         }
 
-        // Handle right-click drag for panning in 3D space
         if (isRightMouseDown && isDragging)
         {
             Vector3 currentMousePosition = Input.mousePosition;
             Vector3 mouseDelta = currentMousePosition - lastMousePosition;
 
-            // Only process if there's actual mouse movement
             if (mouseDelta.sqrMagnitude > 0.1f)
             {
-                // Calculate movement in camera's local space
                 float horizontalMovement = -mouseDelta.x * mousePanSpeed * 0.01f;
                 float verticalMovement = -mouseDelta.y * mousePanSpeed * 0.01f;
 
-                // Adjust direction if inverted
                 if (invertMousePan)
                 {
                     horizontalMovement = -horizontalMovement;
                     verticalMovement = -verticalMovement;
                 }
 
-                // Apply movement based on camera's orientation
                 Vector3 right = transform.right;
                 Vector3 forward = Vector3.Cross(transform.right, Vector3.up);
 
-                // Move camera parallel to the ground plane
                 transform.position += right * horizontalMovement + forward * verticalMovement;
-
-                // Store current position for next frame
                 lastMousePosition = currentMousePosition;
-
-                // Enforce bounds if enabled
-                if (useBounds)
-                {
-                    EnforceBounds();
-                }
+                if (useBounds) EnforceBounds();
             }
         }
     }
 
     private void HandleKeyboardInput()
     {
-        // Get input from arrow keys (or WASD)
+        // ... (code existant inchangé)
         float horizontalInput = Input.GetAxis("Horizontal");
         float verticalInput = Input.GetAxis("Vertical");
 
         if (horizontalInput != 0 || verticalInput != 0)
         {
-            // Scale movement by time and speed
             float moveSpeed = keyboardMoveSpeed * Time.deltaTime;
-
-            // Create movement vector (x and z axes for horizontal movement)
             Vector3 movement = new Vector3(horizontalInput, 0, verticalInput).normalized * moveSpeed;
-
-            // Transform the movement direction to be relative to the camera's orientation
-            // This assumes the camera is looking down at an angle (not directly top-down)
             Vector3 forward = Vector3.ProjectOnPlane(transform.forward, Vector3.up).normalized;
-            if (forward.sqrMagnitude < 0.001f) // If camera is looking straight up/down
-            {
-                forward = transform.up;
-            }
+            if (forward.sqrMagnitude < 0.001f) forward = transform.up;
             Vector3 right = Vector3.Cross(Vector3.up, forward).normalized;
-
-            // Apply movement using the camera's local orientation
             Vector3 moveDirection = right * movement.x + forward * movement.z;
             transform.position += moveDirection;
-
-            // Enforce bounds if enabled
-            if (useBounds)
-            {
-                EnforceBounds();
-            }
+            if (useBounds) EnforceBounds();
         }
     }
 
     private void HandleZoomInput()
     {
+        // --- MODIFIÉ ---
+        if (zoomLocked || controlsLocked) // Vérifie si le zoom spécifique ou tous les contrôles sont verrouillés
+        {
+            return;
+        }
+        // ---------------
+
         float scrollInput = Input.GetAxis("Mouse ScrollWheel");
 
         if (scrollInput != 0)
         {
-            // Adjust zoom direction if inverted
+            // ... (code existant pour le zoom ortho et perspective) ...
             if (invertZoom)
             {
                 scrollInput = -scrollInput;
             }
 
-            // Apply zoom based on camera type
             if (isOrthographic)
             {
-                // For orthographic cameras, adjust orthographic size
                 cameraComponent.orthographicSize = Mathf.Clamp(
                     cameraComponent.orthographicSize - scrollInput * zoomSpeed,
                     minZoom,
@@ -228,11 +208,8 @@ public class RhythmGameCameraController : MonoBehaviour
             }
             else
             {
-                // For perspective cameras, we'll zoom by moving the camera forward/backward
                 Vector3 zoomDirection = transform.forward * scrollInput * zoomSpeed;
                 transform.position += zoomDirection;
-
-                // Enforce bounds after zooming
                 if (useBounds)
                 {
                     EnforceBounds();
@@ -243,32 +220,165 @@ public class RhythmGameCameraController : MonoBehaviour
 
     private void EnforceBounds()
     {
-        // Get current position
         Vector3 pos = transform.position;
-
-        // Clamp position to bounds on all three axes
         pos.x = Mathf.Clamp(pos.x, minX, maxX);
-        pos.y = Mathf.Clamp(pos.y, minY, maxY);
+        pos.y = Mathf.Clamp(pos.y, minY, maxY); // minY/maxY pour la perspective
         pos.z = Mathf.Clamp(pos.z, minZ, maxZ);
-
-        // Apply clamped position
         transform.position = pos;
     }
 
     [Button("Reset Camera")]
-    public void ResetCamera()
+    public void ResetCameraToInitialState() // Renommé pour plus de clarté
     {
-        // Reset position to initial
+        if (_zoomCoroutine != null) StopCoroutine(_zoomCoroutine);
         transform.position = initialPosition;
 
-        // Reset zoom based on camera type
         if (isOrthographic)
         {
-            cameraComponent.orthographicSize = initialZoom;
+            cameraComponent.orthographicSize = initialZoomValue;
         }
         else
         {
-            cameraComponent.fieldOfView = initialZoom;
+            cameraComponent.fieldOfView = initialZoomValue; // Si tu utilisais FoV
+            // Si le zoom perspective est basé sur Y, initialPosition.y est déjà pris en compte.
+        }
+        Debug.Log("[RhythmGameCameraController] Camera reset to initial state.");
+    }
+
+    public void ZoomOutToMaxAndLockControls(bool animate = true, float animationDuration = 1.0f)
+    {
+        // Cette méthode verrouille TOUS les contrôles
+        controlsLocked = true; // Verrouille aussi le mouvement/pan
+        ZoomOutToMaxAndLockZoomOnly(animate, animationDuration); // Appelle la nouvelle méthode qui ne verrouille que le zoom
+        Debug.Log("[RhythmGameCameraController] All controls locked and zooming to max.");
+    }
+
+    // --- NOUVELLE MÉTHODE SPÉCIFIQUE POUR LE ZOOM ---
+    public void ZoomOutToMaxAndLockZoomOnly(bool animate = true, float animationDuration = 1.0f)
+    {
+        zoomLocked = true; // Verrouille uniquement le zoom
+        // Ne pas mettre controlsLocked = true ici
+        Debug.Log("[RhythmGameCameraController] Zoom locked. Zooming out to maximum.");
+
+        if (_zoomCoroutine != null)
+        {
+            StopCoroutine(_zoomCoroutine);
+        }
+
+        if (animate && animationDuration > 0)
+        {
+            _zoomCoroutine = StartCoroutine(AnimateZoomOutCoroutine(animationDuration));
+        }
+        else
+        {
+            ApplyMaxZoomInstantly();
         }
     }
+
+    private void ApplyMaxZoomInstantly()
+    {
+        if (isOrthographic)
+        {
+            cameraComponent.orthographicSize = maxZoom; // maxZoom est la taille ortho max
+        }
+        else // Perspective
+        {
+            if (useBounds)
+            {
+                // Pour la perspective, "max zoom out" signifie atteindre la position Y maximale.
+                // Nous devons préserver X et Z autant que possible tout en atteignant maxY.
+                // Une approche simple est de définir Y directement si c'est la contrainte principale.
+                // Attention, cela pourrait changer l'angle de vue si la caméra n'est pas censée bouger uniquement sur Y.
+                // Si le zoom est un "dolly" (avant/arrière), il faudrait reculer jusqu'à atteindre maxY.
+
+                // Approche simple : fixer Y à maxY si les bornes sont utilisées.
+                Vector3 targetPos = transform.position;
+                targetPos.y = maxY;
+                transform.position = targetPos;
+                EnforceBounds(); // S'assurer que X et Z sont toujours dans les bornes
+            }
+            else
+            {
+                // Si pas de bornes, le concept de "maxZoom" pour une caméra perspective
+                // est moins bien défini par les paramètres actuels (qui affectent la position).
+                // Tu pourrais augmenter le Field of View ici si tu veux.
+                // cameraComponent.fieldOfView = unValeurMaxFoV; (ex: 90)
+                Debug.LogWarning("[RhythmGameCameraController] Max zoom for perspective camera without 'useBounds' enabled is not performing a position change. Consider adjusting Field of View or enabling bounds with maxY.");
+            }
+        }
+    }
+
+    private IEnumerator AnimateZoomOutCoroutine(float duration)
+    {
+        float elapsedTime = 0f;
+
+        if (isOrthographic)
+        {
+            float startSize = cameraComponent.orthographicSize;
+            float targetSize = maxZoom; // maxZoom est la taille ortho max
+            while (elapsedTime < duration)
+            {
+                // Utiliser Time.unscaledDeltaTime car cette animation peut se jouer quand Time.timeScale = 0
+                elapsedTime += Time.unscaledDeltaTime;
+                float t = Mathf.Clamp01(elapsedTime / duration);
+                cameraComponent.orthographicSize = Mathf.Lerp(startSize, targetSize, Mathf.SmoothStep(0f, 1f, t));
+                yield return null;
+            }
+            cameraComponent.orthographicSize = targetSize;
+        }
+        else // Perspective
+        {
+            Vector3 startPosition = transform.position;
+            Vector3 targetPosition = startPosition; // Commence avec la position actuelle
+
+            if (useBounds)
+            {
+                targetPosition.y = maxY; // Cible la hauteur maximale
+                // Si tu veux préserver X et Z, c'est déjà fait car on part de startPosition.
+                // EnforceBounds sera appelé à la fin pour s'assurer.
+            }
+            else
+            {
+                // Si pas de bornes, on pourrait reculer la caméra d'une certaine distance comme "max zoom"
+                // targetPosition -= transform.forward * uneCertaineDistancePourMaxZoomPerspective;
+                // Pour l'instant, on ne fait rien de spécial pour la position si pas de bornes,
+                // car `maxZoom` n'est pas défini pour la position perspective sans bornes.
+                Debug.LogWarning("[RhythmGameCameraController] Animated max zoom for perspective camera without 'useBounds' is not changing position. Consider Field of View animation or enabling bounds.");
+                controlsLocked = true; // Assurer que les contrôles sont bien bloqués
+                _zoomCoroutine = null;
+                yield break; // Sortir si pas de bornes pour l'animation perspective
+            }
+
+            while (elapsedTime < duration)
+            {
+                elapsedTime += Time.unscaledDeltaTime;
+                float t = Mathf.Clamp01(elapsedTime / duration);
+                transform.position = Vector3.Lerp(startPosition, targetPosition, Mathf.SmoothStep(0f, 1f, t));
+                if (useBounds) EnforceBounds(); // Appliquer pendant l'animation pour éviter de sortir des bornes X/Z
+                yield return null;
+            }
+            transform.position = targetPosition;
+            if (useBounds) EnforceBounds(); // Une dernière fois pour la précision
+        }
+        _zoomCoroutine = null;
+        Debug.Log("[RhythmGameCameraController] Animated zoom out complete.");
+    }
+
+    public void UnlockZoomOnly()
+    {
+        zoomLocked = false;
+        // Optionnel: Réinitialiser le zoom à une valeur par défaut ou le laisser tel quel
+        // if (isOrthographic) cameraComponent.orthographicSize = initialZoomValue;
+        // else { /* ajuster position Y ou FoV si besoin */ }
+        Debug.Log("[RhythmGameCameraController] Zoom controls unlocked.");
+    }
+
+    public void UnlockControlsAndReset() // Optionnel
+    {
+        if (_zoomCoroutine != null) StopCoroutine(_zoomCoroutine);
+        controlsLocked = false;
+        ResetCameraToInitialState(); // Retour à l'état initial
+        Debug.Log("[RhythmGameCameraController] Controls unlocked and camera reset.");
+    }
+    // -------------------------
 }

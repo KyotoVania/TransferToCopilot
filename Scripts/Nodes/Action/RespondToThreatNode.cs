@@ -1,11 +1,8 @@
 ﻿using UnityEngine;
-using Unity.Behavior;
 using Unity.Behavior.GraphFramework;
 using System;
 using Unity.Properties;
-using System;
 using Unity.Behavior;
-using UnityEngine;
 
 [Serializable]
 [GeneratePropertyBag]

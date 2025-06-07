@@ -12,7 +12,8 @@ public class GameplayManager : MonoBehaviour
     private TeamManager teamManager;
     private SequenceController sequenceController;
     private GoldController goldController;
-    
+    private LevelScenarioManager _scenarioManager; 
+
     [Header("Configuration")]
     [SerializeField] private string globalSpellsResourcePath = "Data/GlobalSpells"; // Chemin dans Resources pour les sorts globaux
     [SerializeField] private Transform defaultPlayerUnitSpawnPoint; // Un point de spawn par défaut si aucun bâtiment allié n'est trouvé
@@ -24,7 +25,8 @@ public class GameplayManager : MonoBehaviour
         teamManager = TeamManager.Instance;
         sequenceController = FindFirstObjectByType<SequenceController>(); // SequenceController n'est pas un Singleton persistent
         goldController = GoldController.Instance;
-        
+        _scenarioManager = FindFirstObjectByType<LevelScenarioManager>(); 
+
         if (GameManager.Instance == null || GameManager.CurrentLevelToLoad == null)
         {
             Debug.LogError("[GameplayManager] GameManager ou CurrentLevelToLoad est null! Impossible d'initialiser le niveau. Assurez-vous de lancer le niveau via le Hub ou d'avoir une donnée de niveau par défaut pour les tests.");
@@ -67,7 +69,14 @@ public class GameplayManager : MonoBehaviour
         SubscribeToSequenceEvents();
         // --- 4. Configuration de l'Environnement / Visuels ---
         // ConfigureEnvironment(); // À implémenter si LevelData_SO contient des infos de mood
-
+        if (_scenarioManager != null && currentLevelData.scenario != null)
+        {
+            _scenarioManager.Initialize(currentLevelData.scenario);
+        }
+        else if (_scenarioManager != null)
+        {
+            Debug.LogWarning($"[GameplayManager] Le niveau '{currentLevelData.DisplayName}' n'a pas de LevelScenario_SO assigné.");
+        }
         // --- 5. Démarrage de la Logique du Niveau ---
         // StartLevelLogic(); // Ex: Lancer la première vague d'ennemis, activer les inputs joueur
     }

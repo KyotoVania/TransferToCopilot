@@ -162,6 +162,31 @@ public abstract class Unit : MonoBehaviour, ITileReservationObserver
         }
     }
 
+    protected virtual void OnEnable()
+    {
+       // Si l'unité est déjà attachée (après un premier Start) et qu'on la réactive
+       if (isAttached && RhythmManager.Instance != null)
+       {
+            RhythmManager.OnBeat -= OnRhythmBeatInternal; // Éviter double abonnement
+            RhythmManager.OnBeat += OnRhythmBeatInternal;
+       }
+    }
+
+    protected virtual void OnDisable()
+    {
+       if (RhythmManager.Instance != null)
+       {
+            // Se désabonner de l'événement OnBeat pour éviter les fuites de mémoire
+            if (isAttached)
+            RhythmManager.OnBeat -= OnRhythmBeatInternal;
+       }
+        // Si l'unité est en train de bouger ou capturer, tu pourrais vouloir
+        // annuler ces actions proprement ici.
+        IsMoving = false;
+        _isAttacking = false;
+        if (currentState == UnitState.Capturing) StopCapturing();
+    }
+
 //public getter to get the unitStats.UnitType
     public UnitType GetUnitType()
     {
