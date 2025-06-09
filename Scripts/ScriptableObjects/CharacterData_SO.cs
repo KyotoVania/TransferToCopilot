@@ -43,12 +43,12 @@ public class CharacterData_SO : ScriptableObject
     [InfoBox("Séquence de 4 inputs (X, C, ou V) pour invoquer ce personnage.")]
     [ValidateInput("ValidateSequenceLength", "La séquence d'invocation doit comporter exactement 4 inputs.")]
     public List<InputType> InvocationSequence = new List<InputType>(4); // Initialise avec 4 éléments par défaut si besoin
-    
+
     [BoxGroup("Gameplay/Invocation")] // Placé dans le même groupe que la séquence
     [MinValue(0)]
     [SuffixLabel("or")]
     [GUIColor(0.9f, 0.9f, 0.2f)] // Pour le rendre plus visible
-    public int GoldCost = 0; 
+    public int GoldCost = 0;
     // --- Validation pour Odin Inspector ---
     #if UNITY_EDITOR
     private bool ValidateSequenceLength(List<InputType> sequence)
@@ -60,7 +60,7 @@ public class CharacterData_SO : ScriptableObject
 
     [Title("Hub & UI")]
     [AssetsOnly]
-    public GameObject HubVisualPrefab; 
+    public GameObject HubVisualPrefab;
 
     [Title("Audio (Wwise)")]
     [InfoBox("Assigner les Events Wwise spécifiques à ce personnage.")]
@@ -71,10 +71,10 @@ public class CharacterData_SO : ScriptableObject
     [Title("Statut Initial")]
     [InfoBox("Cocher si ce personnage est débloqué dès le début du jeu.")]
     public bool UnlockedByDefault = false;
-    
+
     [Title("Cooldown d'Invocation")]
     [BoxGroup("Cooldown")]
     [MinValue(0)]
     [Tooltip("Temps en beats avant de pouvoir invoquer à nouveau ce personnage.")]
-    public float InvocationCooldown = 5; 
+    public float InvocationCooldown = 5;
 }

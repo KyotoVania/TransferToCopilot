@@ -352,7 +352,5 @@ public class SummoningUIController : MonoBehaviour
         }
     }
     #endregion
-    
-    
 }
 
