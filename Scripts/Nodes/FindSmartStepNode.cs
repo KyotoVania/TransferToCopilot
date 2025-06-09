@@ -24,24 +24,22 @@ public partial class FindSmartStepNode : Unity.Behavior.Action
     private const string SELECTED_ACTION_TYPE_VAR = "SelectedActionType";
 
 
-    // --- Cache pour les variables du Blackboard ---
     private BlackboardVariable<Unit> bbSelfUnit;
     private BlackboardVariable<Vector2Int> bbFinalDestinationPosition;
     private BlackboardVariable<List<Vector2Int>> bbCurrentPath;
-    private BlackboardVariable<Vector2Int> bbMovementTargetPosition;
+    private BlackboardVariable<Vector2Int> bbMovementTargetPosition; // Pour le prochain pas
     private BlackboardVariable<bool> bbPathfindingFailed;
-    private BlackboardVariable<AIActionType> bbSelectedActionType; 
+    private BlackboardVariable<AIActionType> bbSelectedActionType;
 
     private bool blackboardVariablesCached = false;
     private Unit selfUnitInstance;
     private HexGridManager gridManager;
     private string nodeInstanceId;
 
-    // Ajout d'un flag pour déboguer IsTileStandableForUnit
-    [Header("Node Debug Options")] // Pourrait être mis dans une section Odin si vous l'utilisez
+    [Header("Node Debug Options")]
     [SerializeField] private bool debugStandableCheckLog = false;
     [SerializeField] private bool debugEngagementTileSearchLog = false;
-    [SerializeField] private bool debugAStarStepsLog = false; 
+    [SerializeField] private bool debugAStarStepsLog = false;
 
     private class PathNode : IComparable<PathNode>
     {
@@ -69,7 +67,7 @@ public partial class FindSmartStepNode : Unity.Behavior.Action
     // Méthode de log améliorée
     private void LogNodeMessage(string message, bool isError = false, bool isVerboseOverride = false)
     {
-        
+
         Unit unitForLog = selfUnitInstance ?? bbSelfUnit?.Value;
         string unitName = unitForLog != null ? unitForLog.name : (GameObject != null ? GameObject.name : "FindSmartStepNode");
         bool enableGeneralVerboseLogging = false;
@@ -83,7 +81,7 @@ public partial class FindSmartStepNode : Unity.Behavior.Action
             if (isError) Debug.LogError($"{logPrefix} {message}", GameObject);
             else Debug.Log($"{logPrefix} {message}", GameObject);
         }
-        
+
     }
 
     protected override Status OnStart()
@@ -176,6 +174,8 @@ public partial class FindSmartStepNode : Unity.Behavior.Action
 
     private List<Vector2Int> CalculateAStarPathToEngagement(Tile startTile, Tile finalTargetEntityTile, float unitAttackRange, AIActionType currentAction)
     {
+        int GridArrayWidth = gridManager.maxColumn - gridManager.minColumn + 1;
+        int GridArrayHeight = gridManager.maxRow - gridManager.minRow + 1;
         LogNodeMessage($"CalculateAStarPathToEngagement: start=({startTile.column},{startTile.row}), targetEntityTile=({finalTargetEntityTile.column},{finalTargetEntityTile.row}), range={unitAttackRange}", isVerboseOverride: debugEngagementTileSearchLog);
         List<Tile> engagementTiles = GetValidEngagementTiles(finalTargetEntityTile, unitAttackRange, currentAction);
 
@@ -215,7 +215,7 @@ public partial class FindSmartStepNode : Unity.Behavior.Action
         PathNode bestEngagementNodeFound = null;
 
         int iterations = 0;
-        int maxIterations = gridManager.columns * gridManager.rows * 2; // Safety break
+        int maxIterations = (GridArrayWidth * GridArrayHeight) * 2; // Safety break
 
         while (openList.Count > 0 && iterations < maxIterations)
         {
@@ -247,7 +247,7 @@ public partial class FindSmartStepNode : Unity.Behavior.Action
                 }
 
                  PathNode neighborPathNode = GetPathNode(neighborTile, allNodes);
-                float tentativeGCost = currentNode.GCost + 1; 
+                float tentativeGCost = currentNode.GCost + 1;
 
                 if (tentativeGCost < neighborPathNode.GCost)
                 {
@@ -404,16 +404,25 @@ public partial class FindSmartStepNode : Unity.Behavior.Action
 
     private List<Vector2Int> ReconstructPath(PathNode targetNode, Tile startTile)
     {
+        int GridArrayWidth = gridManager.maxColumn - gridManager.minColumn + 1;
+        int GridArrayHeight = gridManager.maxRow - gridManager.minRow + 1;
         List<Vector2Int> path = new List<Vector2Int>();
         PathNode current = targetNode;
         int safetyBreak = 0;
-        while (current != null && current.TileNode != startTile && safetyBreak < (gridManager.columns * gridManager.rows))
+        // MODIFIÉ: Utiliser GridArrayWidth et GridArrayHeight
+        int maxPathLength = GridArrayWidth * GridArrayHeight;
+
+        // Le chemin inclut la tuile cible d'engagement.
+        // Si on veut que MoveToTargetNode aille jusqu'À CETTE tuile, on l'inclut.
+        // Si MoveToTargetNode doit s'arrêter AVANT, on ne l'ajoute pas.
+        // Pour l'instant, on inclut la tuile d'engagement.
+        while (current != null && current.TileNode != startTile && safetyBreak < maxPathLength)
         {
             path.Add(current.Coords);
             current = current.Parent;
             safetyBreak++;
         }
-        if (safetyBreak >= (gridManager.columns * gridManager.rows)) {
+        if (safetyBreak >= maxPathLength) {
             LogNodeMessage("Erreur dans ReconstructPath: boucle infinie ou chemin trop long.", isError:true, isVerboseOverride: true);
             return new List<Vector2Int>();
         }

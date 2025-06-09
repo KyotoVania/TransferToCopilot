@@ -340,15 +340,17 @@ protected override Status OnUpdate()
     // ... (FindNewObjectiveBuildingOnMap, IsPlayerThreatening, ClearOutputs, OnEnd restent majoritairement les mêmes) ...
     private Building FindNewObjectiveBuildingOnMap(EnemyUnit searchingUnit)
     {
+        int GridArrayWidth = HexGridManager.Instance.maxColumn - HexGridManager.Instance.minColumn + 1;
+        int GridArrayHeight = HexGridManager.Instance.maxRow - HexGridManager.Instance.minRow + 1;
         if (HexGridManager.Instance == null || searchingUnit == null) return null;
 
         Building closestSuitableBuilding = null;
         float minDistanceSq = float.MaxValue;
         Vector3 searcherPosition = searchingUnit.transform.position;
 
-        for (int col = 0; col < HexGridManager.Instance.columns; col++)
+        for (int col = 0; col < GridArrayWidth; col++)
         {
-            for (int row = 0; row < HexGridManager.Instance.rows; row++)
+            for (int row = 0; row < GridArrayHeight; row++)
             {
                 Tile tile = HexGridManager.Instance.GetTileAt(col, row);
                 if (tile == null || tile.currentBuilding == null) continue;

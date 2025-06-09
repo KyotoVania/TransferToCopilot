@@ -5,11 +5,19 @@ using System.Linq;
 
 public class HexGridManager : MonoBehaviour
 {
-    [Header("Grid Settings")]
-    public int columns = 10;
-    public int rows = 10;
-    public float tileWidth = 1f;  // Assumed to be the distance between the centers of adjacent tiles horizontally (long diameter for pointy top)
-    public float tileHeight = 1f; // Assumed to be the full height of the hex (short diameter for pointy top)
+    [Header("Grid Logical Settings")] // MODIFIÉ: Titre de section
+    [Tooltip("La coordonnée de colonne logique la plus à gauche (peut être négative).")]
+    public int minColumn = 0; // NOUVEAU
+    [Tooltip("La coordonnée de colonne logique la plus à droite.")]
+    public int maxColumn = 9; // ANCIENNEMENT 'columns', renommé pour clarté
+    [Tooltip("La coordonnée de ligne logique la plus en bas (peut être négative).")]
+    public int minRow = 0;    // NOUVEAU
+    [Tooltip("La coordonnée de ligne logique la plus en haut.")]
+    public int maxRow = 9;    // ANCIENNEMENT 'rows', renommé pour clarté
+
+    [Header("Tile Physical Settings")] // MODIFIÉ: Titre de section
+    public float tileWidth = 1f;
+    public float tileHeight = 1f;
 
     [Tooltip("If true, will use tile's existing row/column values from editor instead of calculating them based on world position.")]
     public bool respectExistingCoordinates = true;
@@ -17,14 +25,14 @@ public class HexGridManager : MonoBehaviour
     [Header("Debug Options")]
     [SerializeField] private bool showPathfindingLogs = false;
 
-    // Instance for global access
     public static HexGridManager Instance { get; private set; }
 
-    private List<Tile> allTilesInScene = new List<Tile>(); // Renamed for clarity
-    private List<IMapObserver> mapObservers = new List<IMapObserver>(); // Renamed for clarity
+    private List<Tile> allTilesInScene = new List<Tile>();
+    private List<IMapObserver> mapObservers = new List<IMapObserver>();
 
-    // 2D array to store tiles by their grid coordinates for quick access
-    private Tile[,] tileGrid;
+    private Tile[,] tileGrid; // Le tableau interne reste basé sur 0
+    private int gridArrayWidth;  // NOUVEAU: Largeur réelle du tableau
+    private int gridArrayHeight; // NOUVEAU: Hauteur réelle du tableau
 
     private void Awake()
     {
@@ -34,14 +42,39 @@ public class HexGridManager : MonoBehaviour
             return;
         }
         Instance = this;
-        tileGrid = new Tile[columns, rows]; // Initialize with configured dimensions
+
+        // NOUVEAU: Calculer les dimensions réelles du tableau
+        gridArrayWidth = maxColumn - minColumn + 1;
+        gridArrayHeight = maxRow - minRow + 1;
+
+        if (gridArrayWidth <= 0 || gridArrayHeight <= 0)
+        {
+            Debug.LogError("[HexGridManager] Grid dimensions (maxColumn/maxRow - minColumn/minRow + 1) result in non-positive size. Check your min/max coordinate settings!", this);
+            enabled = false;
+            return;
+        }
+        tileGrid = new Tile[gridArrayWidth, gridArrayHeight];
+        if (showPathfindingLogs) Debug.Log($"[HexGridManager] Awake: tileGrid initialized with array dimensions {gridArrayWidth}x{gridArrayHeight} to cover logical cols [{minColumn}..{maxColumn}] and rows [{minRow}..{maxRow}].");
     }
 
     private void Start()
     {
         InitializeExistingTiles();
-        SetupNeighborsForAllTiles(); // Renamed for clarity
-        InitializeTileStatesAfterSetup(); // Renamed for clarity
+        SetupNeighborsForAllTiles();
+        InitializeTileStatesAfterSetup();
+    }
+
+    // NOUVEAU: Méthode pour convertir les coordonnées logiques en indices de tableau
+    private Vector2Int ToArrayIndex(int logicalColumn, int logicalRow)
+    {
+        return new Vector2Int(logicalColumn - minColumn, logicalRow - minRow);
+    }
+
+    // NOUVEAU: Vérifie si les coordonnées logiques sont dans les limites définies
+    private bool IsLogicalCoordInBounds(int logicalColumn, int logicalRow)
+    {
+        return logicalColumn >= minColumn && logicalColumn <= maxColumn &&
+               logicalRow >= minRow && logicalRow <= maxRow;
     }
 
     private void InitializeExistingTiles()
@@ -56,65 +89,77 @@ public class HexGridManager : MonoBehaviour
             return;
         }
 
-        // If not respecting existing coordinates, we need a robust way to assign them.
-        // For now, we'll assume if respectExistingCoordinates is false, tiles are dynamically generated or need recalculation.
-        // If tiles are pre-placed and respectExistingCoordinates is true, their column/row should be set in the editor.
+        int validTilesInitialized = 0; // NOUVEAU: Compteur pour le log
 
         foreach (Tile tile in allTilesInScene)
         {
-            if (tile.gameObject.activeInHierarchy) // Process only active tiles
+            if (tile.gameObject.activeInHierarchy)
             {
-                tile.SetGridManager(this); // Link tile to this manager
+                tile.SetGridManager(this);
 
                 if (!respectExistingCoordinates)
                 {
-                    // This world-to-grid calculation needs to be accurate for your hex layout
                     AssignGridCoordinatesFromWorldPosition(tile);
+                    // Rappel: AssignGridCoordinatesFromWorldPosition doit être revu si vous utilisez
+                    // des grilles hexagonales complexes ou des origines de monde arbitraires.
+                    // Il doit assigner des tile.column et tile.row LOGIQUES.
                 }
 
-                // Validate and clamp coordinates
-                if (tile.column < 0 || tile.column >= columns || tile.row < 0 || tile.row >= rows)
+                // MODIFIÉ: Valider par rapport aux limites logiques min/max
+                if (!IsLogicalCoordInBounds(tile.column, tile.row))
                 {
-                    Debug.LogWarning($"[HexGridManager] Tile '{tile.name}' at ({tile.transform.position}) has out-of-bounds coordinates ({tile.column},{tile.row}). Clamping or ignoring. Ensure 'respectExistingCoordinates' is set correctly or coordinates are valid.", tile.gameObject);
-                    // Option: Clamp or skip adding to tileGrid if invalid
-                    tile.column = Mathf.Clamp(tile.column, 0, columns - 1);
-                    tile.row = Mathf.Clamp(tile.row, 0, rows - 1);
+                    Debug.LogWarning($"[HexGridManager] Tile '{tile.name}' at ({tile.transform.position}) has out-of-bounds logical coordinates ({tile.column},{tile.row}). It will be ignored. Logical Bounds: Cols [{minColumn}..{maxColumn}], Rows [{minRow}..{maxRow}]", tile.gameObject);
+                    continue; // Ignorer cette tuile si elle est hors des limites logiques définies
                 }
 
-                // Store in grid array for quick lookup, potentially overwriting if multiple tiles claim same spot
-                if (tileGrid[tile.column, tile.row] != null && tileGrid[tile.column, tile.row] != tile)
+                // MODIFIÉ: Utiliser ToArrayIndex pour stocker dans tileGrid
+                Vector2Int arrayIndices = ToArrayIndex(tile.column, tile.row);
+
+                if (tileGrid[arrayIndices.x, arrayIndices.y] != null && tileGrid[arrayIndices.x, arrayIndices.y] != tile)
                 {
-                    Debug.LogWarning($"[HexGridManager] Multiple tiles assigned to grid position ({tile.column},{tile.row}). Overwriting '{tileGrid[tile.column, tile.row].name}' with '{tile.name}'. Check tile coordinate setup.", tile.gameObject);
+                    Debug.LogWarning($"[HexGridManager] Multiple tiles assigned to logical grid position ({tile.column},{tile.row}) which maps to array index ({arrayIndices.x},{arrayIndices.y}). Overwriting '{tileGrid[arrayIndices.x, arrayIndices.y].name}' with '{tile.name}'. Check tile coordinate setup.", tile.gameObject);
                 }
-                tileGrid[tile.column, tile.row] = tile;
+                tileGrid[arrayIndices.x, arrayIndices.y] = tile;
+                validTilesInitialized++; // NOUVEAU
             }
         }
-         if(showPathfindingLogs) Debug.Log($"[HexGridManager] Initialized {allTilesInScene.Count} tiles. Grid size: {columns}x{rows}.");
+        // MODIFIÉ: Log de fin
+        if(showPathfindingLogs) Debug.Log($"[HexGridManager] InitializeExistingTiles: Processed {allTilesInScene.Count} tiles from scene. Initialized {validTilesInitialized} valid tiles within logical bounds. Array size: {gridArrayWidth}x{gridArrayHeight}. Logical bounds: Col({minColumn} to {maxColumn}), Row({minRow} to {maxRow}).");
     }
 
-    // Example for pointy-topped hexagons
+    // IMPORTANT: Cette méthode doit assigner des coordonnées LOGIQUES à tile.column et tile.row.
+    // La logique actuelle est très basique et pourrait ne pas fonctionner correctement pour des grilles hexagonales
+    // complexes ou si l'origine de votre monde n'est pas (0,0) pour la tuile (minColumn, minRow).
+    // Vous devrez peut-être implémenter un algorithme de conversion de coordonnées monde vers axial/cube puis vers offset logique.
     private void AssignGridCoordinatesFromWorldPosition(Tile tile)
     {
-        // This is a simplified conversion and highly depends on your hex orientation and origin.
-        // For pointy-topped hexagons where 'x' increases to the right and 'z' (world) is 'y' (axial)
-        // This requires a proper axial or cube coordinate conversion.
-        // The current calculation in your original script is for a more "square grid" like assignment.
-        // For a robust solution, you'd convert world to axial/cube, then to offset.
-        // Placeholder - you'll need to replace this with accurate hex grid coordinate conversion.
+        // Exemple simplifié (POINTY-TOPPED, origine de la grille logique (minColumn, minRow) à l'origine du monde (0,0,0) )
+        // CECI EST UN PSEUDO-CODE APPROXIMATIF ET DEVRA ÊTRE ADAPTÉ À VOTRE GÉOMÉTRIE EXACTE.
+        float approxHexWidth = tileWidth * 0.75f; // Espacement horizontal pour pointy-topped
+        float worldX = tile.transform.position.x;
+        float worldZ = tile.transform.position.z;
 
-        // Simple, potentially inaccurate conversion based on your original:
-        float hexWidthApproximation = tileWidth * 0.75f; // For horizontal spacing of pointy-topped hexes
+        // Conversion grossière en coordonnées "offset" logiques.
+        // Vous aurez besoin d'une conversion plus robuste pour les hexagones.
+        // Par exemple, en utilisant des coordonnées axiales ou cubiques comme intermédiaires.
+        // Pour l'instant, cela ressemble plus à une grille carrée.
 
-        int col = Mathf.RoundToInt(tile.transform.position.x / hexWidthApproximation);
+        // Exemple:
+        // int q = Mathf.RoundToInt((worldX * Mathf.Sqrt(3)/3 - worldZ / 3) / (tileWidth/2)); // Conversion vers axial q
+        // int r = Mathf.RoundToInt((worldZ * 2/3) / (tileHeight/2)); // Conversion vers axial r
+        // tile.column = q; // Ou une conversion q,r vers offset si vous préférez les offsets logiques
+        // tile.row = r;    // (ce qui est le cas ici avec minColumn, minRow)
 
-        // For pointy-topped, row calculation depends on if it's an odd or even column (offset rows)
-        float yOffsetForRowCalc = (col % 2 == 1) ? tileHeight * 0.5f : 0f;
-        int r = Mathf.RoundToInt((tile.transform.position.z - yOffsetForRowCalc) / tileHeight);
+        // Placeholder (ancienne logique, à remplacer par une vraie conversion hex vers logique):
+        int col = minColumn + Mathf.RoundToInt(worldX / approxHexWidth);
+        int r = minRow + Mathf.RoundToInt(worldZ / tileHeight);
+        // La logique ci-dessus est très probablement incorrecte pour une grille hexagonale.
+        // Vous DEVEZ la remplacer par un algorithme correct de conversion world-to-hex-offset.
 
         tile.column = col;
         tile.row = r;
 
-        // Debug.Log($"[HexGridManager] Assigned coords ({col},{r}) to tile {tile.name} at world pos {tile.transform.position}");
+        // Debug.Log($"[HexGridManager] AssignGridCoordinatesFromWorldPosition: Assigned logical coords ({col},{r}) to tile {tile.name} at world pos {tile.transform.position}");
     }
 
 
@@ -122,92 +167,51 @@ public class HexGridManager : MonoBehaviour
     {
         foreach (Tile tile in allTilesInScene)
         {
-            if (tileGrid[tile.column, tile.row] == tile) // Ensure we are processing the tile registered at this grid coordinate
+            // MODIFIÉ: S'assurer que la tuile est dans les limites avant de chercher des voisins
+            if (tile != null && IsLogicalCoordInBounds(tile.column, tile.row))
             {
-                List<Tile> neighbors = FindNeighborsForTile(tile.column, tile.row);
-                tile.SetNeighbors(neighbors);
+                // S'assurer aussi que c'est bien CETTE tuile qui est enregistrée aux bonnes coordonnées
+                Vector2Int arrayIndices = ToArrayIndex(tile.column, tile.row);
+                if (tileGrid[arrayIndices.x, arrayIndices.y] == tile)
+                {
+                    List<Tile> neighbors = FindNeighborsForTile(tile.column, tile.row);
+                    tile.SetNeighbors(neighbors);
+                }
             }
         }
     }
 
-    public List<Tile> GetAdjacentTiles(Tile centerTile) // Public wrapper
+    public List<Tile> GetAdjacentTiles(Tile centerTile)
     {
-        if (centerTile == null) return new List<Tile>();
+        if (centerTile == null || !IsLogicalCoordInBounds(centerTile.column, centerTile.row)) return new List<Tile>();
         return FindNeighborsForTile(centerTile.column, centerTile.row);
     }
 
-    // Renamed to be more descriptive
-    private List<Tile> FindNeighborsForTile(int col, int row)
+    // Les paramètres logicalCol et logicalRow sont des coordonnées logiques
+    private List<Tile> FindNeighborsForTile(int logicalCol, int logicalRow)
     {
         List<Tile> neighbors = new List<Tile>();
-        // Directions for pointy-topped hexagons
-        // Parity (even/odd column) determines the offset for diagonal neighbors
-        int[][] directions = (col % 2 == 0) ?
-            new int[][] { new int[]{0, -1}, new int[]{1, -1}, new int[]{1, 0}, new int[]{0, 1}, new int[]{-1, 0}, new int[]{-1, -1} } : // Even column
-            new int[][] { new int[]{0, -1}, new int[]{1, 0}, new int[]{1, 1}, new int[]{0, 1}, new int[]{-1, 1}, new int[]{-1, 0} };   // Odd column
+        // Directions pour pointy-topped (basées sur les coordonnées logiques)
+        int[][] directions = (logicalCol % 2 == 0) ? // Ou parité de (logicalCol - minColumn) si la structure offset dépend de l'index 0 du tableau
+            new int[][] { new int[]{0, -1}, new int[]{1, -1}, new int[]{1, 0}, new int[]{0, 1}, new int[]{-1, 0}, new int[]{-1, -1} } :
+            new int[][] { new int[]{0, -1}, new int[]{1, 0}, new int[]{1, 1}, new int[]{0, 1}, new int[]{-1, 1}, new int[]{-1, 0} };
 
         foreach (int[] dir in directions)
         {
-            int neighborCol = col + dir[0];
-            int neighborRow = row + dir[1];
+            int neighborLogicalCol = logicalCol + dir[0];
+            int neighborLogicalRow = logicalRow + dir[1];
 
-            if (neighborCol >= 0 && neighborCol < columns &&
-                neighborRow >= 0 && neighborRow < rows)
+            // MODIFIÉ: Valider les coordonnées logiques du voisin et utiliser GetTileAt
+            Tile neighbor = GetTileAt(neighborLogicalCol, neighborLogicalRow); // GetTileAt gère la conversion et les limites
+            if (neighbor != null)
             {
-                Tile neighbor = tileGrid[neighborCol, neighborRow];
-                if (neighbor != null)
-                {
-                    neighbors.Add(neighbor);
-                }
+                neighbors.Add(neighbor);
             }
         }
         return neighbors;
     }
 
-    private List<Tile> FindNeighborsForTile_FlatTop_OddQ(int col, int row)
-    {
-        List<Tile> neighbors = new List<Tile>();
-        int[][] directions;
-        if (col % 2 == 0) // Colonnes PAIRES (0, 2, 4...)
-        {
-            directions = new int[][] {
-                new int[]{1, 0},   // Est
-                new int[]{0, 1},   // Sud-Est
-                new int[]{-1, 1},  // Sud-Ouest
-                new int[]{-1, 0},  // Ouest
-                new int[]{-1, -1}, // Nord-Ouest
-                new int[]{0, -1}   // Nord-Est
-            };
-        }
-        else // Colonnes IMPAIRES (1, 3, 5...)
-        {
-            directions = new int[][] {
-                new int[]{1, 0},   // Est
-                new int[]{1, 1},   // Sud-Est
-                new int[]{0, 1},   // Sud-Ouest
-                new int[]{-1, 0},  // Ouest
-                new int[]{0, -1},  // Nord-Ouest
-                new int[]{1, -1}   // Nord-Est
-            };
-        }
-
-        foreach (int[] dir in directions)
-        {
-            int neighborCol = col + dir[0];
-            int neighborRow = row + dir[1];
-
-            if (neighborCol >= 0 && neighborCol < columns &&
-                neighborRow >= 0 && neighborRow < rows)
-            {
-                Tile neighbor = tileGrid[neighborCol, neighborRow];
-                if (neighbor != null)
-                {
-                    neighbors.Add(neighbor);
-                }
-            }
-        }
-        return neighbors;
-    }
+    // FindNeighborsForTile_FlatTop_OddQ serait à adapter de la même manière si vous l'utilisez.
 
     private void InitializeTileStatesAfterSetup()
     {
@@ -216,15 +220,20 @@ public class HexGridManager : MonoBehaviour
 
     private IEnumerator DelayedTileInitialization()
     {
-        yield return new WaitForEndOfFrame(); // Wait for other Start methods to potentially complete
+        yield return new WaitForEndOfFrame();
         foreach (Tile tile in allTilesInScene)
         {
-            if (tileGrid[tile.column, tile.row] == tile) // Check it's the correct tile in the grid
+            // MODIFIÉ: Vérifier si la tuile est valide et à sa place dans la grille logique
+            if (tile != null && IsLogicalCoordInBounds(tile.column, tile.row))
             {
-                MusicReactiveTile musicTile = tile as MusicReactiveTile;
-                if (musicTile != null) // No need to check MusicManager.Instance here, MusicReactiveTile handles it
+                Vector2Int arrayIndices = ToArrayIndex(tile.column, tile.row);
+                if (tileGrid[arrayIndices.x, arrayIndices.y] == tile)
                 {
-                    musicTile.InitializeReactiveState();
+                    MusicReactiveTile musicTile = tile as MusicReactiveTile;
+                    if (musicTile != null)
+                    {
+                        musicTile.InitializeReactiveVisualState(); // Nom de méthode corrigé
+                    }
                 }
             }
         }
@@ -233,10 +242,12 @@ public class HexGridManager : MonoBehaviour
     public Tile GetClosestTile(Vector3 position)
     {
         Tile closest = null;
-        float minDistSq = Mathf.Infinity; // Use squared distance for efficiency
+        float minDistSq = Mathf.Infinity;
         foreach (Tile tile in allTilesInScene)
         {
             if (tile == null || !tile.gameObject.activeInHierarchy) continue;
+            // NOUVEAU: S'assurer que la tuile est dans les limites logiques avant de la considérer
+            if (!IsLogicalCoordInBounds(tile.column, tile.row)) continue;
 
             float distSq = (tile.transform.position - position).sqrMagnitude;
             if (distSq < minDistSq)
@@ -245,79 +256,80 @@ public class HexGridManager : MonoBehaviour
                 closest = tile;
             }
         }
-        if (closest == null && allTilesInScene.Count > 0) {
-             Debug.LogWarning($"[HexGridManager] GetClosestTile to {position} returned null, but there are {allTilesInScene.Count} tiles. Check tile states.");
+        if (closest == null && allTilesInScene.Count > 0 && showPathfindingLogs) {
+             Debug.LogWarning($"[HexGridManager] GetClosestTile to {position} returned null, but there are tiles in scene. Check tile states and logical bounds setup.");
         }
         return closest;
     }
 
+    // Les paramètres currentCol, currentRow, targetCol, targetRow sont LOGIQUES
     public Tile GetNextNeighborTowardsTarget(int currentCol, int currentRow, int targetCol, int targetRow, Unit requestingUnit = null)
     {
+        // La logique interne de cette méthode (A*, distances, etc.) devrait déjà fonctionner avec
+        // des coordonnées logiques (positives ou négatives).
+        // Il faut juste s'assurer que tous les appels à GetTileAt et les accès aux voisins
+        // utilisent bien des coordonnées logiques et que les bornes sont respectées.
+
         if (showPathfindingLogs)
-            Debug.Log($"[HexGridManager] Pathfinding: From ({currentCol},{currentRow}) to ({targetCol},{targetRow}) for unit '{requestingUnit?.name ?? "N/A"}'");
+            Debug.Log($"[HexGridManager] Pathfinding: From logical ({currentCol},{currentRow}) to logical ({targetCol},{targetRow}) for unit '{requestingUnit?.name ?? "N/A"}'");
 
         if (currentCol == targetCol && currentRow == targetRow)
         {
             if (showPathfindingLogs) Debug.Log("[HexGridManager] Pathfinding: Already at target.");
-            return null; // Already at the target
-        }
-
-        Tile currentTile = GetTileAt(currentCol, currentRow);
-        if (currentTile == null)
-        {
-            Debug.LogError($"[HexGridManager] Pathfinding: Current tile at ({currentCol},{currentRow}) is null!");
             return null;
         }
 
-        List<Tile> neighbors = currentTile.Neighbors;
+        Tile currentTile = GetTileAt(currentCol, currentRow); // Utilise la version modifiée
+        if (currentTile == null)
+        {
+            Debug.LogError($"[HexGridManager] Pathfinding: Current tile at logical ({currentCol},{currentRow}) is null!", this);
+            return null;
+        }
+
+        List<Tile> neighbors = currentTile.Neighbors; // Neighbors sont déjà des objets Tile valides
         if (neighbors.Count == 0)
         {
-            if (showPathfindingLogs) Debug.LogWarning($"[HexGridManager] Pathfinding: Tile ({currentCol},{currentRow}) has no neighbors.");
+            if (showPathfindingLogs) Debug.LogWarning($"[HexGridManager] Pathfinding: Tile logical ({currentCol},{currentRow}) has no neighbors.");
             return null;
         }
 
         Tile bestCandidate = null;
         float minDistanceToTarget = float.MaxValue;
 
-        // Check if the target tile itself is a neighbor and is available
-        foreach (Tile neighbor in neighbors)
+        foreach (Tile neighbor in neighbors) // neighbor.column et neighbor.row sont déjà logiques
         {
             if (neighbor.column == targetCol && neighbor.row == targetRow)
             {
-                if (!neighbor.IsOccupied && // Not physically occupied
-                    (TileReservationController.Instance == null || !TileReservationController.Instance.IsTileReservedByOtherUnit(new Vector2Int(neighbor.column, neighbor.row), requestingUnit))) // Not reserved by another unit
+                if (!neighbor.IsOccupied &&
+                    (TileReservationController.Instance == null || !TileReservationController.Instance.IsTileReservedByOtherUnit(new Vector2Int(neighbor.column, neighbor.row), requestingUnit)))
                 {
-                    if (showPathfindingLogs) Debug.Log($"[HexGridManager] Pathfinding: Target ({targetCol},{targetRow}) is a direct, available neighbor.");
-                    return neighbor; // Prefer direct path to target if available
+                    if (showPathfindingLogs) Debug.Log($"[HexGridManager] Pathfinding: Target logical ({targetCol},{targetRow}) is a direct, available neighbor.");
+                    return neighbor;
                 }
                 else
                 {
-                    if (showPathfindingLogs) Debug.Log($"[HexGridManager] Pathfinding: Target ({targetCol},{targetRow}) is a neighbor but occupied/reserved.");
-                    // Don't return null yet, explore other neighbors that might lead towards target.
+                    if (showPathfindingLogs) Debug.Log($"[HexGridManager] Pathfinding: Target logical ({targetCol},{targetRow}) is a neighbor but occupied/reserved.");
                 }
-                break; // Found the target among neighbors, no need to check its distance further for this loop
+                break;
             }
         }
 
-        // If target is not a direct available neighbor, find the best step among other neighbors
         foreach (Tile neighbor in neighbors)
         {
             if (neighbor.IsOccupied || (TileReservationController.Instance != null && TileReservationController.Instance.IsTileReservedByOtherUnit(new Vector2Int(neighbor.column, neighbor.row), requestingUnit)))
             {
-                if (showPathfindingLogs) Debug.Log($"[HexGridManager] Pathfinding: Neighbor ({neighbor.column},{neighbor.row}) is occupied or reserved by other. Skipping.");
+                if (showPathfindingLogs) Debug.Log($"[HexGridManager] Pathfinding: Neighbor logical ({neighbor.column},{neighbor.row}) is occupied or reserved by other. Skipping.");
                 continue;
             }
 
-            float distance = HexDistance(neighbor.column, neighbor.row, targetCol, targetRow);
+            float distance = HexDistance(neighbor.column, neighbor.row, targetCol, targetRow); // HexDistance utilise des coords logiques
             if (distance < minDistanceToTarget)
             {
                 minDistanceToTarget = distance;
                 bestCandidate = neighbor;
             }
-            // Optional: Tie-breaking (e.g., prefer straight lines or less "costly" tiles if you add costs)
             else if (distance == minDistanceToTarget && bestCandidate != null)
             {
-                // Simple tie-breaking: prefer lower column, then lower row, or random
                 if (neighbor.column < bestCandidate.column || (neighbor.column == bestCandidate.column && neighbor.row < bestCandidate.row))
                 {
                     bestCandidate = neighbor;
@@ -327,7 +339,7 @@ public class HexGridManager : MonoBehaviour
 
         if (bestCandidate != null)
         {
-            if (showPathfindingLogs) Debug.Log($"[HexGridManager] Pathfinding: Best next step is ({bestCandidate.column},{bestCandidate.row}), dist to target: {minDistanceToTarget}.");
+            if (showPathfindingLogs) Debug.Log($"[HexGridManager] Pathfinding: Best next step is logical ({bestCandidate.column},{bestCandidate.row}), dist to target: {minDistanceToTarget}.");
         }
         else
         {
@@ -336,72 +348,80 @@ public class HexGridManager : MonoBehaviour
         return bestCandidate;
     }
 
+    // ConvertOffsetToCube_OddQ et HexDistance devraient fonctionner correctement avec des coordonnées logiques négatives
+    // car les maths sous-jacentes des coordonnées cubiques le permettent.
     private Vector3Int ConvertOffsetToCube_OddQ(int col, int row)
     {
         int cube_x = col;
-        int cube_z = row - (col - (col & 1)) / 2; // Correct pour odd-q (pointy ET flat)
+        int cube_z = row - (col - (col & 1)) / 2;
         int cube_y = -cube_x - cube_z;
         return new Vector3Int(cube_x, cube_y, cube_z);
     }
 
     public int HexDistance(int col1, int row1, int col2, int row2)
     {
-        Vector3Int cube1 = ConvertOffsetToCube_OddQ(col1, row1); // Utilise la même conversion
-        Vector3Int cube2 = ConvertOffsetToCube_OddQ(col2, row2); // Utilise la même conversion
-
-        return (Mathf.Abs(cube1.x - cube2.x) +
-                Mathf.Abs(cube1.y - cube2.y) +
-                Mathf.Abs(cube1.z - cube2.z)) / 2; // La formule de distance reste la même
+        Vector3Int cube1 = ConvertOffsetToCube_OddQ(col1, row1);
+        Vector3Int cube2 = ConvertOffsetToCube_OddQ(col2, row2);
+        return (Mathf.Abs(cube1.x - cube2.x) + Mathf.Abs(cube1.y - cube2.y) + Mathf.Abs(cube1.z - cube2.z)) / 2;
     }
 
-    public Tile GetTileAt(int column, int row)
+    // MODIFIÉ: Les paramètres logicalColumn, logicalRow sont des coordonnées logiques
+    public Tile GetTileAt(int logicalColumn, int logicalRow)
     {
-        if (column >= 0 && column < columns && row >= 0 && row < rows)
+        // MODIFIÉ: Valider par rapport aux limites logiques et convertir en indices de tableau
+        if (IsLogicalCoordInBounds(logicalColumn, logicalRow))
         {
-            return tileGrid[column, row];
+            Vector2Int arrayIndices = ToArrayIndex(logicalColumn, logicalRow);
+            return tileGrid[arrayIndices.x, arrayIndices.y];
         }
-        Debug.LogWarning($"[HexGridManager] Attempted to get tile out of bounds: ({column},{row})");
+        // Optionnel: Log verbeux pour les accès hors limites
+        // if (showPathfindingLogs) Debug.LogWarning($"[HexGridManager] Attempted to get tile at logical ({logicalColumn},{logicalRow}) which is out of defined logical bounds: Cols [{minColumn}..{maxColumn}], Rows [{minRow}..{maxRow}]");
         return null;
     }
 
-    public List<Tile> GetTilesWithinRange(int centerColumn, int centerRow, int range)
+    // Les paramètres centerColumn, centerRow sont LOGIQUES
+    public List<Tile> GetTilesWithinRange(int centerLogicalColumn, int centerLogicalRow, int range)
     {
         List<Tile> tilesInRange = new List<Tile>();
         if (range < 0) { Debug.LogError("Range must be non-negative."); return tilesInRange; }
 
-        Tile centerTile = GetTileAt(centerColumn, centerRow);
-        if (centerTile == null) { Debug.LogError($"Center tile ({centerColumn},{centerRow}) not found for GetTilesWithinRange."); return tilesInRange; }
+        Tile centerTile = GetTileAt(centerLogicalColumn, centerLogicalRow); // Utilise la version modifiée
+        if (centerTile == null)
+        {
+            // MODIFIÉ: Log si la tuile centrale n'est pas trouvée avec des coordonnées logiques
+            Debug.LogError($"[HexGridManager] Center tile at logical ({centerLogicalColumn},{centerLogicalRow}) not found for GetTilesWithinRange.");
+            return tilesInRange;
+        }
 
-        // For range 0, only the center tile
         if (range == 0) {
             tilesInRange.Add(centerTile);
             return tilesInRange;
         }
 
         Queue<Tile> queue = new Queue<Tile>();
-        HashSet<Tile> visited = new HashSet<Tile>(); // To prevent reprocessing tiles and cycles
-        Dictionary<Tile, int> distances = new Dictionary<Tile, int>(); // To store distance from center
+        HashSet<Tile> visited = new HashSet<Tile>();
+        Dictionary<Tile, int> distances = new Dictionary<Tile, int>();
 
         queue.Enqueue(centerTile);
         visited.Add(centerTile);
         distances[centerTile] = 0;
-        tilesInRange.Add(centerTile); // Center tile is within range 0 of itself
+        tilesInRange.Add(centerTile);
 
         while (queue.Count > 0)
         {
             Tile current = queue.Dequeue();
             int currentDist = distances[current];
 
-            if (currentDist >= range) continue; // Stop exploring from this tile if max range reached
+            if (currentDist >= range) continue;
 
-            foreach (Tile neighbor in current.Neighbors)
+            foreach (Tile neighbor in current.Neighbors) // Les voisins sont déjà des tuiles valides
             {
                 if (neighbor != null && !visited.Contains(neighbor))
                 {
                     visited.Add(neighbor);
                     distances[neighbor] = currentDist + 1;
                     tilesInRange.Add(neighbor);
-                    queue.Enqueue(neighbor); // Add to queue to explore its neighbors
+                    queue.Enqueue(neighbor);
                 }
             }
         }
@@ -427,6 +447,6 @@ public class HexGridManager : MonoBehaviour
         }
     }
 
-    public int GetTilesCount() => allTilesInScene.Count;
+    public int GetTilesCount() => allTilesInScene.Count(t => t != null && IsLogicalCoordInBounds(t.column, t.row)); // Compte seulement les tuiles valides
     #endregion
 }

@@ -21,6 +21,12 @@ public class GameplayManager : MonoBehaviour
     private List<GlobalSpellData_SO> availableGlobalSpells = new List<GlobalSpellData_SO>();
     
     private Dictionary<string, float> _unitCooldowns = new Dictionary<string, float>();
+    private Dictionary<string, float> _spellCooldowns = new Dictionary<string, float>();
+    
+    public IReadOnlyDictionary<string, float> UnitCooldowns => _unitCooldowns;
+    public IReadOnlyDictionary<string, float> SpellCooldowns => _spellCooldowns;
+    public IReadOnlyList<GlobalSpellData_SO> AvailableGlobalSpells => availableGlobalSpells;
+
     private float _beatInterval;
 
     void Start()
@@ -277,6 +283,25 @@ public class GameplayManager : MonoBehaviour
     void HandleGlobalSpell(GlobalSpellData_SO spellData, int perfectCount)
     {
         Debug.Log($"[GameplayManager] Sort global activé : {spellData.DisplayName}, Inputs Parfaits: {perfectCount}");
+ 		 if (_spellCooldowns.ContainsKey(spellData.SpellID) && Time.time < _spellCooldowns[spellData.SpellID])
+        {
+            Debug.Log($"Sort '{spellData.DisplayName}' est en rechargement.");
+            // Jouer un son d'échec ici serait une bonne idée
+            return;
+        }
+
+        if (spellData == null)
+        {
+            Debug.LogWarning("[GameplayManager] Tentative d'activation d'un sort avec un GlobalSpellData_SO nul.");
+            return;
+        }
+
+        // Vérifier si le sort est en cooldown
+        if (_spellCooldowns.ContainsKey(spellData.SpellID) && Time.time < _spellCooldowns[spellData.SpellID])
+        {
+            Debug.Log($"[GameplayManager] Sort {spellData.DisplayName} en cooldown. Temps restant : {_spellCooldowns[spellData.SpellID] - Time.time:F2} secondes.");
+            return;
+        }
 
         if (spellData.SpellEffect != null)
         {
@@ -284,16 +309,21 @@ public class GameplayManager : MonoBehaviour
             {
                 goldController.RemoveGold(spellData.GoldCost);
                 Debug.Log($"[GameplayManager] Or dépensé pour le sort : {spellData.GoldCost}. Or restant : {goldController.GetCurrentGold()}");
-                spellData.SpellEffect.ExecuteEffect(this.gameObject, perfectCount); // this.gameObject est le caster (GameplayManager)
+                spellData.SpellEffect.ExecuteEffect(this.gameObject, perfectCount);
 
                 if (spellData.ActivationSound != null && spellData.ActivationSound.IsValid())
                 {
-                    spellData.ActivationSound.Post(gameObject); // Jouer le son d'activation du sort
+                    spellData.ActivationSound.Post(gameObject);
                 }
+
+                // Définir le cooldown pour le sort
+                float cooldownInSeconds = spellData.BeatCooldown * _beatInterval; // Exemple basé sur la longueur de la séquence
+                _spellCooldowns[spellData.SpellID] = Time.time + cooldownInSeconds;
+                Debug.Log($"[GameplayManager] Cooldown pour {spellData.DisplayName} défini à {cooldownInSeconds} secondes. Cooldowns actuels: {string.Join(", ", _spellCooldowns.Select(kvp => $"{kvp.Key}: {kvp.Value - Time.time:F2}s"))}");
             }
             else
             {
-                 Debug.LogWarning($"[GameplayManager] Pas assez d'or pour lancer le sort {spellData.DisplayName}. Requis : {spellData.GoldCost}, Actuel : {goldController.GetCurrentGold()}");
+                Debug.LogWarning($"[GameplayManager] Pas assez d'or pour lancer le sort {spellData.DisplayName}. Requis : {spellData.GoldCost}, Actuel : {goldController.GetCurrentGold()}");
             }
         }
         else

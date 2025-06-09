@@ -23,6 +23,12 @@ public class GlobalSpellData_SO : ScriptableObject
 
     public BaseSpellEffect_SO SpellEffect; // Partie clé pour la flexibilité des effets
 
+    [Header("Cooldown")]
+    [Tooltip("Temps de rechargement en secondes avant de pouvoir relancer ce sort.")]
+    [MinValue(0)]
+    public float BeatCooldown = 15f; 
+    
+    
     private bool ValidateSpellSequence(List<InputType> sequence)
     {
         return sequence != null && sequence.Count == 4;

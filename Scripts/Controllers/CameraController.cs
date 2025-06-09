@@ -74,7 +74,7 @@ public class RhythmGameCameraController : MonoBehaviour
 
     [TitleGroup("Locking Mechanism")]
     [ReadOnly]
-    [SerializeField] private bool controlsLocked = false; // Pour verrouiller tous les contrôles
+    [SerializeField] public bool controlsLocked = false; // Pour verrouiller tous les contrôles
     [ReadOnly] // NOUVEAU : Pour voir l'état du verrouillage du zoom
     [SerializeField] private bool zoomLocked = false;    // Pour verrouiller uniquement le zoom
 

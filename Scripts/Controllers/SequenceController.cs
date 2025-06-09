@@ -31,6 +31,9 @@ public class SequenceController : MonoBehaviour
 
     
     private List<KeyCode> currentSequence = new List<KeyCode>();
+    
+    public IReadOnlyList<KeyCode> CurrentSequence => currentSequence.AsReadOnly();
+
     private int perfectCount = 0; // Count of perfect inputs for the current sequence
     public float perfectTolerance = 0.1f;
     public float goodTolerance = 0.25f;

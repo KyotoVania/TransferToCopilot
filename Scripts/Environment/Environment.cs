@@ -19,7 +19,7 @@ public class Environment : MonoBehaviour
 
     // Référence à la tuile occupée
     protected Tile occupiedTile;
-    private bool isAttached = false;
+    protected bool isAttached = false;
 
     // Référence aux statistiques (si l'environnement a des propriétés spéciales)
     [InlineEditor(InlineEditorModes.FullEditor)] // Attribut Odin Inspector

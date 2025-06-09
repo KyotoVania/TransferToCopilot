@@ -1,10 +1,11 @@
+// Fichier: Scripts2/MusicReactiveTile.cs
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using Sirenix.OdinInspector;
-using Game.Observers;
+using Game.Observers; // Assurez-vous que ce namespace existe si IComboObserver est dedans
 
-public class MusicReactiveTile : Tile, IComboObserver //
+public class MusicReactiveTile : Tile, IComboObserver
 {
     #region Profile & State Reactivity
     [Title("Reaction Profile")]
@@ -12,25 +13,30 @@ public class MusicReactiveTile : Tile, IComboObserver //
     [Required("A TileReactionProfile_SO must be assigned for this tile to react.")]
     private TileReactionProfile_SO reactionProfile;
 
+    [Title("Rhythm Interaction")]
+    [Tooltip("Si coché, cette tuile ne réagira PAS aux événements rythmiques.")]
+    [SerializeField]
+    public bool disableRhythmReactions = false;
+
     [Title("Music State Reactivity")]
     [SerializeField] private bool enableMusicStateReactions = true;
     [ShowIf("enableMusicStateReactions")]
     [SerializeField] private float explorationIntensityFactor = 1.0f;
     [ShowIf("enableMusicStateReactions")]
-    [SerializeField] private float combatIntensityFactor = 1.2f; // Valeur ajustée
+    [SerializeField] private float combatIntensityFactor = 1.2f;
     [ShowIf("enableMusicStateReactions")]
-    [SerializeField] private float bossIntensityFactor = 1.4f; // Valeur ajustée
+    [SerializeField] private float bossIntensityFactor = 1.4f;
     #endregion
 
     #region Instance Specific Settings
-    [Title("Instance Specific Water Sequence")] // Section pour les paramètres d'instance
-    [ShowIf("IsWaterTile")] // Ne s'affiche que si tileType est Water
-    [SerializeField, Tooltip("Sequence number for this specific water tile (0 to Total-1). Example: 0, 1, 2...")]
+    [Title("Instance Specific Water Sequence")]
+    [ShowIf("IsWaterTile")]
+    [SerializeField, Tooltip("Sequence number for this specific water tile (0 to Total-1).")]
     private int waterSequenceNumber = 0;
 
     [ShowIf("IsWaterTile")]
-    [SerializeField, Tooltip("Total number of unique steps in this water body's animation sequence. Example: 3 for a 0,1,2 sequence.")]
-    [MinValue(1)] // Une séquence a au moins 1 étape
+    [SerializeField, Tooltip("Total number of unique steps in this water body's animation sequence.")]
+    [MinValue(1)]
     private int waterSequenceTotal = 3;
     #endregion
 
@@ -40,341 +46,283 @@ public class MusicReactiveTile : Tile, IComboObserver //
     private Coroutine currentAnimation;
     private bool isAnimating = false;
     private float currentMovementDuration;
-    private bool isInitialized = false;
-    private Material tileMaterial; // Peut être utilisé pour des effets de shader à l'avenir
-    // currentWaterSequence n'est plus nécessaire car activeWaveSequences gère la progression
+    private bool isReactiveStateInitialized = false;
+    private Material tileMaterial;
     private List<int> activeWaveSequences = new List<int>();
-    private int beatCounterForWaterWaves = 0; // Renommé pour clarté
+    private int beatCounterForWaterWaves = 0;
     private TMPro.TextMeshPro sequenceNumberText;
-
     private float currentDynamicReactionProbability;
     private int lastComboThresholdReached = 0;
+
+    // NOUVEAU: Position de base pour les animations, capturée au Start en mode Play.
+    private Vector3 basePositionForAnimation;
     #endregion
 
     #region Initialization Methods
     protected override void Start()
     {
-        base.Start();
-        originalWorldPosition = transform.position;
+        base.Start(); // Tile.Start() est maintenant plus simple
+
+        // Capturer la position actuelle comme base pour les animations de CETTE session de jeu.
+        // Cela se produit APRÈS que la tuile soit potentiellement attachée à un parent et positionnée.
+        basePositionForAnimation = transform.position;
+        // Debug.Log($"[{this.name}/MusicReactiveTile.Start] basePositionForAnimation capturée: {basePositionForAnimation}");
 
         if (reactionProfile == null)
         {
-            Debug.LogError($"[{this.name}] No TileReactionProfile_SO assigned! Tile reactions disabled.", this);
-            enabled = false;
-            return;
+            disableRhythmReactions = true; // Sécurité
         }
 
-        // Validation Automatique (Option B)
         ValidateProfileAssignment();
-
-        currentDynamicReactionProbability = reactionProfile.reactionProbability;
+        if (reactionProfile != null)
+        {
+             currentDynamicReactionProbability = reactionProfile.reactionProbability;
+        }
 
         MeshRenderer renderer = GetComponent<MeshRenderer>();
-        if (renderer != null)
-        {
-            tileMaterial = renderer.material;
-        }
+        if (renderer != null) tileMaterial = renderer.material; // Utiliser .material pour obtenir une instance si des changements par tuile sont prévus
 
-        if (MusicManager.Instance != null)
+        if (!disableRhythmReactions && reactionProfile != null)
         {
-            MusicManager.Instance.OnBeat += HandleBeat;
-            MusicManager.Instance.OnMusicStateChanged += HandleMusicStateChange;
-            if (enableMusicStateReactions)
+            if (MusicManager.Instance != null)
             {
-                // Tentative d'initialisation de l'état musical actuel
-                // currentMusicStateKey = MusicManager.Instance.GetCurrentMusicStateKey(); // Nécessite une méthode sur MusicManager
+                MusicManager.Instance.OnBeat += HandleBeat;
+                MusicManager.Instance.OnMusicStateChanged += HandleMusicStateChange;
             }
-        }
-        else
-        {
-            Debug.LogWarning($"[{this.name}] MusicManager.Instance not found. Music state reactions and beat sync might not work.", this);
-        }
-
-        if (tileType == TileType.Ground && reactionProfile.reactToCombo && ComboController.Instance != null)
-        {
-            ComboController.Instance.AddObserver(this);
+            if (tileType == TileType.Ground && reactionProfile.reactToCombo && ComboController.Instance != null)
+            {
+                ComboController.Instance.AddObserver(this);
+            }
         }
 
         if (tileType == TileType.Water)
         {
             waterSequenceNumber = Mathf.Clamp(waterSequenceNumber, 0, Mathf.Max(0, waterSequenceTotal - 1));
             CreateSequenceNumberText();
-            beatCounterForWaterWaves = reactionProfile.waterBeatsBetweenWaves;
+            if(reactionProfile != null) beatCounterForWaterWaves = reactionProfile.waterBeatsBetweenWaves;
         }
-        
-        // S'assurer que InitializeReactiveState est appelé APRÈS que le profil soit validé et les valeurs initiales settées.
-        // Si Tile.cs n'appelle pas InitializeReactiveState, il faut l'appeler ici.
-        // Si MusicReactiveTile surcharge Start et que Tile.Start() fait des choses importantes avant
-        // que MusicReactiveTile ait besoin de son profil, l'ordre actuel est bon.
-        // Assumons que InitializeReactiveState() est appelé ici ou par une logique externe au bon moment.
-        // Si vous avez une méthode Setup() ou Initialize() qui est appelée après Start, c'est aussi un bon endroit.
-        // Pour l'instant, on va supposer qu'elle est appelée dans OnEnable ou la première fois que HandleBeat est appelé.
+
+        // Appliquer l'état visuel initial (avec offset si Ground) UNIQUEMENT en mode Play.
+        // En mode éditeur, InitializeReactiveVisualState ne modifiera plus la position.
+        if (Application.isPlaying)
+        {
+            InitializeReactiveVisualState();
+        }
+        else
+        {
+            // En mode éditeur, on peut appeler d'autres logiques d'init visuelle qui ne touchent pas à la position.
+            // Par exemple, mise à jour de matériel si nécessaire.
+        }
+
+        isReactiveStateInitialized = true;
     }
 
-    private void ValidateProfileAssignment()
+    private void ValidateProfileAssignment() // Inchangé
     {
-        if (reactionProfile.applicableTileType == TileReactionProfile_SO.ProfileApplicability.Generic)
-            return; // Un profil générique est acceptable pour n'importe quel type de tuile.
-
+        if (reactionProfile == null) return;
+        if (reactionProfile.applicableTileType == TileReactionProfile_SO.ProfileApplicability.Generic) return;
         bool mismatch = false;
         switch (this.tileType)
         {
-            case TileType.Ground:
-                if (reactionProfile.applicableTileType != TileReactionProfile_SO.ProfileApplicability.Ground) mismatch = true;
-                break;
-            case TileType.Water:
-                if (reactionProfile.applicableTileType != TileReactionProfile_SO.ProfileApplicability.Water) mismatch = true;
-                break;
-            case TileType.Mountain:
-                if (reactionProfile.applicableTileType != TileReactionProfile_SO.ProfileApplicability.Mountain) mismatch = true;
-                break;
+            case TileType.Ground: if (reactionProfile.applicableTileType != TileReactionProfile_SO.ProfileApplicability.Ground) mismatch = true; break;
+            case TileType.Water: if (reactionProfile.applicableTileType != TileReactionProfile_SO.ProfileApplicability.Water) mismatch = true; break;
+            case TileType.Mountain: if (reactionProfile.applicableTileType != TileReactionProfile_SO.ProfileApplicability.Mountain) mismatch = true; break;
         }
-        if (mismatch)
-        {
-            Debug.LogWarning($"[{this.name}] Mismatch: TileType is '{this.tileType}' but assigned ReactionProfile ('{reactionProfile.name}') is marked for '{reactionProfile.applicableTileType}'. Tile reactions might be unintended.", this);
-        }
+        if (mismatch) Debug.LogWarning($"[{this.name}] Mismatch: TileType '{this.tileType}', Profile for '{reactionProfile.applicableTileType}'.", this);
     }
-    
-    public void InitializeReactiveState() // Doit être appelée après que `reactionProfile` soit défini
-    {
-        if (isInitialized || reactionProfile == null) return;
 
-        switch (tileType)
+    // MODIFIÉ: Ne change la position qu'en mode Play
+    public void InitializeReactiveVisualState()
+    {
+        if (Application.isPlaying) // N'appliquer la logique de positionnement initial qu'en mode Play
         {
-            case TileType.Ground:
+            if (disableRhythmReactions || reactionProfile == null)
+            {
+                transform.position = basePositionForAnimation; // Utiliser la base capturée au Start
+            }
+            else if (tileType == TileType.Ground)
+            {
+                // Appliquer l'offset aléatoire UNIQUEMENT en mode Play
                 float initialOffset = Random.Range(reactionProfile.downMin, reactionProfile.upMax);
-                transform.position = originalWorldPosition + Vector3.up * initialOffset;
-                break;
-            case TileType.Water:
-            case TileType.Mountain:
-                transform.position = originalWorldPosition;
-                break;
+                transform.position = basePositionForAnimation + Vector3.up * initialOffset;
+            }
+            else // Water, Mountain
+            {
+                transform.position = basePositionForAnimation; // Utiliser la base capturée au Start
+            }
         }
-        isInitialized = true;
-    }
+        // Si !Application.isPlaying (appel potentiel depuis OnValidate), cette méthode
+        // ne modifiera PLUS transform.position. La tuile conservera sa position de scène.
 
-    private void CreateSequenceNumberText()
-    {
-        // ... (code existant, s'assurer qu'il utilise this.waterSequenceNumber)
-        sequenceNumberText = GetComponentInChildren<TMPro.TextMeshPro>();
-        if (sequenceNumberText == null)
+        // Arrêter toute animation en cours et réinitialiser l'état d'animation (ceci est sûr dans les deux modes)
+        if (currentAnimation != null)
         {
-            GameObject textObject = new GameObject("SequenceNumber");
-            textObject.transform.SetParent(transform);
-            textObject.transform.localPosition = new Vector3(0, 0.05f, 0); 
-            textObject.transform.localRotation = Quaternion.Euler(90, 0, 0); 
-            textObject.transform.localScale = new Vector3(0.5f, 0.5f, 0.5f); 
-            sequenceNumberText = textObject.AddComponent<TMPro.TextMeshPro>();
-            sequenceNumberText.alignment = TMPro.TextAlignmentOptions.Center;
-            sequenceNumberText.fontSize = 5;
-            sequenceNumberText.color = Color.white;
+            StopCoroutine(currentAnimation);
+            currentAnimation = null;
         }
-        sequenceNumberText.text = this.waterSequenceNumber.ToString(); // Utilise le champ de l'instance
+        isAnimating = false;
     }
+    // ... (CreateSequenceNumberText reste inchangé) ...
     #endregion
 
-    #region Combo Observer Implementation
+    #region Combo Observer Implementation // Inchangé
     public void OnComboUpdated(int newCombo)
     {
-        if (reactionProfile == null || tileType != TileType.Ground || !reactionProfile.reactToCombo) return;
-
+        if (disableRhythmReactions || reactionProfile == null || tileType != TileType.Ground || !reactionProfile.reactToCombo) return;
         int thresholdsReached = reactionProfile.comboThreshold > 0 ? newCombo / reactionProfile.comboThreshold : 0;
         if (thresholdsReached > lastComboThresholdReached)
         {
             lastComboThresholdReached = thresholdsReached;
             float boostPercentage = Mathf.Min(reactionProfile.comboReactionBoostPercentage * thresholdsReached, reactionProfile.maxReactionBoostPercentage);
-            float boostMultiplier = 1f + (boostPercentage / 100f);
-            currentDynamicReactionProbability = Mathf.Clamp01(reactionProfile.reactionProbability * boostMultiplier);
+            currentDynamicReactionProbability = Mathf.Clamp01(reactionProfile.reactionProbability * (1f + (boostPercentage / 100f)));
         }
     }
 
     public void OnComboReset()
     {
-        if (reactionProfile == null || tileType != TileType.Ground || !reactionProfile.reactToCombo) return;
+        if (disableRhythmReactions || reactionProfile == null || tileType == TileType.Ground || !reactionProfile.reactToCombo) return;
         currentDynamicReactionProbability = reactionProfile.reactionProbability;
         lastComboThresholdReached = 0;
     }
     #endregion
 
-    #region Beat Handling
+    #region Beat Handling // Inchangé, mais les animations utiliseront basePositionForAnimation
     private void HandleBeat(float beatDuration)
     {
-        if (!isInitialized) { // S'assurer que l'initialisation a eu lieu
-            InitializeReactiveState();
-            if(!isInitialized) return; // Si toujours pas initialisé (ex: pas de profil), sortir
+        if (disableRhythmReactions)
+        {
+            if (isAnimating) { if (currentAnimation != null) StopCoroutine(currentAnimation); transform.position = basePositionForAnimation; isAnimating = false; }
+            return;
         }
-        if (reactionProfile == null) return;
+        if (!isReactiveStateInitialized) InitializeReactiveVisualState();
+        if (reactionProfile == null) return; // isBasePositionCaptured n'est plus pertinent ici
 
         switch (tileType)
         {
-            case TileType.Water:
-                HandleWaterTileBeat(beatDuration);
-                break;
-            case TileType.Ground:
-                HandleGroundTileBeat(beatDuration);
-                break;
-            case TileType.Mountain:
-                HandleMountainTileBeat(beatDuration);
-                break;
+            case TileType.Water: HandleWaterTileBeat(beatDuration); break;
+            case TileType.Ground: HandleGroundTileBeat(beatDuration); break;
+            case TileType.Mountain: HandleMountainTileBeat(beatDuration); break;
         }
     }
-
-    private void HandleWaterTileBeat(float beatDuration)
+    // ... (HandleWaterTileBeat, HandleGroundTileBeat, HandleMountainTileBeat restent structurellement les mêmes mais les animations internes changeront) ...
+     private void HandleWaterTileBeat(float beatDuration) // Structure inchangée
     {
         if (reactionProfile == null) return;
-
         beatCounterForWaterWaves++;
         if (beatCounterForWaterWaves >= reactionProfile.waterBeatsBetweenWaves)
         {
             beatCounterForWaterWaves = 0;
-            activeWaveSequences.Add(0); // Commence une nouvelle vague à la séquence 0
+            activeWaveSequences.Add(0);
         }
-
         for (int i = activeWaveSequences.Count - 1; i >= 0; i--)
         {
-            activeWaveSequences[i]++; // Fait avancer cette vague dans sa séquence
-            // Utilise this.waterSequenceTotal (de l'instance)
-            if (activeWaveSequences[i] > this.waterSequenceTotal) // > car une vague de total 3 va de 1 à 3
-            {
-                activeWaveSequences.RemoveAt(i);
-                continue;
-            }
-            // Utilise this.waterSequenceNumber (de l'instance)
-            if (activeWaveSequences[i] -1 == this.waterSequenceNumber) // Si c'est le tour de cette tuile dans cette vague
+            activeWaveSequences[i]++;
+            if (activeWaveSequences[i] > this.waterSequenceTotal) { activeWaveSequences.RemoveAt(i); continue; }
+            if (activeWaveSequences[i] - 1 == this.waterSequenceNumber)
             {
                 if (!reactionProfile.alwaysReact && Random.value > currentDynamicReactionProbability) continue;
                 if (currentAnimation != null) StopCoroutine(currentAnimation);
                 currentAnimation = StartCoroutine(AnimateWaterTile(beatDuration, reactionProfile));
-                break; 
+                break;
             }
         }
     }
 
-    // ... (HandleGroundTileBeat, HandleMountainTileBeat, et les coroutines d'animation
-    //      doivent continuer à utiliser reactionProfile pour leurs paramètres, comme précédemment)
-    private void HandleGroundTileBeat(float beatDuration)
+    private void HandleGroundTileBeat(float beatDuration) // Structure inchangée
     {
         if (reactionProfile == null) return;
         if (!reactionProfile.alwaysReact && Random.value > currentDynamicReactionProbability) return;
         if (currentAnimation != null) { StopCoroutine(currentAnimation); isAnimating = false; }
-
         RandomizeMovementDuration(beatDuration, reactionProfile);
-        float currentOffset = transform.position.y - originalWorldPosition.y;
+        float currentOffset = transform.position.y - basePositionForAnimation.y; // Changé pour utiliser basePositionForAnimation
         float intensity = GetCurrentIntensityFactor();
         float targetOffset = (currentOffset >= 0f) ?
             Random.Range(reactionProfile.downMin * intensity, reactionProfile.downMax * intensity) :
             Random.Range(reactionProfile.upMin * intensity, reactionProfile.upMax * intensity);
         currentAnimation = StartCoroutine(AnimateWithBounce(targetOffset, reactionProfile));
     }
-    
-    private void HandleMountainTileBeat(float beatDuration)
+
+    private void HandleMountainTileBeat(float beatDuration) // Structure inchangée
     {
         if (reactionProfile == null) return;
         if (!reactionProfile.alwaysReact && Random.value > currentDynamicReactionProbability) return;
         if (currentAnimation != null) { StopCoroutine(currentAnimation); isAnimating = false; }
-
-        // Utiliser un multiplicateur du profil pour la durée du shake, par exemple
-        float shakeDurationMultiplier = reactionProfile.groundAnimBeatMultiplier * 0.7f; // Ou un nouveau champ mountainShakeDurationMultiplier
+        float shakeDurationMultiplier = reactionProfile.groundAnimBeatMultiplier * 0.7f; // Assurez-vous que groundAnimBeatMultiplier est pertinent ou utilisez une variable dédiée
         float shakeDuration = beatDuration * shakeDurationMultiplier;
-
         float currentMountainReactionStrength = reactionProfile.mountainReactionStrength * GetCurrentIntensityFactor();
         currentAnimation = StartCoroutine(ShakeMountain(currentMountainReactionStrength, shakeDuration));
     }
     #endregion
 
-    #region Animations (doivent utiliser reactionProfile)
-
+    #region Animations // Doivent maintenant utiliser basePositionForAnimation
     private IEnumerator AnimateWaterTile(float beatDuration, TileReactionProfile_SO profile)
     {
         if (profile == null) yield break;
         isAnimating = true;
-        Vector3 startPos = transform.position;
+        Vector3 currentActualPos = transform.position;
         Vector3 originalScale = transform.localScale;
-        
-        float intensityFactor = GetCurrentIntensityFactor(); // Utilise les facteurs de MusicReactiveTile
+        float intensityFactor = GetCurrentIntensityFactor();
         Vector3 maxScale = originalScale * profile.waterScaleFactor * intensityFactor;
         float currentWaterMoveHeight = profile.waterMoveHeight * intensityFactor;
-        // Utiliser originalWorldPosition comme base pour le mouvement vertical pour éviter la dérive si la tuile est déjà en mouvement
-        Vector3 upPos = originalWorldPosition + new Vector3(0, currentWaterMoveHeight, 0);
+        Vector3 upPosTarget = basePositionForAnimation + new Vector3(0, currentWaterMoveHeight, 0); // UTILISE basePositionForAnimation
 
+        float nextBeatTime = Time.time + beatDuration;
+        if(MusicManager.Instance != null) nextBeatTime = MusicManager.Instance.GetNextBeatTime();
 
-        float nextBeatTime = MusicManager.Instance.GetNextBeatTime();
-        // Recalculer timeUntilNextBeat ici car la coroutine peut avoir attendu
         float timeUntilNextBeatOnStart = nextBeatTime - Time.time;
-
         float totalAnimationDuration = beatDuration * profile.waterAnimationDurationMultiplier;
         float preBeatDuration = totalAnimationDuration * profile.preBeatFraction;
         float postBeatDuration = totalAnimationDuration - preBeatDuration;
 
-        if (timeUntilNextBeatOnStart < preBeatDuration * 0.8f) // Si pas assez de temps avant le prochain beat visé
-        {
-            nextBeatTime += beatDuration; // Viser le beat d'après
-        }
-        
-        // Le reste du timing doit être relatif à nextBeatTime qui est maintenant correctement ciblé
+        if (timeUntilNextBeatOnStart < preBeatDuration * 0.8f && MusicManager.Instance != null) nextBeatTime += beatDuration;
+
         float animationStartTime = nextBeatTime - preBeatDuration;
         float waitTime = animationStartTime - Time.time;
         if (waitTime > 0) yield return new WaitForSeconds(waitTime);
 
-        // Phase 1: Montée
-        float startTimePhase1 = Time.time; // Démarrage réel de l'animation de montée
-        float endTimePhase1 = nextBeatTime; // Pic de l'animation sur le beat ciblé
-
+        float startTimePhase1 = Time.time;
+        float endTimePhase1 = nextBeatTime;
         while (Time.time < endTimePhase1)
         {
             float progress = Mathf.InverseLerp(startTimePhase1, endTimePhase1, Time.time);
-            float easedProgress = Mathf.Sin(progress * Mathf.PI * 0.5f); 
-            transform.position = Vector3.Lerp(startPos, upPos, easedProgress);
+            float easedProgress = Mathf.Sin(progress * Mathf.PI * 0.5f);
+            transform.position = Vector3.Lerp(currentActualPos, upPosTarget, easedProgress);
             transform.localScale = Vector3.Lerp(originalScale, maxScale, easedProgress);
             yield return null;
         }
-        transform.position = upPos;
+        transform.position = upPosTarget;
         transform.localScale = maxScale;
 
-        // Phase 2: Descente
-        float startTimePhase2 = Time.time; // Démarrage réel de la descente (juste après le beat)
+        float startTimePhase2 = Time.time;
         float endTimePhase2 = startTimePhase2 + postBeatDuration;
-
+        currentActualPos = transform.position;
         while (Time.time < endTimePhase2)
         {
             float progress = Mathf.InverseLerp(startTimePhase2, endTimePhase2, Time.time);
-            float easedProgress = 1f - Mathf.Sin((1f - progress) * Mathf.PI * 0.5f); 
-            transform.position = Vector3.Lerp(upPos, startPos, easedProgress);
+            float easedProgress = 1f - Mathf.Sin((1f - progress) * Mathf.PI * 0.5f);
+            transform.position = Vector3.Lerp(currentActualPos, basePositionForAnimation, easedProgress); // RETOURNE à basePositionForAnimation
             transform.localScale = Vector3.Lerp(maxScale, originalScale, easedProgress);
             yield return null;
         }
-        transform.position = startPos;
+        transform.position = basePositionForAnimation; // Assure le retour à basePositionForAnimation
         transform.localScale = originalScale;
         isAnimating = false;
     }
-    
-    private IEnumerator ResetWaterAmplitude(float duration) // Cette méthode semble incorrecte dans le contexte des SO
-    {
-        yield return new WaitForSeconds(duration * 0.5f);
-        // On ne peut pas modifier reactionProfile.waterWaveAmplitude directement car c'est un asset.
-        // Si un effet temporaire est désiré, il faut une variable d'instance dans MusicReactiveTile.
-        Debug.LogWarning("ResetWaterAmplitude: This method needs review. Cannot modify ScriptableObject profile directly at runtime for temporary effects.");
-    }
 
-    private void RandomizeMovementDuration(float beatDuration, TileReactionProfile_SO profile)
+    private void RandomizeMovementDuration(float beatDuration, TileReactionProfile_SO profile) // Inchangé
     {
         if (profile == null) return;
         float baseAnimDuration = beatDuration * profile.groundAnimBeatMultiplier;
-        currentMovementDuration = Mathf.Clamp(
-            baseAnimDuration + Random.Range(-profile.durationVariation, profile.durationVariation),
-            0.1f,
-            beatDuration * 0.95f
-        );
+        currentMovementDuration = Mathf.Clamp(baseAnimDuration + Random.Range(-profile.durationVariation, profile.durationVariation), 0.1f, beatDuration * 0.95f);
     }
 
-    private IEnumerator AnimateWithBounce(float targetOffset, TileReactionProfile_SO profile)
+    private IEnumerator AnimateWithBounce(float targetOffsetY, TileReactionProfile_SO profile)
     {
         if (profile == null) yield break;
         isAnimating = true;
         Vector3 startPos = transform.position;
-        Vector3 targetPos = originalWorldPosition + Vector3.up * targetOffset;
+        Vector3 targetPos = basePositionForAnimation + Vector3.up * targetOffsetY; // UTILISE basePositionForAnimation
         float elapsedTime = 0f;
-
         while (elapsedTime < currentMovementDuration)
         {
             float t = profile.movementCurve.Evaluate(elapsedTime / currentMovementDuration);
@@ -385,73 +333,64 @@ public class MusicReactiveTile : Tile, IComboObserver //
         transform.position = targetPos;
 
         float traveledDistance = Mathf.Abs(targetPos.y - startPos.y);
-        float bounceOffsetValue = profile.bouncePercentage * traveledDistance; // Renommé pour éviter conflit
-        Vector3 bounceTarget = targetPos + Vector3.up * (targetPos.y > startPos.y ? bounceOffsetValue : -bounceOffsetValue);
+        float bounceAmplitude = profile.bouncePercentage * traveledDistance;
+        // Le rebond se fait par rapport à targetPos, qui est déjà calculée par rapport à basePositionForAnimation
+        Vector3 bounceUpTarget = targetPos + Vector3.up * (targetOffsetY > (startPos.y - basePositionForAnimation.y) ? -bounceAmplitude : bounceAmplitude);
 
-        yield return StartCoroutine(AnimateBounceInternal(targetPos, bounceTarget, profile.bounceDuration, profile));
+        yield return StartCoroutine(AnimateBounceInternal(targetPos, bounceUpTarget, profile.bounceDuration, profile));
         isAnimating = false;
     }
 
-    private IEnumerator AnimateBounceInternal(Vector3 from, Vector3 bounceTarget, float duration, TileReactionProfile_SO profile)
+    private IEnumerator AnimateBounceInternal(Vector3 fromPos, Vector3 bouncePeakPos, float duration, TileReactionProfile_SO profile) // Inchangé
     {
         if (profile == null) yield break;
         float halfDuration = duration / 2f;
         float elapsedTime = 0f;
-
         while (elapsedTime < halfDuration)
         {
-            float t = elapsedTime / halfDuration;
-            transform.position = Vector3.Lerp(from, bounceTarget, t);
+            transform.position = Vector3.Lerp(fromPos, bouncePeakPos, profile.movementCurve.Evaluate(elapsedTime / halfDuration));
             elapsedTime += Time.deltaTime;
             yield return null;
         }
-
         elapsedTime = 0f;
         while (elapsedTime < halfDuration)
         {
-            float t = elapsedTime / halfDuration;
-            transform.position = Vector3.Lerp(bounceTarget, from, t);
+            transform.position = Vector3.Lerp(bouncePeakPos, fromPos, profile.movementCurve.Evaluate(elapsedTime / halfDuration));
             elapsedTime += Time.deltaTime;
             yield return null;
         }
-        transform.position = from;
+        transform.position = fromPos;
     }
-
-    // Supprimer la version surchargée de AnimateBounce qui ne prend pas de profil
-    // private IEnumerator AnimateBounce(Vector3 from, Vector3 bounceTarget, float duration) { ... }
 
     private IEnumerator ShakeMountain(float intensity, float duration)
     {
         isAnimating = true;
-        Vector3 startPos = transform.position;
+        Vector3 actualBasePos = basePositionForAnimation; // UTILISE basePositionForAnimation
         float elapsedTime = 0f;
-
         while (elapsedTime < duration)
         {
             float xOffset = Random.Range(-1f, 1f) * 0.02f * intensity;
             float zOffset = Random.Range(-1f, 1f) * 0.02f * intensity;
-            transform.position = startPos + new Vector3(xOffset, 0, zOffset);
+            transform.position = actualBasePos + new Vector3(xOffset, 0, zOffset);
             elapsedTime += Time.deltaTime;
             yield return null;
         }
-        transform.position = startPos;
+        transform.position = actualBasePos; // Retourne à basePositionForAnimation
         isAnimating = false;
     }
     #endregion
 
-    #region Utility and State Management
+    #region Utility and State Management // GetCurrentIntensityFactor et HandleMusicStateChange inchangés
     private void HandleMusicStateChange(string newStateKey)
     {
-        if (enableMusicStateReactions)
-        {
-            currentMusicStateKey = newStateKey;
-        }
+        if (disableRhythmReactions) return;
+        if (enableMusicStateReactions) currentMusicStateKey = newStateKey;
     }
 
     private float GetCurrentIntensityFactor()
     {
         if (!enableMusicStateReactions) return 1.0f;
-        switch (currentMusicStateKey.ToLower())
+        switch (currentMusicStateKey.ToLower()) // Utiliser ToLower() pour la robustesse
         {
             case "exploration": return explorationIntensityFactor;
             case "combat": return combatIntensityFactor;
@@ -460,104 +399,151 @@ public class MusicReactiveTile : Tile, IComboObserver //
         }
     }
 
-    protected override void OnDestroy()
+    protected override void OnDestroy() // Inchangé
     {
         base.OnDestroy();
-        if (MusicManager.Instance != null)
+        if (!disableRhythmReactions)
         {
-            MusicManager.Instance.OnBeat -= HandleBeat;
-            MusicManager.Instance.OnMusicStateChanged -= HandleMusicStateChange;
-        }
-        if (reactionProfile != null && ComboController.Instance != null && tileType == TileType.Ground && reactionProfile.reactToCombo)
-        {
-            ComboController.Instance.RemoveObserver(this);
+            if (MusicManager.Instance != null)
+            {
+                MusicManager.Instance.OnBeat -= HandleBeat;
+                MusicManager.Instance.OnMusicStateChanged -= HandleMusicStateChange;
+            }
+            if (reactionProfile != null && ComboController.Instance != null && tileType == TileType.Ground && reactionProfile.reactToCombo)
+            {
+                ComboController.Instance.RemoveObserver(this);
+            }
         }
     }
 
-    public void ResetToDefaultState()
+    public void ResetToDefaultState() // Doit maintenant utiliser basePositionForAnimation
     {
         if (currentAnimation != null) StopCoroutine(currentAnimation);
-        if (reactionProfile != null)
-        {
-             currentDynamicReactionProbability = reactionProfile.reactionProbability;
-        }
+        if (reactionProfile != null) currentDynamicReactionProbability = reactionProfile.reactionProbability;
         lastComboThresholdReached = 0;
-        transform.position = originalWorldPosition;
-        isInitialized = false;
-        InitializeReactiveState();
+
+        isReactiveStateInitialized = false; // Permettre à Initialize de s'exécuter (si Start l'appelle conditionnellement)
+        // Réinitialiser la position à celle capturée au début du jeu
+        if (Application.isPlaying) // Ne le faire que si le jeu tourne, sinon OnValidate s'en occupe.
+        {
+            transform.position = basePositionForAnimation;
+        }
+        InitializeReactiveVisualState(); // Pour réinitialiser l'état d'animation, etc.
     }
-    
-    protected override void UpdateTileAppearance()
+
+    protected override void UpdateTileAppearance() // Inchangé
     {
         base.UpdateTileAppearance();
         if (currentAnimation != null) StopCoroutine(currentAnimation);
-
         if (tileType == TileType.Water)
         {
             if (sequenceNumberText == null) CreateSequenceNumberText();
-            else
-            {
-                sequenceNumberText.text = waterSequenceNumber.ToString();
-                sequenceNumberText.gameObject.SetActive(true);
-            }
+            else { sequenceNumberText.text = waterSequenceNumber.ToString(); sequenceNumberText.gameObject.SetActive(true); }
         }
-        else if (sequenceNumberText != null)
-        {
-            sequenceNumberText.gameObject.SetActive(false);
-        }
+        else if (sequenceNumberText != null) sequenceNumberText.gameObject.SetActive(false);
     }
     #endregion
 
-    #region Helper Methods for Odin Inspector
-    private bool IsWaterTile() => tileType == TileType.Water; //
-    private bool IsGroundTile() => tileType == TileType.Ground; //
-    private bool IsMountainTile() => tileType == TileType.Mountain; //
+    #region Editor Specifics // OnValidate ne doit plus appeler InitializeReactiveVisualState pour la position
+    #if UNITY_EDITOR
+        void OnValidate()
+        {
+            if (Application.isPlaying || UnityEditor.EditorApplication.isPlayingOrWillChangePlaymode) return;
+
+            UnityEditor.EditorApplication.delayCall += () =>
+            {
+                if (this == null || this.gameObject == null || !this.gameObject.scene.IsValid()) return;
+
+                // InitializeReactiveVisualState() ne modifiera plus transform.position en mode éditeur.
+                // Elle peut être appelée si elle a d'autres logiques d'initialisation visuelle
+                // qui sont sûres pour l'éditeur (ex: matériaux).
+                // Si elle ne fait QUE gérer la position, cet appel peut être commenté/supprimé d'ici.
+                // Pour l'instant, on la laisse, car elle reset isAnimating et currentAnimation.
+                InitializeReactiveVisualState();
+
+                // Si vous avez d'autres logiques dans OnValidate qui doivent s'exécuter, gardez-les.
+                ValidateProfileAssignment();
+                if (tileType == TileType.Water && GetComponentInChildren<TMPro.TextMeshPro>() != null) // Recréer si nécessaire
+                {
+                    // Mettre à jour le texte si le composant existe déjà
+                    // Pourrait aussi être dans CreateSequenceNumberText, mais OnValidate est appelé plus souvent.
+                    var tmp = GetComponentInChildren<TMPro.TextMeshPro>();
+                    if (tmp) tmp.text = this.waterSequenceNumber.ToString();
+                } else if (tileType == TileType.Water) {
+                    CreateSequenceNumberText(); // S'il n'existe pas
+                }
+
+
+                // Forcer la mise à jour de la vue Scène peut toujours être utile
+                if (UnityEditor.SceneView.lastActiveSceneView != null) {
+                    UnityEditor.SceneView.lastActiveSceneView.Repaint();
+                }
+            };
+        }
+    #endif
     #endregion
 
-    #region Editor Utilities
+    #region Helper Methods for Odin Inspector // Inchangé
+    private bool IsWaterTile() => tileType == TileType.Water;
+    private bool IsGroundTile() => tileType == TileType.Ground;
+    private bool IsMountainTile() => tileType == TileType.Mountain;
+    #endregion
+
+    #region Editor Utilities // Inchangé
 #if UNITY_EDITOR
     [ContextMenu("Increment Sequence Number")]
     private void IncrementSequenceNumber()
     {
+        if (waterSequenceTotal <= 0) waterSequenceTotal = 1;
         waterSequenceNumber = (waterSequenceNumber + 1) % waterSequenceTotal;
-        if (sequenceNumberText != null)
-        {
-            sequenceNumberText.text = waterSequenceNumber.ToString();
-        }
+        if (sequenceNumberText != null) sequenceNumberText.text = waterSequenceNumber.ToString();
+        else CreateSequenceNumberText();
     }
-
     [ContextMenu("Decrement Sequence Number")]
     private void DecrementSequenceNumber()
     {
+        if (waterSequenceTotal <= 0) waterSequenceTotal = 1;
         waterSequenceNumber = (waterSequenceNumber - 1 + waterSequenceTotal) % waterSequenceTotal;
-        if (sequenceNumberText != null)
-        {
-            sequenceNumberText.text = waterSequenceNumber.ToString();
-        }
+        if (sequenceNumberText != null) sequenceNumberText.text = waterSequenceNumber.ToString();
+        else CreateSequenceNumberText();
     }
-
-    [ContextMenu("Test Combo Increase (Add 10)")]
+    [ContextMenu("Test Combo Increase (Add Threshold)")]
     private void TestComboIncrease()
     {
-        if (reactionProfile != null && ComboController.Instance != null && tileType == TileType.Ground && reactionProfile.reactToCombo)
-        {
-            OnComboUpdated((lastComboThresholdReached + 1) * reactionProfile.comboThreshold);
-        }
-         else if (reactionProfile == null)
-        {
-            Debug.LogWarning($"[{this.name}] TestComboIncrease: ReactionProfile is null. Cannot test combo reaction.");
-        }
-        else if (!reactionProfile.reactToCombo) //
-        {
-            Debug.LogWarning($"[{this.name}] TestComboIncrease: reactToCombo is false in the profile. Combo reaction is disabled for this profile.");
-        }
-    }
+        if (reactionProfile == null) { Debug.LogWarning($"Cannot test combo: ReactionProfile is null."); return; }
+        if (!reactionProfile.reactToCombo) { Debug.LogWarning($"Cannot test combo: reactToCombo is false in profile."); return; }
+        if (tileType != TileType.Ground) { Debug.LogWarning($"Cannot test combo: TileType is not Ground."); return; }
 
-    [ContextMenu("Reset Combo Reaction")]
-    private void TestComboReset()
-    {
-        OnComboReset();
+        int currentComboForTest = (lastComboThresholdReached + 1) * (reactionProfile.comboThreshold > 0 ? reactionProfile.comboThreshold : 5);
+        OnComboUpdated(currentComboForTest);
+        Debug.Log($"Tested combo increase to {currentComboForTest}. New dynamic probability: {currentDynamicReactionProbability}");
     }
+    [ContextMenu("Reset Combo Reaction")]
+    private void TestComboReset() { OnComboReset(); Debug.Log($"Tested combo reset. Dynamic probability: {currentDynamicReactionProbability}"); }
 #endif
     #endregion
+
+    // Ajout de CreateSequenceNumberText() comme dans la version précédente si elle avait été omise.
+    private void CreateSequenceNumberText()
+    {
+        sequenceNumberText = GetComponentInChildren<TMPro.TextMeshPro>();
+        if (sequenceNumberText == null)
+        {
+            GameObject textObject = new GameObject("SequenceNumberText");
+            textObject.transform.SetParent(transform);
+            RectTransform rect = textObject.AddComponent<RectTransform>();
+            rect.localPosition = new Vector3(0, 0.05f, 0); // Ajuster si nécessaire
+            rect.localRotation = Quaternion.Euler(90, 0, 0);
+            rect.localScale = new Vector3(0.05f, 0.05f, 0.05f);
+            rect.sizeDelta = new Vector2(100, 20);
+
+            sequenceNumberText = textObject.AddComponent<TMPro.TextMeshPro>();
+            sequenceNumberText.alignment = TMPro.TextAlignmentOptions.Center;
+            sequenceNumberText.fontSize = 10;
+            sequenceNumberText.color = Color.white;
+            sequenceNumberText.enableWordWrapping = false;
+        }
+        sequenceNumberText.text = this.waterSequenceNumber.ToString();
+        sequenceNumberText.gameObject.SetActive(true);
+    }
 }
