@@ -17,7 +17,7 @@ public class GameManager : SingletonPersistent<GameManager>
     [Header("Scene Data")]
     [SerializeField] private LevelData_SO mainMenuSceneData;
     [SerializeField] private LevelData_SO hubSceneData;
-    public static LevelData_SO CurrentLevelToLoad { get; private set; } // Pour savoir quel niveau charger
+    public static LevelData_SO CurrentLevelToLoad { get; private set; }
 
     protected override void Awake()
     {
@@ -311,10 +311,7 @@ public class GameManager : SingletonPersistent<GameManager>
 
             if (!string.IsNullOrEmpty(musicStateToSet))
             {
-                // Le booléen 'immediate' dans SetMusicState est maintenant moins critique
-                // car Wwise gère les transitions du Music Switch Container.
-                // Vous pouvez le passer à 'false' pour vous fier aux réglages Wwise par défaut,
-                // ou 'true' si vous avez une logique spécifique dans MusicManager qui l'utilise.
+              
                 MusicManager.Instance.SetMusicState(musicStateToSet, immediateTransition);
             }
         }

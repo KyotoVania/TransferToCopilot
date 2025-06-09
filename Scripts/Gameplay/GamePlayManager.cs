@@ -67,6 +67,9 @@ public class GameplayManager : MonoBehaviour
         LoadGlobalSpells();
         InitializeSequenceController();
         SubscribeToSequenceEvents();
+        Unit.OnUnitAttacked += HandleCombatDetection;
+        Building.OnBuildingAttackedByUnit += HandleCombatDetection;
+        
         // --- 4. Configuration de l'Environnement / Visuels ---
         // ConfigureEnvironment(); // À implémenter si LevelData_SO contient des infos de mood
         if (_scenarioManager != null && currentLevelData.scenario != null)
@@ -262,6 +265,42 @@ public class GameplayManager : MonoBehaviour
         }
     }
 
+    
+    private void HandleCombatDetection(Unit attacker, Unit target, int damage)
+    {
+        // On vérifie que ce n'est pas un combat "interne" (allié vs allié si c'était possible)
+        bool isCrossTeamCombat = (attacker is EnemyUnit && target is AllyUnit) || (attacker is AllyUnit && target is EnemyUnit);
+        if (isCrossTeamCombat)
+        {
+            TriggerCombatState();
+        }
+    }
+
+    // --- NOUVEAU HANDLER (Surcharge pour les bâtiments) ---
+    private void HandleCombatDetection(Building target, Unit attacker)
+    {
+        // On vérifie que c'est bien un ennemi qui attaque un bâtiment joueur
+        bool isCrossTeamCombat = (attacker is EnemyUnit && target is PlayerBuilding);
+        if (isCrossTeamCombat)
+        {
+            TriggerCombatState();
+        }
+    }
+
+    private void TriggerCombatState()
+    {
+        // On récupère le GameStateManager qui est dans la scène Core
+        var gameStateManager = FindObjectOfType<GameStateManager>();
+        if (gameStateManager == null) return;
+        
+        // On ne change l'état que si on est actuellement en "Exploration" on check avec le get rajouté pour acceder a l'état actuel
+        if (gameStateManager.CurrentState == GameStateManager.GameState.Exploration)
+        {
+            Debug.Log("[GameplayManager] Combat détecté ! Passage à l'état de jeu 'Combat'.");
+            gameStateManager.UpdateGameState(GameStateManager.GameState.Combat);
+        }
+    }
+    
     private void OnDestroy()
     {
         // Se désabonner proprement pour éviter les erreurs
@@ -270,5 +309,7 @@ public class GameplayManager : MonoBehaviour
             SequenceController.OnCharacterInvocationSequenceComplete -= HandleCharacterInvocation;
             SequenceController.OnGlobalSpellSequenceComplete -= HandleGlobalSpell;
         }
+        Unit.OnUnitAttacked -= HandleCombatDetection;
+        Building.OnBuildingAttackedByUnit -= HandleCombatDetection;
     }
 }

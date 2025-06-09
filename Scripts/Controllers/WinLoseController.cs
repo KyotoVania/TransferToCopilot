@@ -4,6 +4,8 @@ using Unity.Behavior.GraphFramework;
 
 public class WinLoseController : SingletonPersistent<WinLoseController>
 {
+  
+    /*
     [Header("Conditions de Victoire/Défaite")]
     [Tooltip("Référence directe ou sera trouvée par nom via le champ 'Name Target To Destroy For Win'.")]
     [SerializeField] private Building targetToDestroyForWin;
@@ -15,7 +17,7 @@ public class WinLoseController : SingletonPersistent<WinLoseController>
     [SerializeField] private string name_targetToDestroyForWin = "NomDuBatimentPourGagner";
     [Tooltip("Nom EXACT du GameObject du bâtiment à protéger (sa destruction = défaite).")]
     [SerializeField] private string name_targetToProtectForLose = "NomDuBatimentAPreteger";
-
+*/
     [Header("Débogage")]
     [SerializeField] private KeyCode winDebugKey = KeyCode.F10;
     [SerializeField] private KeyCode loseDebugKey = KeyCode.F11;
@@ -64,8 +66,11 @@ public class WinLoseController : SingletonPersistent<WinLoseController>
         // Cela garantit que la scène est chargée et que les GameObjects sont potentiellement trouvables.
         // Pour le tout premier lancement du jeu, GameManager va définir un état initial (ex: MainMenu)
         // qui déclenchera ResetGameConditionState -> SetInitialScreenState.
+        /*
         Building.OnBuildingDestroyed += HandleBuildingDestroyed;
         Debug.Log($"[{gameObject.name} WinLoseController.Start] Abonnement à Building.OnBuildingDestroyed.", this);
+        */
+    
     }
 
     private void FindAndValidateCameraControllerReference(bool isInitialAttempt = false) {
@@ -159,8 +164,8 @@ public class WinLoseController : SingletonPersistent<WinLoseController>
         FindAndUpdateUIGameObjectReference(ref currentNextLevelBoardObject, name_nextLevelBoardObject, "NextLvl Board");
         FindAndUpdateUIGameObjectReference(ref currentNextLevelBoardSleeveObject, name_nextLevelBoardSleeveObject, "NextLvl Sleeve");
 
-        FindAndUpdateBuildingReference(ref targetToDestroyForWin, name_targetToDestroyForWin, "Cible Victoire");
-        FindAndUpdateBuildingReference(ref targetToProtectForLose, name_targetToProtectForLose, "Cible Défaite");
+        //FindAndUpdateBuildingReference(ref targetToDestroyForWin, name_targetToDestroyForWin, "Cible Victoire");
+        //FindAndUpdateBuildingReference(ref targetToProtectForLose, name_targetToProtectForLose, "Cible Défaite");
 
         // Maintenant, (dés)activer en utilisant les références potentiellement mises à jour
         if (currentGameOverOverlayPanel != null) currentGameOverOverlayPanel.SetActive(false); else Debug.LogWarning($"[{gameObject.name}] Overlay Panel ('{name_gameOverOverlayPanel}') non trouvé/assigné pour SetActive(false).");
@@ -179,7 +184,7 @@ public class WinLoseController : SingletonPersistent<WinLoseController>
 
         _deactivatedAllyUnits.Clear();
         _deactivatedEnemyUnits.Clear();
-        Debug.Log($"[{gameObject.name} WinLoseController.SetInitialScreenState] Terminé. isGameOverInstance: {isGameOverInstance}, IsGameOverScreenActive: {IsGameOverScreenActive}. Cible Victoire: {targetToDestroyForWin?.name ?? "NULL"}, Cible Défaite: {targetToProtectForLose?.name ?? "NULL"}", this);
+        Debug.Log($"[{gameObject.name} WinLoseController.SetInitialScreenState] Terminé. isGameOverInstance: {isGameOverInstance}, IsGameOverScreenActive: {IsGameOverScreenActive}.", this);
     }
 
     private void Update()
@@ -188,7 +193,7 @@ public class WinLoseController : SingletonPersistent<WinLoseController>
         if (Input.GetKeyDown(winDebugKey)) TriggerWinCondition();
         if (Input.GetKeyDown(loseDebugKey)) TriggerLoseCondition();
     }
-
+/*
     private void HandleBuildingDestroyed(Building destroyedBuilding)
     {
         if (isGameOverInstance || destroyedBuilding == null) return;
@@ -198,7 +203,7 @@ public class WinLoseController : SingletonPersistent<WinLoseController>
 
         if (winMet) { Debug.Log($"[WinLoseController] WIN par destruction de {destroyedBuilding.name}", this); TriggerWinCondition(); }
         else if (loseMet) { Debug.Log($"[WinLoseController] LOSE par destruction de {destroyedBuilding.name}", this); TriggerLoseCondition(); }
-    }
+    }*/
 
     public void TriggerWinCondition()
     {
@@ -263,7 +268,8 @@ public class WinLoseController : SingletonPersistent<WinLoseController>
 
     private void OnDestroy()
     {
-        Building.OnBuildingDestroyed -= HandleBuildingDestroyed;
         IsGameOverScreenActive = false;
+        isGameOverInstance = false;
+        // Building.OnBuildingDestroyed -= HandleBuildingDestroyed; // Désabonnement si nécessaire
     }
 }

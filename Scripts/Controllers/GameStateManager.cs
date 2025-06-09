@@ -17,6 +17,12 @@ public class GameStateManager : MonoBehaviour
     }
 
     [SerializeField] private GameState currentState = GameState.Exploration;
+
+    public GameState CurrentState
+    {
+        get => currentState;
+        set => currentState = value;
+    }
     
     [SerializeField] private KeyCode explorationKey = KeyCode.Alpha1;
     [SerializeField] private KeyCode combatKey = KeyCode.Alpha2;

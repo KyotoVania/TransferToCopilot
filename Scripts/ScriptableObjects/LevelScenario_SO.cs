@@ -13,7 +13,9 @@ public enum TriggerType
     OnZoneEnter,
     OnBossDied, // Nous allons utiliser OnBossSpawned pour l'instant, mais gardons ceci pour le futur
     OnWaveCleared,
-    OnTimerElapsed
+    OnTimerElapsed,
+    OnAllTargetsWithTagDestroyed, 
+    OnSpecificTargetDestroyed     
 }
 
 /// <summary>
@@ -24,7 +26,9 @@ public enum ActionType
     StartWave,
     ActivateSpawnerBuilding,
     DeactivateSpawnerBuilding,
-    EndLevel
+    EndLevel,
+    TriggerVictory,
+    TriggerDefeat     
 }
 
 // --- Classe sérialisable pour un événement ---

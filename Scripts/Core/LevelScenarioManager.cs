@@ -1,89 +1,120 @@
-﻿using UnityEngine;
+﻿
+using UnityEngine;
 using Unity.Behavior.GraphFramework;
 using Unity.Behavior;
 using System;
 using System.Collections;
-using Unity.Properties;
 using System.Collections.Generic;
+
 public class LevelScenarioManager : MonoBehaviour
 {
     private LevelScenario_SO _currentScenario;
     private readonly Dictionary<ScenarioEvent, bool> _processedEvents = new Dictionary<ScenarioEvent, bool>();
     private float _levelStartTime;
 
+    // Structure de suivi simplifiée pour les objectifs "Détruire tout"
+    private class ObjectiveTracker
+    {
+        public int CurrentCount;
+    }
+    private readonly Dictionary<string, ObjectiveTracker> _destroyAllTrackers = new Dictionary<string, ObjectiveTracker>();
+
+    // Plus besoin de _protectTags, la logique est gérée par ProcessEvents
+
     public void Initialize(LevelScenario_SO scenario)
     {
-        if (scenario == null)
-        {
-            Debug.LogWarning("[LevelScenarioManager] Aucun scénario fourni. Le manager sera inactif.", this);
+        if (scenario == null) {
+            Debug.LogWarning("[LevelScenarioManager] Aucun scénario fourni.", this);
             enabled = false;
             return;
         }
         _currentScenario = scenario;
         _processedEvents.Clear();
+        _destroyAllTrackers.Clear();
+
         Debug.Log($"[LevelScenarioManager] Initialisé avec le scénario: '{_currentScenario.scenarioName}'.", this);
 
-        SubscribeToEvents();
+        ParseScenarioForObjectives();
+        SubscribeToGameEvents();
         _levelStartTime = Time.time;
         ProcessEvents(TriggerType.OnLevelStart);
     }
 
     private void OnDestroy()
     {
-        UnsubscribeFromEvents();
+        UnsubscribeFromGameEvents();
     }
     
     private void Update()
     {
-        if (_currentScenario == null) return;
-        ProcessTimerEvents();
+        if (_currentScenario != null) ProcessTimerEvents();
     }
 
-    private void SubscribeToEvents()
+    private void ParseScenarioForObjectives()
     {
-        // CORRIGÉ: S'abonne à OnBossSpawned, car OnBossDied n'existe pas.
-        EnemyRegistry.OnBossSpawned += HandleBossEvent; 
-        // CORRIGÉ: La signature du handler est maintenant correcte.
-        EnemyRegistry.OnEnemyDied += HandleEnemyDied;
-        // CORRIGÉ: S'abonne à l'événement de la nouvelle classe TriggerZone.
-        TriggerZone.OnZoneEntered += HandleZoneEntered;
-    }
-
-    private void UnsubscribeFromEvents()
-    {
-        if (EnemyRegistry.Instance != null)
+        foreach (var evt in _currentScenario.events)
         {
-            EnemyRegistry.OnBossSpawned -= HandleBossEvent;
-            EnemyRegistry.OnEnemyDied -= HandleEnemyDied;
+            // On ne configure que les trackers pour les objectifs "Détruire TOUT"
+            if (evt.triggerType == TriggerType.OnAllTargetsWithTagDestroyed)
+            {
+                string tag = evt.triggerParameter;
+                if (string.IsNullOrEmpty(tag)) continue;
+
+                if (!_destroyAllTrackers.ContainsKey(tag))
+                {
+                    int initialCount = GameObject.FindGameObjectsWithTag(tag).Length;
+                    _destroyAllTrackers[tag] = new ObjectiveTracker { CurrentCount = initialCount };
+                    Debug.Log($"[LevelScenarioManager] OBJECTIF SUIVI : Détruire toutes les cibles avec le tag '{tag}'. Nombre initial : {initialCount}.");
+                }
+            }
         }
+    }
+
+    private void SubscribeToGameEvents()
+    {
+        // On s'abonne à tous les événements potentiellement utiles
+        Building.OnBuildingDestroyed += HandleTargetDestroyed;
+        // Si vous voulez aussi traquer la mort d'unités:
+        // EnemyRegistry.OnEnemyDied += HandleEnemyDestroyed;
+        TriggerZone.OnZoneEntered += HandleZoneEntered;
+        // etc.
+    }
+
+    private void UnsubscribeFromGameEvents()
+    {
+        Building.OnBuildingDestroyed -= HandleTargetDestroyed;
         TriggerZone.OnZoneEntered -= HandleZoneEntered;
     }
 
     #region Handlers
     
-    // CORRIGÉ: Le handler accepte maintenant un EnemyUnit.
-    private void HandleBossEvent(EnemyUnit bossUnit)
+    private void HandleTargetDestroyed(Building destroyedBuilding)
     {
-        // Note : L'événement s'appelle OnBossSpawned. Si vous voulez un trigger à la mort,
-        // il faudra créer un événement OnBossDied dans EnemyRegistry.
-        // Pour l'instant, on se base sur ce qui existe.
-        Debug.Log("[LevelScenarioManager] Trigger détecté: OnBossDied (via OnBossSpawned).", this);
-        ProcessEvents(TriggerType.OnBossDied);
-    }
+        if (destroyedBuilding == null) return;
+        string destroyedTag = destroyedBuilding.tag;
 
-    // CORRIGÉ: Le handler accepte un EnemyUnit.
-    private void HandleEnemyDied(EnemyUnit deadUnit)
-    {
-        // TODO: Implémenter la logique pour vérifier si une vague est terminée.
-        // Cela nécessite que les unités sachent à quelle vague elles appartiennent.
+        // 1. Déclencher les événements "OnSpecificTargetDestroyed"
+        ProcessEvents(TriggerType.OnSpecificTargetDestroyed, destroyedTag);
+
+        // 2. Mettre à jour les objectifs "OnAllTargetsWithTagDestroyed"
+        if (_destroyAllTrackers.ContainsKey(destroyedTag))
+        {
+            var tracker = _destroyAllTrackers[destroyedTag];
+            tracker.CurrentCount--;
+            Debug.Log($"[LevelScenarioManager] Cible avec tag '{destroyedTag}' détruite. Restant: {tracker.CurrentCount}.");
+
+            if (tracker.CurrentCount <= 0)
+            {
+                ProcessEvents(TriggerType.OnAllTargetsWithTagDestroyed, destroyedTag);
+            }
+        }
     }
 
     private void HandleZoneEntered(string zoneID)
     {
-        Debug.Log($"[LevelScenarioManager] Trigger détecté: OnZoneEnter pour la zone ID: {zoneID}.", this);
         ProcessEvents(TriggerType.OnZoneEnter, zoneID);
     }
-    
+
     #endregion
 
     private void ProcessEvents(TriggerType trigger, string param = "")
@@ -94,7 +125,19 @@ public class LevelScenarioManager : MonoBehaviour
         {
             if (evt.triggerType == trigger && !_processedEvents.ContainsKey(evt))
             {
-                bool match = (evt.triggerType != TriggerType.OnZoneEnter) || (evt.triggerParameter == param);
+                bool match = false;
+                // Pour ces triggers, le paramètre DOIT correspondre.
+                if (trigger == TriggerType.OnZoneEnter || 
+                    trigger == TriggerType.OnSpecificTargetDestroyed || 
+                    trigger == TriggerType.OnAllTargetsWithTagDestroyed)
+                {
+                    match = (evt.triggerParameter == param);
+                }
+                else // Pour les triggers sans paramètre (OnLevelStart, OnTimerElapsed, etc.)
+                {
+                    match = true;
+                }
+
                 if (match)
                 {
                     _processedEvents.Add(evt, true);
@@ -106,6 +149,7 @@ public class LevelScenarioManager : MonoBehaviour
     
     private void ProcessTimerEvents()
     {
+        if (_currentScenario == null) return;
         float elapsedTime = Time.time - _levelStartTime;
         foreach (var evt in _currentScenario.events)
         {
@@ -134,13 +178,26 @@ public class LevelScenarioManager : MonoBehaviour
                 SetSpawnerBuildingActive(scenarioEvent.actionParameter_BuildingTag, isActive);
                 break;
             case ActionType.EndLevel:
-                GameManager.Instance.LoadHub();
+                if (GameManager.Instance != null) GameManager.Instance.LoadHub();
                 break;
             case ActionType.StartWave:
                 CommandWaveToSpawners(scenarioEvent.actionParameter_BuildingTag, scenarioEvent.actionParameter_Wave);
                 break;
+            case ActionType.TriggerVictory:
+                if (WinLoseController.Instance != null)
+                    WinLoseController.Instance.TriggerWinCondition();
+                else
+                    Debug.LogError("[LevelScenarioManager] WinLoseController.Instance non trouvé pour TriggerVictory !");
+                break;
+            case ActionType.TriggerDefeat:
+                if (WinLoseController.Instance != null)
+                    WinLoseController.Instance.TriggerLoseCondition();
+                else
+                    Debug.LogError("[LevelScenarioManager] WinLoseController.Instance non trouvé pour TriggerDefeat !");
+                break;
         }
     }
+
 
     private void SetSpawnerBuildingActive(string tag, bool isActive)
     {
