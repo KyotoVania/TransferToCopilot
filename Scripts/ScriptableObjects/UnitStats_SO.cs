@@ -40,4 +40,5 @@ public class UnitStats_SO : ScriptableObject
     [EnumToggleButtons] // Permet de choisir le type de manière plus visuelle
     public UnitType Type = UnitType.Regular; // Type de l'unité, peut être Regular, Elite ou Boss
     
+    
 }

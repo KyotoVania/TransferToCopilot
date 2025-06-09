@@ -60,7 +60,7 @@ public class CharacterData_SO : ScriptableObject
 
     [Title("Hub & UI")]
     [AssetsOnly]
-    public GameObject HubVisualPrefab; // Optionnel: si différent du prefab de gameplay
+    public GameObject HubVisualPrefab; 
 
     [Title("Audio (Wwise)")]
     [InfoBox("Assigner les Events Wwise spécifiques à ce personnage.")]
@@ -71,4 +71,10 @@ public class CharacterData_SO : ScriptableObject
     [Title("Statut Initial")]
     [InfoBox("Cocher si ce personnage est débloqué dès le début du jeu.")]
     public bool UnlockedByDefault = false;
+    
+    [Title("Cooldown d'Invocation")]
+    [BoxGroup("Cooldown")]
+    [MinValue(0)]
+    [Tooltip("Temps en beats avant de pouvoir invoquer à nouveau ce personnage.")]
+    public float InvocationCooldown = 5; 
 }

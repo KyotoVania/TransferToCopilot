@@ -12,20 +12,23 @@ public class GameplayManager : MonoBehaviour
     private TeamManager teamManager;
     private SequenceController sequenceController;
     private GoldController goldController;
-    private LevelScenarioManager _scenarioManager; 
+    private LevelScenarioManager scenarioManager; 
 
     [Header("Configuration")]
     [SerializeField] private string globalSpellsResourcePath = "Data/GlobalSpells"; // Chemin dans Resources pour les sorts globaux
-    [SerializeField] private Transform defaultPlayerUnitSpawnPoint; // Un point de spawn par défaut si aucun bâtiment allié n'est trouvé
+    [SerializeField] private Transform defaultPlayerUnitSpawnPoint; 
 
     private List<GlobalSpellData_SO> availableGlobalSpells = new List<GlobalSpellData_SO>();
+    
+    private Dictionary<string, float> _unitCooldowns = new Dictionary<string, float>();
+    private float _beatInterval;
 
     void Start()
     {
         teamManager = TeamManager.Instance;
         sequenceController = FindFirstObjectByType<SequenceController>(); // SequenceController n'est pas un Singleton persistent
         goldController = GoldController.Instance;
-        _scenarioManager = FindFirstObjectByType<LevelScenarioManager>(); 
+        scenarioManager = FindFirstObjectByType<LevelScenarioManager>(); 
 
         if (GameManager.Instance == null || GameManager.CurrentLevelToLoad == null)
         {
@@ -72,15 +75,18 @@ public class GameplayManager : MonoBehaviour
         
         // --- 4. Configuration de l'Environnement / Visuels ---
         // ConfigureEnvironment(); // À implémenter si LevelData_SO contient des infos de mood
-        if (_scenarioManager != null && currentLevelData.scenario != null)
+        if (scenarioManager != null && currentLevelData.scenario != null)
         {
-            _scenarioManager.Initialize(currentLevelData.scenario);
+            scenarioManager.Initialize(currentLevelData.scenario);
         }
-        else if (_scenarioManager != null)
+        else if (scenarioManager != null)
         {
             Debug.LogWarning($"[GameplayManager] Le niveau '{currentLevelData.DisplayName}' n'a pas de LevelScenario_SO assigné.");
         }
+        // calcul l'intervalle de battement basé sur le BPM qui est dans currentLevelData
+        
         // --- 5. Démarrage de la Logique du Niveau ---
+        
         // StartLevelLogic(); // Ex: Lancer la première vague d'ennemis, activer les inputs joueur
     }
 
@@ -88,8 +94,12 @@ public class GameplayManager : MonoBehaviour
     {
         if (RhythmManager.Instance != null && currentLevelData.RhythmBPM > 0)
         {
-            RhythmManager.Instance.SetBPM(currentLevelData.RhythmBPM); //
+            RhythmManager.Instance.SetBPM(currentLevelData.RhythmBPM);
             Debug.Log($"[GameplayManager] BPM du niveau réglé à : {currentLevelData.RhythmBPM}");
+
+            // Stocker l'intervalle de battement pour utilisation dans les cooldowns
+            _beatInterval = RhythmManager.Instance.GetBeatDuration();
+            Debug.Log($"[GameplayManager] Intervalle de battement calculé : {_beatInterval} secondes.");
         }
 
         if (MusicManager.Instance != null)
@@ -155,10 +165,31 @@ public class GameplayManager : MonoBehaviour
         Debug.Log("[GameplayManager] Abonné aux événements OnCharacterInvocationSequenceComplete et OnGlobalSpellSequenceComplete.");
     }
 
-    void HandleCharacterInvocation(CharacterData_SO characterData, int perfectCount)
+    /// <summary>
+    /// Gère la logique d'invocation d'un personnage lorsque la séquence a déjà été validée.
+    /// </summary>
+    /// <param name="characterData">Le ScriptableObject du personnage à invoquer.</param>
+    /// <param name="perfectCount">Le nombre d'inputs parfaits (pour une future utilisation).</param>
+    public void HandleCharacterInvocation(CharacterData_SO characterData, int perfectCount)
     {
-        Debug.Log($"[GameplayManager] Tentative d'invocation de personnage reçue : {characterData.DisplayName}, Inputs Parfaits: {perfectCount}");
+        // On utilise le format de log que vous avez spécifié.
+        // Note: J'utilise .Name car DisplayName n'est pas dans la définition de CharacterData_SO.
+        Debug.Log($"[GameplayManager] Tentative d'invocation reçue : {characterData.CharacterID}, Inputs Parfaits: {perfectCount}");
+    
+        if (characterData == null)
+        {
+            Debug.LogWarning("[GameplayManager] Tentative d'invocation avec un CharacterData_SO nul.");
+            return;
+        }
+        
+        // Vérifier si l'unité est en cooldown
+        if (_unitCooldowns.ContainsKey(characterData.CharacterID) && Time.time < _unitCooldowns[characterData.CharacterID])
+        {
+            Debug.Log($"{characterData.CharacterID} is on cooldown.");
+            return; // Stop l'invocation si l'unité est en cooldown
+        }
 
+        
         if (goldController.GetCurrentGold() >= characterData.GoldCost)
         {
             goldController.RemoveGold(characterData.GoldCost); // Utiliser RemoveGold pour la déduction
@@ -201,7 +232,13 @@ public class GameplayManager : MonoBehaviour
 
                         // Pour l'instant, on logue juste. L'unité devrait chercher ses stats dans son Start().
                         Debug.Log($"[GameplayManager] Unité {characterData.DisplayName} invoquée sur la tuile ({spawnTile.column},{spawnTile.row}).");
+                        float cooldownInSeconds = characterData.InvocationCooldown * _beatInterval;
+                        _unitCooldowns[characterData.CharacterID] = Time.time + cooldownInSeconds;
+                        //DEBUG log qui affiche le cooldown et tous les cooldowns
+                        Debug.Log($"[GameplayManager] Cooldown pour {characterData.DisplayName} défini à {cooldownInSeconds} secondes. Cooldowns actuels: {string.Join(", ", _unitCooldowns.Select(kvp => $"{kvp.Key}: {kvp.Value - Time.time:F2}s"))}");
+                        
                     }
+                  
                 }
                 else
                 {
