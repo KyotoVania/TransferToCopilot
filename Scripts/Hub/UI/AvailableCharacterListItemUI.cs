@@ -20,7 +20,7 @@ public class AvailableCharacterListItemUI : MonoBehaviour
     private CharacterData_SO _characterData;
     private Action<CharacterData_SO> _onSelectCallback;
 
-    public void Setup(CharacterData_SO data, Action<CharacterData_SO> onSelect)
+    public void Setup(CharacterData_SO data, Action<CharacterData_SO> onSelect, int level)
     {
         _characterData = data;
         _onSelectCallback = onSelect;
@@ -44,8 +44,7 @@ public class AvailableCharacterListItemUI : MonoBehaviour
 
         if (characterLevelText != null)
         {
-            // Vous n'avez pas de niveau sur CharacterData_SO, on met un placeholder
-            characterLevelText.text = "Lv. ??";
+            characterLevelText.text = $"Lv. {level}";
         }
 
         // Configurer le bouton

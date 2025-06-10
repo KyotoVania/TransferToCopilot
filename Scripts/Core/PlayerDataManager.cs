@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq; 
 using ScriptableObjects;
+using Newtonsoft.Json;
 
 [System.Serializable]
 public class CharacterProgress
@@ -83,7 +84,7 @@ public class PlayerDataManager : SingletonPersistent<PlayerDataManager>
     {
         try
         {
-            string json = JsonUtility.ToJson(Data, true); // 'true' pour pretty print (lisible)
+            string json = JsonConvert.SerializeObject(Data, Formatting.Indented);
             File.WriteAllText(_saveFilePath, json);
             Debug.Log($"[PlayerDataManager] Données sauvegardées dans {_saveFilePath}");
         }
@@ -100,7 +101,7 @@ public class PlayerDataManager : SingletonPersistent<PlayerDataManager>
             try
             {
                 string json = File.ReadAllText(_saveFilePath);
-                Data = JsonUtility.FromJson<PlayerSaveData>(json);
+                Data = JsonConvert.DeserializeObject<PlayerSaveData>(json);
 
                 // Sécurité : S'assurer que les listes ne sont pas null après désérialisation
                 if (Data.UnlockedCharacterIDs == null) Data.UnlockedCharacterIDs = new List<string>();
@@ -113,7 +114,7 @@ public class PlayerDataManager : SingletonPersistent<PlayerDataManager>
             {
                 Debug.LogError($"[PlayerDataManager] Échec du chargement du fichier de sauvegarde : {e.Message}. Création de nouvelles données par défaut.");
                 CreateDefaultData();
-                SaveData(); // Sauvegarder les nouvelles données par défaut
+                SaveData();
             }
         }
         else
@@ -365,7 +366,7 @@ public class PlayerDataManager : SingletonPersistent<PlayerDataManager>
 
          // 3. Boucle de montée de niveau
          int xpForNextLevel = charData.ProgressionData.GetXPRequiredForLevel(progress.CurrentLevel + 1);
-        
+         Debug.Log($"[PlayerDataManager] Ajout de {xpAmount} XP à {characterID}. XP actuel: {progress.CurrentXP}, Niveau actuel: {progress.CurrentLevel}, XP pour le niveau suivant: {xpForNextLevel}");
          while (progress.CurrentXP >= xpForNextLevel && xpForNextLevel > 0)
          {
              progress.CurrentLevel++;
@@ -374,11 +375,11 @@ public class PlayerDataManager : SingletonPersistent<PlayerDataManager>
              // Pour l'instant, on garde le total.
             
              Debug.Log($"Personnage {characterID} est monté au niveau {progress.CurrentLevel}!");
-
              // Mettre à jour le montant requis pour le niveau suivant
              xpForNextLevel = charData.ProgressionData.GetXPRequiredForLevel(progress.CurrentLevel + 1);
              if (xpForNextLevel == charData.ProgressionData.GetXPRequiredForLevel(progress.CurrentLevel))
              {
+                 Debug.Log($"[PlayerDataManager] Niveau maximum atteint pour {characterID} : {progress.CurrentLevel}");
                  // On a atteint le niveau max défini dans la courbe, on sort.
                  break;
              }

@@ -31,7 +31,7 @@ public class TeamSlotUI : MonoBehaviour
     /// <summary>
     /// Configure le slot pour afficher soit un personnage, soit un bouton d'ajout.
     /// </summary>
-    public void Setup(CharacterData_SO characterData, int slotIndex, Action<CharacterData_SO> onRemove, Action<int> onAdd, Action<CharacterData_SO> onShowEquipment)
+    public void Setup(CharacterData_SO characterData, int slotIndex, Action<CharacterData_SO> onRemove, Action<int> onAdd, Action<CharacterData_SO> onShowEquipment, int level)
     {
         _characterData = characterData;
         _slotIndex = slotIndex;
@@ -59,7 +59,7 @@ public class TeamSlotUI : MonoBehaviour
                 // Exemple, vous pouvez adapter ceci avec les vraies données de CharacterData_SO si vous les ajoutez
                 if (_characterData.BaseStats != null)
                 {
-                    characterDescText.text = $"Lvl ?? / {_characterData.BaseStats.Type}";
+                    characterDescText.text = $"Lvl {level} / {_characterData.BaseStats.Type}";
                 }
                 else
                 {

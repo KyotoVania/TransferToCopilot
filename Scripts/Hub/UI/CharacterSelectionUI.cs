@@ -82,10 +82,20 @@ public class CharacterSelectionUI : MonoBehaviour
             var itemUI = itemGO.GetComponent<AvailableCharacterListItemUI>();
             if (itemUI != null)
             {
-                itemUI.Setup(character, SelectCharacter);
-                _instantiatedListItems.Add(itemUI); // AJOUTER l'item à notre liste
+                int characterLevel = 1;
+                if (TeamManager.Instance != null &&
+                    PlayerDataManager.Instance.Data.CharacterProgressData.ContainsKey(character.CharacterID))
+                {
+                    characterLevel = PlayerDataManager.Instance.Data.CharacterProgressData[character.CharacterID]
+                        .CurrentLevel;
+                }
+
+                // Passe le niveau à l'item UI
+                itemUI.Setup(character, SelectCharacter, characterLevel);
+
+                _instantiatedListItems.Add(itemUI);
             }
-        }
+        }   
     }
 
     // Appelée par un item de la liste quand il est cliqué

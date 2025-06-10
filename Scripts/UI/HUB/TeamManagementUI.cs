@@ -108,9 +108,16 @@ public class TeamManagementUI : MonoBehaviour
             if (slotUI != null)
             {
                 CharacterData_SO characterInSlot = (i < activeTeam.Count) ? activeTeam[i] : null;
-                // Le callback "onAdd" ouvrira le panel de sélection plus tard
-                slotUI.Setup(characterInSlot, i, OnRemoveCharacter, OnAddCharacterSlotClicked, OnShowEquipmentPanel);
-                _instantiatedTeamSlots.Add(slotUI);
+            
+				int characterLevel = 1; // Niveau par défaut si aucune progression n'est trouvée
+            	if (characterInSlot != null && _playerDataManager.Data.CharacterProgressData.ContainsKey(characterInSlot.CharacterID))
+            	{
+                	characterLevel = _playerDataManager.Data.CharacterProgressData[characterInSlot.CharacterID].CurrentLevel;
+            	}
+            	// Passe le niveau au slot UI
+            	slotUI.Setup(characterInSlot, i, OnRemoveCharacter, OnAddCharacterSlotClicked, OnShowEquipmentPanel, characterLevel);
+
+            	_instantiatedTeamSlots.Add(slotUI);
             }
             else
             {

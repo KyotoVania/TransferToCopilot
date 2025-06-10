@@ -18,8 +18,8 @@
         [SerializeField] private TextMeshProUGUI characterNameText;
         [SerializeField] private TextMeshProUGUI characterLevelText;
         [SerializeField] private Slider xpSlider;
-        [SerializeField] private TextMeshProUGUI statsText; // Un seul champ texte pour afficher toutes les stats
-
+        [SerializeField] private TextMeshProUGUI xpSliderText;
+        [SerializeField] private TextMeshProUGUI statsText; 
         [Header("Equipment & Inventory")]
         [Tooltip("Le parent des slots d'équipement du personnage (ex: casque, arme...).")]
         [SerializeField] private Transform equipmentSlotsContainer;
@@ -72,8 +72,34 @@
             if (progress == null) progress = new CharacterProgress();
 
             characterLevelText.text = $" {progress.CurrentLevel}";
-            int xpForNextLevel = progress.CurrentLevel * 100;
-            xpSlider.value = (float)progress.CurrentXP / Mathf.Max(1, xpForNextLevel);
+
+            if (_currentCharacter.ProgressionData != null)
+            {
+                // Utilise la courbe de progression pour obtenir l'XP requise pour le NIVEAU SUIVANT
+                int xpForNextLevel = _currentCharacter.ProgressionData.GetXPRequiredForLevel(progress.CurrentLevel + 1);
+                int xpForCurrentLevel = _currentCharacter.ProgressionData.GetXPRequiredForLevel(progress.CurrentLevel);
+
+                // Gérer le cas du niveau maximum où l'XP requise pourrait ne pas augmenter
+                if (xpForNextLevel <= xpForCurrentLevel) 
+                {
+                    xpSlider.value = 1f;
+                    if(xpSliderText != null) xpSliderText.text = "MAX";
+                }
+                else
+                {
+                    // Calculer l'XP gagnée depuis le début du niveau actuel
+                    int xpSinceLastLevel = progress.CurrentXP - xpForCurrentLevel;
+                    int xpNeededForThisLevel = xpForNextLevel - xpForCurrentLevel;
+
+                    xpSlider.value = (float)xpSinceLastLevel / Mathf.Max(1, xpNeededForThisLevel);
+                    if(xpSliderText != null) xpSliderText.text = $"{xpSinceLastLevel} / {xpNeededForThisLevel} XP";
+                }
+            }
+            else // Fallback si pas de données de progression
+            {
+                xpSlider.value = 0;
+                if(xpSliderText != null) xpSliderText.text = "N/A";
+            }
         }
 
         private void PopulateEquippedSlots()
