@@ -84,12 +84,14 @@ public class HubManager : MonoBehaviour
         if (hubPointsOfInterest.Count == 0) return;
 
         bool navigated = false;
+        int previousIndex = currentInterestPointIndex;
+
         if (Input.GetKeyDown(KeyCode.RightArrow) || Input.GetKeyDown(KeyCode.D))
         {
             currentInterestPointIndex++;
             if (currentInterestPointIndex >= hubPointsOfInterest.Count)
             {
-                currentInterestPointIndex = -1;
+                currentInterestPointIndex = -1; // Retour à la vue générale
             }
             navigated = true;
         }
@@ -105,48 +107,51 @@ public class HubManager : MonoBehaviour
 
         if (navigated)
         {
-            ActivateCurrentInterestPoint();
+            // On a changé de point d'intérêt.
+            // On lance UNIQUEMENT la transition de caméra et on cache les panels.
+            TransitionToCurrentInterestPoint();
         }
 
+        // NOUVELLE LOGIQUE : Confirmation pour afficher le panel
         if (currentInterestPointIndex != -1 && (Input.GetKeyDown(KeyCode.Return) || Input.GetKeyDown(KeyCode.Space)))
         {
-            Debug.Log($"[HubManager] Interaction avec {hubPointsOfInterest[currentInterestPointIndex].Name} confirmée par clavier.");
-            // Ici, vous pourriez déclencher une action "d'entrée" spécifique si nécessaire,
-            // par exemple, si le panel a un bouton par défaut.
-            // Pour l'instant, l'activation du panel se fait déjà par ActivateCurrentInterestPoint.
+            // Vérifie qu'on n'est pas déjà sur un panel affiché par erreur
+            // et que le point d'intérêt est valide.
+            if (currentInterestPointIndex >= 0 && currentInterestPointIndex < hubPointsOfInterest.Count)
+            {
+                Debug.Log($"[HubManager] Interaction avec {hubPointsOfInterest[currentInterestPointIndex].Name} confirmée.");
+                // Affiche le panel correspondant au point d'intérêt actuel.
+                hubPointsOfInterest[currentInterestPointIndex].ShowPanelAction?.Invoke();
+            }
         }
     }
-
-    private void ActivateCurrentInterestPoint()
+    private void TransitionToCurrentInterestPoint()
     {
+        HideAllSectionPanels(); // Cacher tous les panels de section
+
         if (currentInterestPointIndex == -1) // Vue générale
         {
-            HideAllSectionPanels(); // S'assure que seul le panel principal (si existant) est actif
             _hubCameraManager?.TransitionToGeneralHubView();
-            Debug.Log("[HubManager] Navigation clavier : Vue Générale activée.");
+            Debug.Log("[HubManager] Navigation clavier : Transition vers la Vue Générale.");
         }
         else if (currentInterestPointIndex >= 0 && currentInterestPointIndex < hubPointsOfInterest.Count)
         {
             HubInterestPoint point = hubPointsOfInterest[currentInterestPointIndex];
-            HideAllSectionPanels(); // Cacher les autres avant d'afficher le nouveau
-            point.ShowPanelAction?.Invoke(); // Invoque l'UnityEvent pour afficher le panel UI
-            point.TransitionCameraAction?.Invoke(); // Invoque l'UnityEvent pour la transition caméra
-            Debug.Log($"[HubManager] Navigation clavier : Point d'intérêt '{point.Name}' activé.");
+            point.TransitionCameraAction?.Invoke();
+            Debug.Log($"[HubManager] Navigation clavier : Transition vers le point d'intérêt '{point.Name}'.");
         }
     }
+    
 
     private void HideAllSectionPanels()
     {
         panelLevelSelection?.SetActive(false);
         panelTeamManagement?.SetActive(false);
-        // panelMainHub?.SetActive(true); // Activer le panel principal seulement si on retourne à la vue générale.
-                                        // Ou le gérer comme un autre point d'intérêt.
-                                        // Pour l'instant, si index = -1, on ne fait qu'appeler la transition caméra.
-                                        // Assurez-vous que votre "vue générale" ne nécessite pas un panel spécifique
-                                        // ou que vous l'activez/désactivez correctement.
+        
         if (panelMainHub != null)
         {
-            panelMainHub.SetActive(currentInterestPointIndex == -1 && panelMainHub != panelLevelSelection && panelMainHub != panelTeamManagement);
+            // Affiche le panel principal seulement si on est en vue générale
+            panelMainHub.SetActive(currentInterestPointIndex == -1);
         }
     }
     
