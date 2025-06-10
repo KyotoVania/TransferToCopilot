@@ -19,6 +19,10 @@ public class LevelData_SO : ScriptableObject
 
     [BoxGroup("Identification")]
     public string DisplayName = "Niveau par défaut";
+	
+	[BoxGroup("Identification")]
+    [Tooltip("Index pour trier les niveaux. Le plus petit s'affiche en premier.")]
+    public int OrderIndex = 0;
 
     [BoxGroup("Scene")]
     [Required("Le nom de la scène à charger est requis.")]

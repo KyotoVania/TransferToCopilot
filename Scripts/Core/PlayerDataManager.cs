@@ -13,7 +13,7 @@ public class PlayerSaveData
     public int Currency = 0;
     public int Experience = 0;
     public List<string> UnlockedCharacterIDs = new List<string>();
-    public List<string> CompletedLevelIDs = new List<string>(); // Peut-être utile plus tard
+    public Dictionary<string, int> CompletedLevels = new Dictionary<string, int>();
     public List<string> ActiveTeamCharacterIDs = new List<string>();
 }
 
@@ -90,7 +90,7 @@ public class PlayerDataManager : SingletonPersistent<PlayerDataManager>
 
                 // Sécurité : S'assurer que les listes ne sont pas null après désérialisation
                 if (Data.UnlockedCharacterIDs == null) Data.UnlockedCharacterIDs = new List<string>();
-                if (Data.CompletedLevelIDs == null) Data.CompletedLevelIDs = new List<string>();
+                if (Data.CompletedLevels == null) Data.CompletedLevels = new Dictionary<string, int>();
                 if (Data.ActiveTeamCharacterIDs == null) Data.ActiveTeamCharacterIDs = new List<string>();
 
                 Debug.Log($"[PlayerDataManager] Données chargées depuis {_saveFilePath}. Monnaie: {Data.Currency}, XP: {Data.Experience}, Persos: {Data.UnlockedCharacterIDs.Count}, Équipe: {Data.ActiveTeamCharacterIDs.Count}");
@@ -118,7 +118,7 @@ public class PlayerDataManager : SingletonPersistent<PlayerDataManager>
         Data.Experience = 0;
         Data.UnlockedCharacterIDs = new List<string>();
         Data.ActiveTeamCharacterIDs = new List<string>();
-        Data.CompletedLevelIDs = new List<string>();
+        Data.CompletedLevels = new Dictionary<string, int>();
 
         // Débloquer les personnages par défaut
         // Important: Ceci nécessite que les assets CharacterData_SO soient accessibles,
@@ -164,7 +164,27 @@ public class PlayerDataManager : SingletonPersistent<PlayerDataManager>
 
         Debug.Log("[PlayerDataManager] Nouvelles données par défaut créées.");
     }
+    public void CompleteLevel(string levelID, int stars)
+    {
+        if (string.IsNullOrEmpty(levelID)) return;
+        stars = Mathf.Clamp(stars, 0, 3); // Ensure stars are between 0 and 3.
 
+        // Update if exists with a better score, or add if new.
+        if (Data.CompletedLevels.ContainsKey(levelID))
+        {
+            if (stars > Data.CompletedLevels[levelID])
+            {
+                Data.CompletedLevels[levelID] = stars;
+                Debug.Log($"[PlayerDataManager] Score du niveau '{levelID}' mis à jour à {stars} étoile(s).");
+            }
+        }
+        else
+        {
+            Data.CompletedLevels.Add(levelID, stars);
+            Debug.Log($"[PlayerDataManager] Niveau '{levelID}' complété avec {stars} étoile(s).");
+        }
+        SaveData();
+    }
     // --- Gestion de la Monnaie ---
 
     public void AddCurrency(int amount)
@@ -295,5 +315,18 @@ public class PlayerDataManager : SingletonPersistent<PlayerDataManager>
          {
              Debug.LogWarning("[PlayerDataManager] Aucun fichier de sauvegarde à supprimer.");
          }
+     }
+     
+     [ContextMenu("Simulate First 2 Levels Complete")]
+     private void SimulateLevelCompletion()
+     {
+         // This requires you to know the IDs of your first few levels.
+         // Replace "Level_01" and "Level_02" with actual LevelIDs from your SOs.
+         LevelData_SO[] allLevels = Resources.LoadAll<LevelData_SO>("Data/Levels").OrderBy(l => l.DisplayName).ToArray();
+         if (allLevels.Length > 0) CompleteLevel(allLevels[0].LevelID, 3); // 3 stars on first level
+         if (allLevels.Length > 1) CompleteLevel(allLevels[1].LevelID, 1); // 1 star on second level
+        
+         Debug.Log("[PlayerDataManager] Données de test de complétion de niveau appliquées.");
+         OnPlayerDataLoaded?.Invoke(); // Notify systems to refresh with new data
      }
 }

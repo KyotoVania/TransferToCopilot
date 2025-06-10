@@ -1,125 +1,69 @@
 using UnityEngine;
-using UnityEngine.UI; // Pour les éléments UI comme Button, VerticalLayoutGroup
-using TMPro;          // Pour TextMeshProUGUI
+using UnityEngine.UI;
+using TMPro;
 using System.Collections.Generic;
-using System.Linq;    // Pourra être utile pour trier ou filtrer les niveaux
+using System.Linq;
 
 public class LevelSelectionUI : MonoBehaviour
 {
     [Header("Configuration des Données")]
-    [Tooltip("Chemin dans le dossier Resources pour charger les LevelData_SO. Exemple: Data/Levels")]
-    [SerializeField] private string levelDataPath = "Data/Levels"; // Chemin configurable
+    [SerializeField] private string levelDataPath = "Data/Levels";
 
+    [Header("Prefabs des États de Niveau")]
+    [SerializeField] private GameObject stageLockPrefab;
+    [Tooltip("Prefab pour un niveau débloqué mais non complété (StageNeutral).")]
+    [SerializeField] private GameObject stageNeutralPrefab;
+    [SerializeField] private GameObject stageCompletePrefab;
+    
     [Header("Références UI")]
-    [Tooltip("Prefab pour un élément de la liste des niveaux.")]
-    [SerializeField] private GameObject levelSelectItemPrefab;
-    [Tooltip("Conteneur où les items de niveau seront instanciés (doit avoir un LayoutGroup).")]
     [SerializeField] private Transform levelItemsContainer;
-    [Tooltip("Bouton pour retourner à la vue générale du Hub.")]
     [SerializeField] private Button backButton;
-
-    [Header("Affichage Détails Niveau (Optionnel)")]
-    [Tooltip("Panel pour afficher les détails du niveau sélectionné.")]
-    [SerializeField] private GameObject levelDetailsPanel; // GameObject parent du panel de détails
-    [SerializeField] private TextMeshProUGUI detailLevelNameText;
-    [SerializeField] private Image detailLevelIconImage; // Ajout pour une icône potentielle
-    [SerializeField] private TextMeshProUGUI detailLevelDescriptionText;
-    [SerializeField] private TextMeshProUGUI detailRewardsText; // Pourrait afficher XP, monnaie, etc.
-    [SerializeField] private Button launchLevelButton; // Bouton pour lancer le niveau depuis les détails
-
+    [SerializeField] private Button launchLevelButton; // Now used for the selected level.
+    
+    // --- Logic for selection and launching ---
+    private LevelData_SO _selectedLevel;
+    private List<LevelSelectItemUI> _instantiatedItems = new List<LevelSelectItemUI>();
     private List<LevelData_SO> _loadedLevels = new List<LevelData_SO>();
-    private LevelData_SO _selectedLevel = null; // Niveau actuellement sélectionné
 
     private HubManager _hubManager;
 
-    #region Cycle de Vie Unity
-
-    private void Awake()
+    void Awake()
     {
-        // Correction de l'avertissement CS0618
         _hubManager = FindFirstObjectByType<HubManager>();
-        if (_hubManager == null)
-        {
-            Debug.LogError("[LevelSelectionUI] HubManager non trouvé dans la scène !");
-            enabled = false;
-            return;
-        }
+        if (_hubManager == null) Debug.LogError("[LevelSelectionUI] HubManager non trouvé!");
+        
+        if (stageLockPrefab == null || stageNeutralPrefab == null || stageCompletePrefab == null)
+             Debug.LogError("[LevelSelectionUI] Un ou plusieurs prefabs d'état de niveau ne sont pas assignés !");
 
-        if (levelSelectItemPrefab == null)
-        {
-            Debug.LogError("[LevelSelectionUI] Le prefab 'levelSelectItemPrefab' n'est pas assigné !");
-            enabled = false;
-            return;
-        }
-
-        if (levelItemsContainer == null)
-        {
-            Debug.LogError("[LevelSelectionUI] Le conteneur 'levelItemsContainer' n'est pas assigné !");
-            enabled = false;
-            return;
-        }
-
-        if (backButton != null)
-        {
-            backButton.onClick.AddListener(OnBackButtonClicked);
-        }
-        else
-        {
-            Debug.LogWarning("[LevelSelectionUI] Le bouton 'backButton' n'est pas assigné.");
-        }
-
-        if (launchLevelButton != null)
-        {
-            launchLevelButton.onClick.AddListener(OnLaunchLevelButtonClicked);
-        }
-
-        if (levelDetailsPanel != null)
-        {
-            levelDetailsPanel.SetActive(false);
-        }
+        backButton?.onClick.AddListener(OnBackButtonClicked);
+        launchLevelButton?.onClick.AddListener(OnLaunchLevelButtonClicked);
     }
 
     private void OnEnable()
     {
-        Debug.Log("[LevelSelectionUI] Panel activé. Chargement et affichage des niveaux...");
         LoadAndDisplayLevels();
+        // Initially, no level is selected.
     }
 
     private void OnDisable()
     {
-        Debug.Log("[LevelSelectionUI] Panel désactivé. Nettoyage des items de niveau...");
         ClearLevelItems();
     }
-
-    #endregion
-
-    #region Logique Principale
 
     private void LoadAndDisplayLevels()
     {
         LoadLevelData();
-        PopulateLevelList();
-        SelectLevel(null);
+        PopulateLevelGrid();
     }
 
     private void LoadLevelData()
     {
         _loadedLevels.Clear();
-        LevelData_SO[] allLevelsInResources = Resources.LoadAll<LevelData_SO>(levelDataPath);
-
-        if (allLevelsInResources.Length == 0)
-        {
-            Debug.LogWarning($"[LevelSelectionUI] Aucun LevelData_SO trouvé dans Resources/{levelDataPath}");
-        }
-        else
-        {
-            // Filtrer pour ne garder que les GameplayLevel
-            _loadedLevels = allLevelsInResources
-                                .Where(level => level.TypeOfLevel == LevelType.GameplayLevel)
-                                .OrderBy(level => level.DisplayName) // Exemple de tri par nom
-                                .ToList();
-            Debug.Log($"[LevelSelectionUI] {allLevelsInResources.Length} niveaux trouvés, {_loadedLevels.Count} sont des GameplayLevels et ont été chargés depuis Resources/{levelDataPath}");
-        }
+        LevelData_SO[] allLevels = Resources.LoadAll<LevelData_SO>(levelDataPath);
+        _loadedLevels = allLevels
+                        .Where(level => level.TypeOfLevel == LevelType.GameplayLevel)
+                        .OrderBy(level => level.OrderIndex)
+                        .ToList();
     }
 
     private void ClearLevelItems()
@@ -128,149 +72,103 @@ public class LevelSelectionUI : MonoBehaviour
         {
             Destroy(child.gameObject);
         }
+        _instantiatedItems.Clear();
     }
 
-    private void PopulateLevelList()
+    // REWRITTEN LOGIC
+    private void PopulateLevelGrid()
     {
         ClearLevelItems();
-
-        if (PlayerDataManager.Instance == null)
+        var playerData = PlayerDataManager.Instance?.Data;
+        if (playerData == null)
         {
-            Debug.LogError("[LevelSelectionUI] PlayerDataManager.Instance est null. Impossible de vérifier les conditions de déblocage.");
+            Debug.LogError("[LevelSelectionUI] PlayerDataManager non disponible.");
             return;
         }
 
-        if (_loadedLevels.Count == 0)
+        foreach (var levelData in _loadedLevels)
         {
-            Debug.Log("[LevelSelectionUI] Aucun niveau de type GameplayLevel à afficher.");
-            // Optionnel : Afficher un message à l'utilisateur si aucun niveau n'est disponible.
-            return;
-        }
-
-        foreach (LevelData_SO levelData in _loadedLevels)
-        {
-            GameObject itemGO = Instantiate(levelSelectItemPrefab, levelItemsContainer);
-            LevelSelectItemUI itemUI = itemGO.GetComponent<LevelSelectItemUI>();
-
-            if (itemUI != null)
+            bool isUnlocked = CheckLevelUnlockConditions(levelData, playerData);
+            
+            if (!isUnlocked)
             {
-                bool isUnlocked = CheckLevelUnlockConditions(levelData, PlayerDataManager.Instance.Data);
-                itemUI.Setup(levelData, isUnlocked, this.SelectLevel);
+                Instantiate(stageLockPrefab, levelItemsContainer);
+                continue;
+            }
+
+            playerData.CompletedLevels.TryGetValue(levelData.LevelID, out int stars);
+            bool isCompleted = stars > 0;
+
+            GameObject itemGO;
+            if (isCompleted)
+            {
+                // Instantiate a 'Complete' button.
+                itemGO = Instantiate(stageCompletePrefab, levelItemsContainer);
+                itemGO.GetComponent<LevelSelectItemUI>()?.Setup(levelData, stars, OnLevelSelected);
             }
             else
             {
-                // Fallback si LevelSelectItemUI n'est pas sur le prefab
-                TextMeshProUGUI nameText = itemGO.transform.Find("LevelNameText")?.GetComponent<TextMeshProUGUI>();
-                Button itemButton = itemGO.GetComponent<Button>();
+                // Instantiate a 'Neutral' (available but not complete) button.
+                itemGO = Instantiate(stageNeutralPrefab, levelItemsContainer);
+                itemGO.GetComponent<LevelSelectItemUI>()?.Setup(levelData, 0, OnLevelSelected);
+            }
 
-                if (nameText != null) nameText.text = levelData.DisplayName;
-
-                bool isUnlocked = CheckLevelUnlockConditions(levelData, PlayerDataManager.Instance.Data);
-
-                if (itemButton != null)
-                {
-                    itemButton.interactable = isUnlocked;
-                    itemButton.onClick.RemoveAllListeners();
-                    itemButton.onClick.AddListener(() => SelectLevel(levelData));
-
-                    var colors = itemButton.colors;
-                    colors.disabledColor = new Color(0.5f, 0.5f, 0.5f, 0.5f);
-                    itemButton.colors = colors;
-                }
-                Debug.Log($"[LevelSelectionUI] Niveau '{levelData.DisplayName}' (GameplayLevel) instancié. Débloqué: {isUnlocked}");
+            if (itemGO.GetComponent<LevelSelectItemUI>() != null)
+            {
+                _instantiatedItems.Add(itemGO.GetComponent<LevelSelectItemUI>());
             }
         }
     }
 
     private bool CheckLevelUnlockConditions(LevelData_SO levelToCheck, PlayerSaveData playerData)
     {
-        if (levelToCheck == null || playerData == null) return false;
-
-        // 1. Vérifier le niveau de joueur requis (XP)
-        if (playerData.Experience < levelToCheck.RequiredPlayerLevel)
-        {
-            Debug.Log($"[LevelSelectionUI] Niveau '{levelToCheck.DisplayName}' bloqué: XP requise {levelToCheck.RequiredPlayerLevel}, XP joueur {playerData.Experience}.");
-            return false;
-        }
-
-        // 2. Vérifier si le niveau précédent requis est complété
         if (levelToCheck.RequiredPreviousLevel != null)
         {
-            if (!playerData.CompletedLevelIDs.Contains(levelToCheck.RequiredPreviousLevel.LevelID))
+            if (!playerData.CompletedLevels.ContainsKey(levelToCheck.RequiredPreviousLevel.LevelID))
             {
-                Debug.Log($"[LevelSelectionUI] Niveau '{levelToCheck.DisplayName}' bloqué: Niveau requis '{levelToCheck.RequiredPreviousLevel.DisplayName}' non complété.");
                 return false;
             }
         }
         return true;
     }
-
-    public void SelectLevel(LevelData_SO levelData)
+    
+    private void OnLevelSelected(LevelData_SO selectedLevel)
     {
-        _selectedLevel = levelData;
+        _selectedLevel = selectedLevel;
 
+        // Update the visual selection state for all items.
+        foreach(var item in _instantiatedItems)
+        {
+            item.SetSelected(item.GetLevelData() == _selectedLevel);
+        }
+
+        // Enable/disable the launch button based on selection.
+        if (launchLevelButton != null)
+        {
+            launchLevelButton.interactable = (_selectedLevel != null);
+        }
+        
+        Debug.Log($"[LevelSelectionUI] Level '{_selectedLevel?.DisplayName ?? "None"}' selected.");
+        _hubManager?.StartLevel(_selectedLevel);
+    }
+
+    // MODIFIED: This is now triggered by the dedicated launch button.
+    private void OnLaunchLevelButtonClicked()
+    {
         if (_selectedLevel != null)
         {
-            Debug.Log($"[LevelSelectionUI] Niveau sélectionné : {_selectedLevel.DisplayName}");
-            if (levelDetailsPanel != null) levelDetailsPanel.SetActive(true);
-
-            if (detailLevelNameText != null) detailLevelNameText.text = _selectedLevel.DisplayName;
-            // if (detailLevelIconImage != null) // Si tu ajoutes une icône au LevelData_SO et un champ Image ici
-            // {
-            //     detailLevelIconImage.sprite = _selectedLevel.LevelIcon; // Supposant que LevelIcon existe dans LevelData_SO
-            //     detailLevelIconImage.enabled = (_selectedLevel.LevelIcon != null);
-            // }
-            if (detailLevelDescriptionText != null) detailLevelDescriptionText.text = _selectedLevel.Description;
-            if (detailRewardsText != null)
-            {
-                string rewards = $"XP: {_selectedLevel.ExperienceReward}\nMonnaie: {_selectedLevel.CurrencyReward}";
-                if (_selectedLevel.CharacterUnlockReward != null)
-                {
-                    rewards += $"\nDébloque: {_selectedLevel.CharacterUnlockReward.DisplayName}";
-                }
-                detailRewardsText.text = rewards;
-            }
-
-            if (launchLevelButton != null && PlayerDataManager.Instance != null)
-            {
-                launchLevelButton.interactable = CheckLevelUnlockConditions(_selectedLevel, PlayerDataManager.Instance.Data);
-            }
+            Debug.Log($"[LevelSelectionUI] Launch button clicked for '{_selectedLevel.DisplayName}'. Launching game.");
+            _hubManager?.StartLevel(_selectedLevel);
         }
         else
         {
-            Debug.Log("[LevelSelectionUI] Aucun niveau sélectionné (ou sélection désélectionnée).");
-            if (levelDetailsPanel != null) levelDetailsPanel.SetActive(false);
+            Debug.LogWarning("[LevelSelectionUI] Launch button clicked, but no level is selected.");
         }
     }
-
-    #endregion
-
-    #region Gestion des Clics UI
 
     private void OnBackButtonClicked()
     {
-        Debug.Log("[LevelSelectionUI] Bouton Retour cliqué.");
-        _hubManager?.GoToGeneralView(); // Demande au HubManager de retourner à la vue générale
+        _hubManager?.GoToGeneralView();
     }
-
-    private void OnLaunchLevelButtonClicked()
-    {
-        if (_selectedLevel != null && PlayerDataManager.Instance != null)
-        {
-            if (CheckLevelUnlockConditions(_selectedLevel, PlayerDataManager.Instance.Data))
-            {
-                Debug.Log($"[LevelSelectionUI] Lancement du niveau : {_selectedLevel.DisplayName}");
-                _hubManager?.StartLevel(_selectedLevel);
-            }
-            else
-            {
-                Debug.LogWarning($"[LevelSelectionUI] Tentative de lancer le niveau '{_selectedLevel.DisplayName}' mais il n'est pas débloqué.");
-            }
-        }
-        else
-        {
-            Debug.LogWarning("[LevelSelectionUI] Aucun niveau sélectionné pour le lancement.");
-        }
-    }
-    #endregion
+    
 }
