@@ -4,6 +4,7 @@ using TMPro;
 using System.Collections.Generic;
 using UnityEngine.Events;
 using System.Linq;
+using System;
 
 public class GameplayManager : MonoBehaviour
 {
@@ -26,6 +27,11 @@ public class GameplayManager : MonoBehaviour
     public IReadOnlyDictionary<string, float> UnitCooldowns => _unitCooldowns;
     public IReadOnlyDictionary<string, float> SpellCooldowns => _spellCooldowns;
     public IReadOnlyList<GlobalSpellData_SO> AvailableGlobalSpells => availableGlobalSpells;
+  	/// <summary>
+    /// Invoqué après que les sorts globaux aient été chargés depuis les Resources.
+    /// Fournit la liste des sorts chargés.
+    /// </summary>
+    public static event Action<IReadOnlyList<GlobalSpellData_SO>> OnGlobalSpellsLoaded;
 
     private float _beatInterval;
 
@@ -143,7 +149,10 @@ public class GameplayManager : MonoBehaviour
         GlobalSpellData_SO[] spells = Resources.LoadAll<GlobalSpellData_SO>(globalSpellsResourcePath);
         availableGlobalSpells = new List<GlobalSpellData_SO>(spells);
         Debug.Log($"[GameplayManager] Chargé {availableGlobalSpells.Count} sorts globaux depuis '{globalSpellsResourcePath}'.");
-    }
+		OnGlobalSpellsLoaded?.Invoke(availableGlobalSpells);
+
+	
+	}
 
     void InitializeSequenceController()
     {
