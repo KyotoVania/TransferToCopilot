@@ -2,7 +2,7 @@ using UnityEngine;
 using UnityEngine.UI;
 using TMPro; // Si jamais tu veux ajouter un nom ou autre texte au slot
 using System; // Pour Action
-
+using ScriptableObjects; 
 public class TeamSlotItemUI : MonoBehaviour
 {
     [SerializeField] private Image characterIconImage;

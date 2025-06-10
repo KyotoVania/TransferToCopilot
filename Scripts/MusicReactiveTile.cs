@@ -1,9 +1,10 @@
-// Fichier: Scripts2/MusicReactiveTile.cs
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using Sirenix.OdinInspector;
-using Game.Observers; // Assurez-vous que ce namespace existe si IComboObserver est dedans
+using Game.Observers; 
+using ScriptableObjects;
+
 
 public class MusicReactiveTile : Tile, IComboObserver
 {

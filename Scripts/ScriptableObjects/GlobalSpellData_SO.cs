@@ -1,11 +1,13 @@
-using UnityEngine;
-using System.Collections.Generic;
-using Sirenix.OdinInspector; // Assuming ValidateInput attribute is from Odin Inspector
-using AK.Wwise;
-
-[CreateAssetMenu(fileName = "NewGlobalSpellData", menuName = "ScriptableObjects/GlobalSpellData", order = 1)]
-public class GlobalSpellData_SO : ScriptableObject
+namespace ScriptableObjects
 {
+	using UnityEngine;
+	using System.Collections.Generic;
+	using Sirenix.OdinInspector; // Assuming ValidateInput attribute is from Odin Inspector
+	using AK.Wwise;
+
+	[CreateAssetMenu(fileName = "NewGlobalSpellData", menuName = "ScriptableObjects/GlobalSpellData", order = 1)]
+	public class GlobalSpellData_SO : ScriptableObject
+	{
     public string SpellID; // Identifiant unique, ex: "SPELL_GOLD_BOOST"
     public string DisplayName; // Nom du sort pour l'UI, ex: "Pluie d'Or"
 
@@ -33,4 +35,6 @@ public class GlobalSpellData_SO : ScriptableObject
     {
         return sequence != null && sequence.Count == 4;
     }
+	}
+
 }

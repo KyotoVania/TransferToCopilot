@@ -2,6 +2,7 @@ using UnityEngine;
 using UnityEngine.SceneManagement;
 using System;
 using System.Collections;
+using ScriptableObjects;
 
 public enum GameState { Boot, MainMenu, Hub, Loading, InLevel, EndGame }
 

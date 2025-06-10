@@ -3,6 +3,8 @@ using UnityEngine.UI;
 using TMPro;
 using System.Collections.Generic;
 using System.Linq;
+using ScriptableObjects;
+
 
 public class LevelSelectionUI : MonoBehaviour
 {

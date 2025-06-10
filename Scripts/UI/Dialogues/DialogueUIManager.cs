@@ -1,11 +1,10 @@
-// Dans DialogueUIManager.cs
-
 using UnityEngine;
 using UnityEngine.UI; // Pour Image
 using TMPro;          // Pour TextMeshProUGUI
 using System.Collections.Generic;
 using System.Collections;
-// Pas besoin de Unity.Behavior.GraphFramework ici si on ne touche plus aux agents directement
+using ScriptableObjects;
+
 
 public class DialogueUIManager : MonoBehaviour
 {

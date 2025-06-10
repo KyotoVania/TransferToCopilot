@@ -2,6 +2,7 @@
 using UnityEngine.UI;
 using TMPro;
 using System;
+using ScriptableObjects;
 
 public class TeamSlotUI : MonoBehaviour
 {
@@ -14,6 +15,9 @@ public class TeamSlotUI : MonoBehaviour
     [SerializeField] private TextMeshProUGUI characterNameText;
     [SerializeField] private TextMeshProUGUI characterDescText;
     [SerializeField] private Button removeButton;
+    
+    [Header("Interaction")]
+    [SerializeField] private Button mainCardButton; // Add a reference to the main button component of the card
 
     [Header("Éléments du Slot Vide")]
     [SerializeField] private Button addButton;
@@ -22,16 +26,18 @@ public class TeamSlotUI : MonoBehaviour
     private int _slotIndex;
     private Action<CharacterData_SO> _onRemoveCallback;
     private Action<int> _onAddCallback;
+    private Action<CharacterData_SO> _onShowEquipmentCallback;
 
     /// <summary>
     /// Configure le slot pour afficher soit un personnage, soit un bouton d'ajout.
     /// </summary>
-    public void Setup(CharacterData_SO characterData, int slotIndex, Action<CharacterData_SO> onRemove, Action<int> onAdd)
+    public void Setup(CharacterData_SO characterData, int slotIndex, Action<CharacterData_SO> onRemove, Action<int> onAdd, Action<CharacterData_SO> onShowEquipment)
     {
         _characterData = characterData;
         _slotIndex = slotIndex;
         _onRemoveCallback = onRemove;
         _onAddCallback = onAdd;
+        _onShowEquipmentCallback = onShowEquipment; // Store the new callback
 
         if (_characterData != null)
         {
@@ -63,6 +69,8 @@ public class TeamSlotUI : MonoBehaviour
 
             removeButton.onClick.RemoveAllListeners();
             removeButton.onClick.AddListener(HandleRemoveClick);
+            mainCardButton.onClick.RemoveAllListeners();
+            mainCardButton.onClick.AddListener(HandleShowEquipmentClick);
         }
         else
         {
@@ -72,6 +80,7 @@ public class TeamSlotUI : MonoBehaviour
 
             addButton.onClick.RemoveAllListeners();
             addButton.onClick.AddListener(HandleAddClick);
+            
         }
     }
 
@@ -83,5 +92,9 @@ public class TeamSlotUI : MonoBehaviour
     private void HandleAddClick()
     {
         _onAddCallback?.Invoke(_slotIndex);
+    }
+    private void HandleShowEquipmentClick()
+    {
+        _onShowEquipmentCallback?.Invoke(_characterData);
     }
 }

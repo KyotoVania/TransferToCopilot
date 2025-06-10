@@ -2,7 +2,15 @@ using UnityEngine;
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Linq; // Ajouté pour FindAssetsByType
+using System.Linq; 
+using ScriptableObjects;
+
+[System.Serializable]
+public class CharacterProgress
+{
+    public int CurrentLevel = 1;
+    public int CurrentXP = 0;
+}
 
 /// <summary>
 /// Structure pour stocker les données de sauvegarde du joueur.
@@ -15,6 +23,12 @@ public class PlayerSaveData
     public List<string> UnlockedCharacterIDs = new List<string>();
     public Dictionary<string, int> CompletedLevels = new Dictionary<string, int>();
     public List<string> ActiveTeamCharacterIDs = new List<string>();
+    public List<string> UnlockedEquipmentIDs = new List<string>();
+
+    public Dictionary<string, List<string>> EquippedItems = new Dictionary<string, List<string>>();
+    public Dictionary<string, CharacterProgress> CharacterProgressData = new Dictionary<string, CharacterProgress>();
+
+
 }
 
 /// <summary>
@@ -328,5 +342,111 @@ public class PlayerDataManager : SingletonPersistent<PlayerDataManager>
         
          Debug.Log("[PlayerDataManager] Données de test de complétion de niveau appliquées.");
          OnPlayerDataLoaded?.Invoke(); // Notify systems to refresh with new data
+     }
+     
+     public void AddXPToCharacter(string characterID, int xpAmount)
+     {
+         // 1. Trouver le CharacterData pour obtenir sa courbe de progression
+         CharacterData_SO charData = Resources.Load<CharacterData_SO>($"Data/Characters/{characterID}");
+         if (charData == null || charData.ProgressionData == null)
+         {
+             Debug.LogError($"[PlayerDataManager] Impossible d'ajouter de l'XP : CharacterData ou ProgressionData manquant pour l'ID {characterID}");
+             return;
+         }
+
+         // 2. Initialiser la progression si elle n'existe pas
+         if (!Data.CharacterProgressData.ContainsKey(characterID))
+         {
+             Data.CharacterProgressData[characterID] = new CharacterProgress();
+         }
+
+         CharacterProgress progress = Data.CharacterProgressData[characterID];
+         progress.CurrentXP += xpAmount;
+
+         // 3. Boucle de montée de niveau
+         int xpForNextLevel = charData.ProgressionData.GetXPRequiredForLevel(progress.CurrentLevel + 1);
+        
+         while (progress.CurrentXP >= xpForNextLevel && xpForNextLevel > 0)
+         {
+             progress.CurrentLevel++;
+             // On ne soustrait pas l'XP, car la courbe représente le total requis.
+             // On pourrait le faire si la courbe représentait l'XP *par* niveau.
+             // Pour l'instant, on garde le total.
+            
+             Debug.Log($"Personnage {characterID} est monté au niveau {progress.CurrentLevel}!");
+
+             // Mettre à jour le montant requis pour le niveau suivant
+             xpForNextLevel = charData.ProgressionData.GetXPRequiredForLevel(progress.CurrentLevel + 1);
+             if (xpForNextLevel == charData.ProgressionData.GetXPRequiredForLevel(progress.CurrentLevel))
+             {
+                 // On a atteint le niveau max défini dans la courbe, on sort.
+                 break;
+             }
+         }
+         SaveData();
+     }
+
+     
+     public void UnlockEquipment(string equipmentID)
+     {
+         if (!Data.UnlockedEquipmentIDs.Contains(equipmentID))
+         {
+             Data.UnlockedEquipmentIDs.Add(equipmentID);
+             Debug.Log($"Equipment unlocked: {equipmentID}");
+             SaveData();
+         }
+     }
+
+     public void EquipItemOnCharacter(string characterID, string equipmentID)
+     {
+         if (!Data.UnlockedEquipmentIDs.Contains(equipmentID)) return;
+
+         // Initialize dictionary entry if it doesn't exist
+         if (!Data.EquippedItems.ContainsKey(characterID))
+         {
+             Data.EquippedItems[characterID] = new List<string>();
+         }
+
+         // TODO: Add logic to check if a slot of the same type is already occupied
+         // before adding the new item.
+
+         Data.EquippedItems[characterID].Add(equipmentID);
+         SaveData();
+     }
+
+     public void UnequipItemFromCharacter(string characterID, string equipmentID)
+     {
+         if (Data.EquippedItems.ContainsKey(characterID))
+         {
+             Data.EquippedItems[characterID].Remove(equipmentID);
+             SaveData();
+         }
+     }
+     
+     
+     /// <summary>
+     /// Débloque une liste d'équipements pour le joueur.
+     /// </summary>
+     /// <param name="equipmentIDs">La liste des EquipmentID à ajouter à l'inventaire.</param>
+     public void UnlockMultipleEquipment(List<string> equipmentIDs)
+     {
+         if (equipmentIDs == null) return;
+
+         int itemsAdded = 0;
+         foreach (string id in equipmentIDs)
+         {
+             if (!string.IsNullOrEmpty(id) && !Data.UnlockedEquipmentIDs.Contains(id))
+             {
+                 Data.UnlockedEquipmentIDs.Add(id);
+                 itemsAdded++;
+             }
+         }
+
+         if (itemsAdded > 0)
+         {
+             Debug.Log($"[PlayerDataManager] {itemsAdded} nouveaux items d'équipement débloqués.");
+             SaveData();
+             // Optionnel : Déclencher un événement si l'UI de l'inventaire doit être notifiée globalement.
+         }
      }
 }

@@ -2,6 +2,7 @@
 using UnityEngine.UI;
 using TMPro;
 using System;
+using ScriptableObjects;
 
 public class AvailableCharacterListItemUI : MonoBehaviour
 {

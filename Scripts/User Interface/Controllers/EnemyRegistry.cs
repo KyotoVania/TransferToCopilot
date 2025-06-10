@@ -1,6 +1,8 @@
 ﻿using UnityEngine;
 using System.Collections.Generic;
 using System;
+using ScriptableObjects;
+
 
 public class EnemyRegistry : SingletonPersistent<EnemyRegistry>
 {

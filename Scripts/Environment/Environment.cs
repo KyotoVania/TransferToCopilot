@@ -1,6 +1,7 @@
 using UnityEngine;
 using System.Collections;
 using Sirenix.OdinInspector; // Si vous utilisez Odin Inspector
+using ScriptableObjects;
 
 public class Environment : MonoBehaviour
 {

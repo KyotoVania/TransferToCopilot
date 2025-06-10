@@ -1,18 +1,20 @@
-using UnityEngine;
-using Sirenix.OdinInspector;
-using System.Collections.Generic; // Ajouté pour les listes potentielles
-
-
-public enum LevelType
+namespace ScriptableObjects
 {
-    SystemScene,    // Pour MainMenu, Hub, Core, etc.
-    GameplayLevel,  // Pour les niveaux jouables classiques
-    Cinematic,      // Pour les scènes cinématiques
-}
+	using UnityEngine;
+	using Sirenix.OdinInspector;
+	using System.Collections.Generic; // Ajouté pour les listes potentielles
 
-[CreateAssetMenu(fileName = "LevelData_New", menuName = "GameData/Level Data")]
-public class LevelData_SO : ScriptableObject
-{
+
+	public enum LevelType
+	{
+    	SystemScene,    // Pour MainMenu, Hub, Core, etc.
+    	GameplayLevel,  // Pour les niveaux jouables classiques
+    	Cinematic,      // Pour les scènes cinématiques
+	}
+
+	[CreateAssetMenu(fileName = "LevelData_New", menuName = "GameData/Level Data")]
+	public class LevelData_SO : ScriptableObject
+	{
     [BoxGroup("Identification")]
     [InfoBox("ID Unique utilisé pour la sauvegarde et les références internes.")]
     public string LevelID = "Level_Default";
@@ -60,4 +62,5 @@ public class LevelData_SO : ScriptableObject
     public AK.Wwise.Switch MusicStateSwitch; // Potentiel Switch Wwise pour ce niveau
     // public AK.Wwise.Event VictoryMusic;
     // public AK.Wwise.Event DefeatMusic;
+	}
 }

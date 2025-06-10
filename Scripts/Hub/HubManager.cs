@@ -3,6 +3,8 @@ using UnityEngine.UI;
 using TMPro;
 using System.Collections.Generic;
 using UnityEngine.Events;
+using System.Linq;
+using ScriptableObjects;
 
 public class HubManager : MonoBehaviour
 {
@@ -15,7 +17,9 @@ public class HubManager : MonoBehaviour
     [SerializeField] private TextMeshProUGUI textCurrency;
     [SerializeField] private TextMeshProUGUI textExperience;
     [SerializeField] private Button buttonBackToMainMenu;
-
+  	[Header("Debug Options")]
+    [Tooltip("Liste des SO d'équipement à donner au joueur via le bouton de débogage.")]
+    [SerializeField] private List<EquipmentData_SO> testEquipmentToGive;
     // Classe interne pour les points d'intérêt
     [System.Serializable]
     public class HubInterestPoint
@@ -206,7 +210,76 @@ public class HubManager : MonoBehaviour
     }
 
     public void GoBackToMainMenu()
-    {
+    {	
         GameManager.Instance?.LoadMainMenu();
     }
+
+ 	public void OnDebugAddItemsClicked()
+    {
+        if (testEquipmentToGive == null || testEquipmentToGive.Count == 0)
+        {
+            Debug.LogWarning("[HubManager] La liste 'testEquipmentToGive' est vide. Aucun item à ajouter.");
+            return;
+        }
+
+        if (PlayerDataManager.Instance != null)
+        {
+            // Extraire les IDs de la liste de ScriptableObjects
+            List<string> idsToUnlock = testEquipmentToGive.Select(item => item.EquipmentID).ToList();
+            
+            // Appeler la nouvelle méthode du PlayerDataManager
+            PlayerDataManager.Instance.UnlockMultipleEquipment(idsToUnlock);
+
+            Debug.Log($"[HubManager] Tentative de déblocage de {idsToUnlock.Count} items de test.");
+            
+            // On peut ajouter un petit feedback visuel simple
+            // par exemple en désactivant le bouton après usage.
+            // (Logique plus avancée : rafraîchir l'UI de l'inventaire si elle est visible).
+        }
+        else
+        {
+            Debug.LogError("[HubManager] PlayerDataManager.Instance non trouvé ! Impossible d'ajouter les items.");
+        }
+    }
+
+	/// <summary>
+    /// Appelée par le bouton de débogage pour ajouter de l'XP à tous les personnages de l'équipe active.
+    /// </summary>
+    public void OnDebugAddXPClicked()
+    {
+        // Montant d'XP à donner à chaque fois, vous pouvez l'ajuster
+        const int xpToGive = 100;
+
+        if (TeamManager.Instance == null || PlayerDataManager.Instance == null)
+        {
+            Debug.LogError("[HubManager] TeamManager ou PlayerDataManager non disponible ! Impossible d'ajouter de l'XP.");
+            return;
+        }
+
+        List<CharacterData_SO> activeTeam = TeamManager.Instance.ActiveTeam;
+        if (activeTeam.Count == 0)
+        {
+            Debug.LogWarning("[HubManager] L'équipe active est vide. Aucun XP n'a été ajouté.");
+            return;
+        }
+
+        Debug.Log($"[HubManager] Ajout de {xpToGive} XP à {activeTeam.Count(c => c != null)} personnage(s) de l'équipe active...");
+
+        // Parcourir chaque personnage de l'équipe active et lui ajouter de l'XP
+        foreach (CharacterData_SO character in activeTeam)
+        {
+            if (character != null)
+            {
+                PlayerDataManager.Instance.AddXPToCharacter(character.CharacterID, xpToGive);
+                // Le log de la montée de niveau est déjà dans PlayerDataManager.
+            }
+        }
+
+        Debug.Log("[HubManager] Distribution d'XP terminée.");
+        
+        // Optionnel : Mettre à jour l'UI si elle est ouverte et affiche des niveaux/XP.
+        // Si vous êtes sur le panel d'équipement, il faudrait le notifier pour qu'il se rafraîchisse.
+        // Pour l'instant, quitter et rouvrir le panel suffira pour voir les changements.
+    }
+
 }

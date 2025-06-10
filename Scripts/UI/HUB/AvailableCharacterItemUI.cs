@@ -1,7 +1,8 @@
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
-using System; // Pour Action
+using System; 
+using ScriptableObjects;
 
 public class AvailableCharacterItemUI : MonoBehaviour
 {

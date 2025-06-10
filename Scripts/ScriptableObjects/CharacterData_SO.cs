@@ -1,15 +1,19 @@
-using UnityEngine;
-using System.Collections.Generic;
-using Sirenix.OdinInspector;
-#if UNITY_EDITOR
-using UnityEditor;
-#endif
-
-public enum InputType { X, C, V }
-
-[CreateAssetMenu(fileName = "CharacterData_New", menuName = "GameData/Character Data")]
-public class CharacterData_SO : ScriptableObject
+namespace ScriptableObjects
 {
+	using UnityEngine;
+	using System.Collections.Generic;
+	using Sirenix.OdinInspector;
+	#if UNITY_EDITOR
+	using UnityEditor;
+	#endif
+
+
+
+	public enum InputType { X, C, V }
+
+	[CreateAssetMenu(fileName = "CharacterData_New", menuName = "GameData/Character Data")]
+	public class CharacterData_SO : ScriptableObject
+	{
     [BoxGroup("Identification", ShowLabel = false)]
     [HorizontalGroup("Identification/Split", Width = 100)]
     [PreviewField(100, ObjectFieldAlignment.Left), HideLabel]
@@ -33,6 +37,9 @@ public class CharacterData_SO : ScriptableObject
     [InlineEditor(InlineEditorModes.FullEditor)] // Permet d'éditer le SO directement ici
     public UnitStats_SO BaseStats; // Référence à un SO UnitStats existant
 
+	[BoxGroup("Gameplay/Stats")]
+    [Required("Une courbe de progression est requise.")]
+    public CharacterProgressionData_SO ProgressionData;
     [BoxGroup("Gameplay/Prefabs")]
     [Required("Le Prefab de l'unité en combat est requis.")]
     [AssetsOnly]
@@ -77,4 +84,5 @@ public class CharacterData_SO : ScriptableObject
     [MinValue(0)]
     [Tooltip("Temps en beats avant de pouvoir invoquer à nouveau ce personnage.")]
     public float InvocationCooldown = 5;
+	}
 }

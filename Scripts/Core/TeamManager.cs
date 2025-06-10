@@ -2,7 +2,7 @@ using UnityEngine;
 using System.Collections.Generic;
 using System;
 using System.Linq;
-
+using ScriptableObjects;
 // Assure-toi que ce script est dans le bon dossier, par exemple Scripts/Core/
 // et qu'il hérite de SingletonPersistent<TeamManager>
 public class TeamManager : SingletonPersistent<TeamManager>

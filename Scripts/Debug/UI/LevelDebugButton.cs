@@ -1,6 +1,7 @@
 ﻿using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
+using ScriptableObjects;
 
 /// <summary>
 /// Composant optionnel pour les boutons de niveau dans la scène de debug

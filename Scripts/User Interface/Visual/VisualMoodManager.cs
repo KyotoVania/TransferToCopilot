@@ -1,7 +1,8 @@
 using UnityEngine;
 using UnityEngine.Rendering;
-using UnityEngine.Rendering.Universal; // Assurez-vous d'avoir le bon namespace si vous utilisez URP/HDRP
+using UnityEngine.Rendering.Universal; 
 using System.Collections.Generic;
+using ScriptableObjects;
 
 #if UNITY_EDITOR
 using UnityEditor;
@@ -15,7 +16,6 @@ public interface IMoodManager
     MoodType CurrentMood { get; }
 }
 
-// Ajout de ExecuteAlways pour que Awake/OnDestroy fonctionnent aussi en Editor
 [ExecuteAlways]
 public class VisualMoodManager : MonoBehaviour, IMoodManager
 {

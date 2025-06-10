@@ -5,6 +5,9 @@ using System.Collections.Generic;
 using System.Linq;
 using System;
 using System.Collections;
+using Hub;
+using ScriptableObjects;
+
 public class TeamManagementUI : MonoBehaviour
 {
     [Header("Références des Managers")]
@@ -33,6 +36,7 @@ public class TeamManagementUI : MonoBehaviour
     [SerializeField] private Button readyButton; // Le bouton "Ready" du nouveau design
     [Header("Panels Connectés")]
     [SerializeField] private GameObject characterSelectionPanel;
+    [SerializeField] private EquipmentPanelUI equipmentPanel;
 
     private readonly List<TeamSlotUI> _instantiatedTeamSlots = new List<TeamSlotUI>();
     private CharacterData_SO _selectedCharacterForDetails = null;
@@ -105,7 +109,7 @@ public class TeamManagementUI : MonoBehaviour
             {
                 CharacterData_SO characterInSlot = (i < activeTeam.Count) ? activeTeam[i] : null;
                 // Le callback "onAdd" ouvrira le panel de sélection plus tard
-                slotUI.Setup(characterInSlot, i, OnRemoveCharacter, OnAddCharacterSlotClicked);
+                slotUI.Setup(characterInSlot, i, OnRemoveCharacter, OnAddCharacterSlotClicked, OnShowEquipmentPanel);
                 _instantiatedTeamSlots.Add(slotUI);
             }
             else
@@ -179,7 +183,18 @@ public class TeamManagementUI : MonoBehaviour
         // Pour l'instant, on le laisse désactivé.
         characterDetailsPanel.SetActive(false);
     }
-
+  	private void OnShowEquipmentPanel(CharacterData_SO character)
+    {
+        if (equipmentPanel != null)
+        {
+            gameObject.SetActive(false); // Hide this panel
+            equipmentPanel.ShowPanelFor(character);
+        }
+        else
+        {
+            Debug.LogError("[TeamManagementUI] EquipmentPanel reference is not set!");
+        }
+    }
     #endregion
 
     #region Navigation
@@ -226,4 +241,6 @@ public class TeamManagementUI : MonoBehaviour
         // C'est SEULEMENT MAINTENANT, à la toute fin, qu'on désactive l'ancien panel.
         gameObject.SetActive(false);
     }
+
+
 }

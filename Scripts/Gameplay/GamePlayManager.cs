@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using UnityEngine.Events;
 using System.Linq;
 using System;
+using ScriptableObjects;
 
 public class GameplayManager : MonoBehaviour
 {

@@ -4,8 +4,9 @@ using Unity.Behavior.GraphFramework;
 using System;
 using System.Collections;
 using System.Collections.Generic;
-using System.Linq; // Pour OrderBy
+using System.Linq; 
 using Unity.Properties;
+using ScriptableObjects;
 
 /// <summary>
 /// Action Node qui lit une Wave_SO depuis le Blackboard et exécute les requêtes de spawn

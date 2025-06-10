@@ -5,7 +5,7 @@ using TMPro;
 using System.Collections.Generic;
 using System.Linq;
 using UnityEngine.EventSystems;
-
+using ScriptableObjects;
 /// <summary>
 /// Manages the UI panel for the 4 player units, showing their status,
 /// cost, cooldown, and providing feedback during sequence input.

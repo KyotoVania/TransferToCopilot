@@ -1,9 +1,10 @@
-// Modified file: kyotovania/transfertocopilot/KyotoVania-TransferToCopilot-c815ca4872be6703099c7d3724009d8a6568c3ba/Scripts/UI/HUB/LevelSelectItemUI.cs
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
 using System;
 using System.Collections.Generic;
+using ScriptableObjects;
+
 
 public class LevelSelectItemUI : MonoBehaviour
 {

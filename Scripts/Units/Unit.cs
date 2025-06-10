@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using Sirenix.OdinInspector;
 using System.Linq;
+using ScriptableObjects;
 
 public enum UnitState
 {
@@ -1225,8 +1226,14 @@ protected virtual void SetState(UnitState newState)
             return;
         }
 
-        this.unitStats = characterData.BaseStats; // Assigner les stats du CharacterData
-        
+        int characterLevel = 1;
+        if (PlayerDataManager.Instance != null && PlayerDataManager.Instance.Data.CharacterProgressData.ContainsKey(characterData.CharacterID))
+        {
+            characterLevel = PlayerDataManager.Instance.Data.CharacterProgressData[characterData.CharacterID].CurrentLevel;
+        }
+
+        // Calculer les stats pour le niveau actuel en utilisant l'asset de progression
+        this.unitStats = characterData.ProgressionData.GetStatsForLevel(characterData.BaseStats, characterLevel);
         this.Health = this.unitStats.Health;
         
         if (debugUnitCombat || debugUnitMovement) // Utilisez un de vos flags de debug existants ou créez-en un nouveau
