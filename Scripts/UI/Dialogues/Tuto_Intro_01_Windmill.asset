@@ -10,14 +10,14 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 5a886cd9e7920dd46ae5bb3edf46ac87, type: 3}
-  m_Name: IntroDialogue_01
+  m_Name: Tuto_Intro_01_Windmill
   m_EditorClassIdentifier: 
   entries:
-  - speakerName: test
+  - speakerName: Butler
     speakerPortrait: {fileID: -1856009930, guid: 900a9e6e6260cc84e8e280b5eb4ef35b,
       type: 3}
-    dialogueText: test test
-  - speakerName: test2
+    dialogueText: They also stopped our windmill from working.
+  - speakerName: General
     speakerPortrait: {fileID: -1856009930, guid: 900a9e6e6260cc84e8e280b5eb4ef35b,
       type: 3}
-    dialogueText: prout
+    dialogueText: "Let's DESTROY the defenders \nand re-capture it ! "

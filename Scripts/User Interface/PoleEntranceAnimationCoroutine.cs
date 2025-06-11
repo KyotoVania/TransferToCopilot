@@ -10,86 +10,111 @@ public enum EntranceDirection
 public class PoleEntranceAnimationGeneric : MonoBehaviour
 {
     [Header("Animation Settings")]
-    // Choose from which side the UI element should come in
     public EntranceDirection entranceDirection = EntranceDirection.Left;
-    // How far (in pixels) the element will overshoot the final position
     public float overshootDistance = 20f;
-    // Duration (in seconds) of each animation phase (entrance and correction)
     public float animationDuration = 0.5f;
 
     private RectTransform rectTransform;
-    private Vector2 finalPosition;
+    private Vector2 finalPosition; // La position à l'écran, définie dans l'éditeur
+    private Coroutine animationCoroutine;
 
     void Awake()
     {
         rectTransform = GetComponent<RectTransform>();
-        // The final anchored position is set in the Editor
+        // On sauvegarde la position finale une seule fois
         finalPosition = rectTransform.anchoredPosition;
     }
 
-    void Start()
+    void OnEnable()
     {
-        // Set the starting X position based on the desired entrance direction.
+        // S'assurer qu'aucune ancienne animation ne tourne en arrière-plan
+        if (animationCoroutine != null)
+        {
+            StopCoroutine(animationCoroutine);
+        }
+
+        // Réinitialiser la position à son état hors-écran
+        ResetToOffScreenPosition();
+
+        // Lancer la nouvelle animation
+        animationCoroutine = StartCoroutine(AnimateEntrance());
+    }
+
+    void OnDisable()
+    {
+        // Si l'objet est désactivé en cours d'animation, on l'arrête
+        if (animationCoroutine != null)
+        {
+            StopCoroutine(animationCoroutine);
+            animationCoroutine = null;
+        }
+
+        // Réinitialiser immédiatement la position à son état hors-écran
+        ResetToOffScreenPosition();
+    }
+
+    /// <summary>
+    /// Place l'objet à sa position de départ, hors de l'écran.
+    /// </summary>
+    private void ResetToOffScreenPosition()
+    {
+        if (rectTransform == null) return;
+
         float initialX = finalPosition.x;
+        // La largeur du RectTransform est utilisée pour le placer juste à l'extérieur
+        float width = rectTransform.rect.width;
+
         if (entranceDirection == EntranceDirection.Left)
         {
-            // Coming from left: position it off-screen to the left.
-            initialX = finalPosition.x - Mathf.Abs(rectTransform.rect.width);
+            initialX = finalPosition.x - Mathf.Abs(width);
         }
         else if (entranceDirection == EntranceDirection.Right)
         {
-            // Coming from right: position it off-screen to the right.
-            initialX = finalPosition.x + Mathf.Abs(rectTransform.rect.width);
+            initialX = finalPosition.x + Mathf.Abs(width);
         }
-        // Update the anchored position to the starting position.
-        rectTransform.anchoredPosition = new Vector2(initialX, finalPosition.y);
 
-        // Start the animation coroutine.
-        StartCoroutine(AnimateEntrance());
+        rectTransform.anchoredPosition = new Vector2(initialX, finalPosition.y);
     }
 
     IEnumerator AnimateEntrance()
     {
-        // Determine the overshoot target based on the entrance direction.
+        // --- Phase 1: Entrée avec overshoot ---
         float overshootTargetX = finalPosition.x;
         if (entranceDirection == EntranceDirection.Left)
         {
-            // For left entrance, overshoot to the right.
             overshootTargetX = finalPosition.x + overshootDistance;
         }
         else if (entranceDirection == EntranceDirection.Right)
         {
-            // For right entrance, overshoot to the left.
             overshootTargetX = finalPosition.x - overshootDistance;
         }
 
-        // Phase 1: Animate from the starting off-screen position to the overshoot position.
         float elapsedTime = 0f;
-        float startX = rectTransform.anchoredPosition.x;
-        while (elapsedTime < animationDuration)
-        {
-            elapsedTime += Time.deltaTime;
-            float t = Mathf.SmoothStep(0f, 1f, elapsedTime / animationDuration);
-            float newX = Mathf.Lerp(startX, overshootTargetX, t);
-            rectTransform.anchoredPosition = new Vector2(newX, finalPosition.y);
-            yield return null;
-        }
-        // Ensure overshoot target is reached.
-        rectTransform.anchoredPosition = new Vector2(overshootTargetX, finalPosition.y);
+        Vector2 startPos = rectTransform.anchoredPosition; // Part de la position hors-écran
+        Vector2 overshootPos = new Vector2(overshootTargetX, finalPosition.y);
 
-        // Phase 2: Animate back from the overshoot position to the final anchored position.
-        elapsedTime = 0f;
-        float overshootX = overshootTargetX;
-        float finalX = finalPosition.x;
         while (elapsedTime < animationDuration)
         {
             elapsedTime += Time.deltaTime;
             float t = Mathf.SmoothStep(0f, 1f, elapsedTime / animationDuration);
-            float newX = Mathf.Lerp(overshootX, finalX, t);
-            rectTransform.anchoredPosition = new Vector2(newX, finalPosition.y);
+            rectTransform.anchoredPosition = Vector2.Lerp(startPos, overshootPos, t);
             yield return null;
         }
-        // Finalize the position.
-        rectTransform.anchoredPosition = new Vector2(finalX, finalPosition.y);
+        rectTransform.anchoredPosition = overshootPos;
+
+        // --- Phase 2: Retour à la position finale ---
+        elapsedTime = 0f;
+        startPos = rectTransform.anchoredPosition; // Part de la position d'overshoot
+
+        while (elapsedTime < animationDuration)
+        {
+            elapsedTime += Time.deltaTime;
+            float t = Mathf.SmoothStep(0f, 1f, elapsedTime / animationDuration);
+            rectTransform.anchoredPosition = Vector2.Lerp(startPos, finalPosition, t);
+            yield return null;
+        }
+        rectTransform.anchoredPosition = finalPosition;
+
+        animationCoroutine = null;
     }
 }

@@ -1,11 +1,15 @@
+// Fichier: Scripts2/UI/Dialogues/DialogueUIManager.cs (Corrigé)
 using UnityEngine;
-using UnityEngine.UI; // Pour Image
-using TMPro;          // Pour TextMeshProUGUI
+using UnityEngine.UI;
+using TMPro;
 using System.Collections.Generic;
 using System.Collections;
-using ScriptableObjects;
+using ScriptableObjects; // <--- LIGNE AJOUTÉE ICI
 
-
+/// <summary>
+/// Gère UNIQUEMENT l'affichage du panneau de dialogue et du texte.
+/// Il est maintenant contrôlé par des managers externes comme DialogueSequenceManager.
+/// </summary>
 public class DialogueUIManager : MonoBehaviour
 {
     public static DialogueUIManager Instance { get; private set; }
@@ -29,19 +33,11 @@ public class DialogueUIManager : MonoBehaviour
     public static event System.Action OnDialogueSystemStart;
     public static event System.Action OnDialogueSystemEnd;
 
-    private RhythmGameCameraController _cameraController;
-
-    // NOUVEAU: Listes pour stocker les GameObjects des unités désactivées
-    private List<GameObject> _deactivatedAllyUnitsByDialogue = new List<GameObject>();
-    private List<GameObject> _deactivatedEnemyUnitsByDialogue = new List<GameObject>();
-
-
     void Awake()
     {
         if (Instance == null)
         {
             Instance = this;
-            // DontDestroyOnLoad(gameObject);
         }
         else
         {
@@ -49,9 +45,9 @@ public class DialogueUIManager : MonoBehaviour
             return;
         }
 
-        if (dialoguePanel == null || speakerNameText == null || speakerPortraitImage == null || dialogueTextDisplay == null || clickAdvanceButton == null)
+        if (dialoguePanel == null || clickAdvanceButton == null)
         {
-            Debug.LogError($"[{gameObject.name}/DialogueUIManager] Un ou plusieurs éléments UI ne sont pas assignés!", this);
+            Debug.LogError($"[DialogueUIManager] Le panneau de dialogue ou le bouton pour avancer ne sont pas assignés !", this);
             enabled = false;
             return;
         }
@@ -61,17 +57,7 @@ public class DialogueUIManager : MonoBehaviour
 
     void Start()
     {
-        _cameraController = FindFirstObjectByType<RhythmGameCameraController>();
-        if (_cameraController == null)
-        {
-            Debug.LogWarning($"[{gameObject.name}/DialogueUIManager] RhythmGameCameraController non trouvé.");
-        }
-
-        if (clickAdvanceButton != null)
-        {
-            clickAdvanceButton.onClick.RemoveAllListeners();
-            clickAdvanceButton.onClick.AddListener(HandleAdvanceClick);
-        }
+        clickAdvanceButton.onClick.AddListener(HandleAdvanceClick);
     }
 
     public bool IsDialogueActive()
@@ -79,10 +65,10 @@ public class DialogueUIManager : MonoBehaviour
         return _isDisplayingDialogue;
     }
 
+    // La signature de cette méthode attend maintenant ScriptableObjects.DialogueSequence
     public void StartDialogue(DialogueSequence sequence)
     {
-        if (sequence == null || sequence.entries.Count == 0) return;
-        if (_isDisplayingDialogue) return;
+        if (sequence == null || sequence.entries.Count == 0 || _isDisplayingDialogue) return;
 
         _isDisplayingDialogue = true;
         _currentSequenceQueue.Clear();
@@ -91,18 +77,7 @@ public class DialogueUIManager : MonoBehaviour
             _currentSequenceQueue.Enqueue(entry);
         }
 
-        if (_cameraController != null)
-        {
-            _cameraController.controlsLocked = true;
-            Debug.Log($"[{gameObject.name}/DialogueUIManager] Camera controls LOCKED by dialogue.");
-        }
-
-        // Désactiver les GameObjects des unités
-        SetUnitsGameObjectsActive(false);
-
         OnDialogueSystemStart?.Invoke();
-        Debug.Log($"[{gameObject.name}/DialogueUIManager] DialogueSystem START.");
-
         dialoguePanel.SetActive(true);
         DisplayNextEntry();
     }
@@ -128,25 +103,24 @@ public class DialogueUIManager : MonoBehaviour
         if (_currentSequenceQueue.Count > 0)
         {
             _currentEntry = _currentSequenceQueue.Dequeue();
-            speakerNameText.text = _currentEntry.speakerName;
-            if (_currentEntry.speakerPortrait != null)
+            if (speakerNameText != null) speakerNameText.text = _currentEntry.speakerName;
+            if (speakerPortraitImage != null)
             {
                 speakerPortraitImage.sprite = _currentEntry.speakerPortrait;
-                speakerPortraitImage.enabled = true;
+                speakerPortraitImage.enabled = (_currentEntry.speakerPortrait != null);
             }
-            else
+            if (dialogueTextDisplay != null)
             {
-                speakerPortraitImage.enabled = false;
-            }
-            if (textTypingSpeed > 0)
-            {
-                if (_typingCoroutine != null) StopCoroutine(_typingCoroutine);
-                _typingCoroutine = StartCoroutine(TypeText(_currentEntry.dialogueText));
-            }
-            else
-            {
-                dialogueTextDisplay.text = _currentEntry.dialogueText;
-                _isTyping = false;
+                 if (textTypingSpeed > 0)
+                {
+                    if (_typingCoroutine != null) StopCoroutine(_typingCoroutine);
+                    _typingCoroutine = StartCoroutine(TypeText(_currentEntry.dialogueText));
+                }
+                else
+                {
+                    dialogueTextDisplay.text = _currentEntry.dialogueText;
+                    _isTyping = false;
+                }
             }
         }
         else
@@ -183,88 +157,6 @@ public class DialogueUIManager : MonoBehaviour
             _isTyping = false;
         }
 
-        if (_cameraController != null)
-        {
-            _cameraController.controlsLocked = false;
-            Debug.Log($"[{gameObject.name}/DialogueUIManager] Camera controls UNLOCKED by dialogue.");
-        }
-
-        // Réactiver les GameObjects des unités
-        SetUnitsGameObjectsActive(true);
-
         OnDialogueSystemEnd?.Invoke();
-        Debug.Log($"[{gameObject.name}/DialogueUIManager] DialogueSystem END.");
-    }
-
-    // MÉTHODE MODIFIÉE pour activer/désactiver les GameObjects des unités
-    private void SetUnitsGameObjectsActive(bool shouldBeActive)
-    {
-        if (!shouldBeActive) // Si on désactive
-        {
-            _deactivatedAllyUnitsByDialogue.Clear();
-            _deactivatedEnemyUnitsByDialogue.Clear();
-
-            // Désactiver les unités alliées
-            if (AllyUnitRegistry.Instance != null)
-            {
-                // Copier la liste pour itérer car SetActive(false) pourrait modifier la liste du registre via OnDisable
-                foreach (AllyUnit allyUnit in AllyUnitRegistry.Instance.ActiveAllyUnits)
-                {
-                    if (allyUnit != null && allyUnit.gameObject.activeSelf)
-                    {
-                        _deactivatedAllyUnitsByDialogue.Add(allyUnit.gameObject);
-                        allyUnit.gameObject.SetActive(false);
-                    }
-                }
-                Debug.Log($"[DialogueUIManager] AllyUnits GameObjects DEACTIVATED (via Registry): {_deactivatedAllyUnitsByDialogue.Count}");
-            }
-            else // Fallback par tag si pas de registre
-            {
-                GameObject[] allyGameObjects = GameObject.FindGameObjectsWithTag("AllyUnit");
-                foreach (GameObject unitGO in allyGameObjects)
-                {
-                    if (unitGO != null && unitGO.activeSelf)
-                    {
-                         _deactivatedAllyUnitsByDialogue.Add(unitGO);
-                        unitGO.SetActive(false);
-                    }
-                }
-                Debug.Log($"[DialogueUIManager] AllyUnits GameObjects DEACTIVATED (via Tag): {_deactivatedAllyUnitsByDialogue.Count}");
-            }
-
-            // Désactiver les unités ennemies
-            GameObject[] enemyGameObjects = GameObject.FindGameObjectsWithTag("Enemy");
-            foreach (GameObject unitGO in enemyGameObjects)
-            {
-                if (unitGO != null && unitGO.activeSelf)
-                {
-                    _deactivatedEnemyUnitsByDialogue.Add(unitGO);
-                    unitGO.SetActive(false);
-                }
-            }
-            Debug.Log($"[DialogueUIManager] EnemyUnits GameObjects DEACTIVATED (via Tag): {_deactivatedEnemyUnitsByDialogue.Count}");
-        }
-        else // Si on réactive
-        {
-            foreach (GameObject unitGO in _deactivatedAllyUnitsByDialogue)
-            {
-                if (unitGO != null) // Vérifier s'il n'a pas été détruit entre-temps
-                {
-                    unitGO.SetActive(true);
-                }
-            }
-            Debug.Log($"[DialogueUIManager] AllyUnits GameObjects REACTIVATED: {_deactivatedAllyUnitsByDialogue.Count}");
-            _deactivatedAllyUnitsByDialogue.Clear();
-
-            foreach (GameObject unitGO in _deactivatedEnemyUnitsByDialogue)
-            {
-                if (unitGO != null)
-                {
-                    unitGO.SetActive(true);
-                }
-            }
-            Debug.Log($"[DialogueUIManager] EnemyUnits GameObjects REACTIVATED: {_deactivatedEnemyUnitsByDialogue.Count}");
-            _deactivatedEnemyUnitsByDialogue.Clear();
-        }
     }
 }

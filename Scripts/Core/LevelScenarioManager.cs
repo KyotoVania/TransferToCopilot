@@ -94,12 +94,15 @@ public class LevelScenarioManager : MonoBehaviour
     private void HandleTargetDestroyed(Building destroyedBuilding)
     {
         if (destroyedBuilding == null) return;
+
+        // Récupérer à la fois le nom et le tag du bâtiment détruit
+        string destroyedName = destroyedBuilding.name;
         string destroyedTag = destroyedBuilding.tag;
 
-        // 1. Déclencher les événements "OnSpecificTargetDestroyed"
-        ProcessEvents(TriggerType.OnSpecificTargetDestroyed, destroyedTag);
+        // 1. Déclencher les événements "OnSpecificTargetDestroyed" en utilisant le NOM de l'objet
+        ProcessEvents(TriggerType.OnSpecificTargetDestroyed, destroyedName);
 
-        // 2. Mettre à jour les objectifs "OnAllTargetsWithTagDestroyed"
+        // 2. Mettre à jour les objectifs "OnAllTargetsWithTagDestroyed" en utilisant le TAG de l'objet (logique inchangée)
         if (_destroyAllTrackers.ContainsKey(destroyedTag))
         {
             var tracker = _destroyAllTrackers[destroyedTag];
@@ -170,9 +173,9 @@ public class LevelScenarioManager : MonoBehaviour
     private IEnumerator ExecuteActionWithDelay(ScenarioEvent scenarioEvent)
     {
         yield return new WaitForSeconds(scenarioEvent.delay);
-        
+
         Debug.Log($"[LevelScenarioManager] Exécution de l'action '{scenarioEvent.actionType}' pour '{scenarioEvent.eventName}'.", this);
-        
+
         switch (scenarioEvent.actionType)
         {
             case ActionType.ActivateSpawnerBuilding:
@@ -197,6 +200,11 @@ public class LevelScenarioManager : MonoBehaviour
                     WinLoseController.Instance.TriggerLoseCondition();
                 else
                     Debug.LogError("[LevelScenarioManager] WinLoseController.Instance non trouvé pour TriggerDefeat !");
+                break;
+
+            // AJOUT DE LA NOUVELLE LOGIQUE
+            case ActionType.TriggerGameObject:
+                TriggerGameObjectByName(scenarioEvent.actionParameter_GameObjectName);
                 break;
         }
     }
@@ -248,6 +256,36 @@ public class LevelScenarioManager : MonoBehaviour
                     Debug.Log($"[LevelScenarioManager] Sent wave '{wave.waveName}' to spawner '{spawnerGO.name}' blackboard.");
                 }
             }
+        }
+    }
+
+    private void TriggerGameObjectByName(string name)
+    {
+        if (string.IsNullOrEmpty(name))
+        {
+            Debug.LogWarning($"[LevelScenarioManager] L'action TriggerGameObject a été appelée avec un nom de GameObject vide.", this);
+            return;
+        }
+
+        GameObject targetObject = GameObject.Find(name);
+
+        if (targetObject == null)
+        {
+            Debug.LogError($"[LevelScenarioManager] Impossible de trouver le GameObject nommé '{name}' pour le déclencher.", this);
+            return;
+        }
+
+        // On cherche un composant qui implémente notre interface
+        IScenarioTriggerable triggerable = targetObject.GetComponent<IScenarioTriggerable>();
+
+        if (triggerable != null)
+        {
+            Debug.Log($"[LevelScenarioManager] Déclenchement de l'action sur '{name}'.", this);
+            triggerable.TriggerAction();
+        }
+        else
+        {
+            Debug.LogWarning($"[LevelScenarioManager] Le GameObject '{name}' a été trouvé, mais il n'a pas de composant implémentant l'interface IScenarioTriggerable.", this);
         }
     }
 }

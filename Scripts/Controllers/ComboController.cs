@@ -1,3 +1,4 @@
+// Fichier: Scripts2/Controllers/ComboController.cs (Version mise à jour)
 using UnityEngine;
 using System.Collections.Generic;
 using System;
@@ -5,6 +6,7 @@ using Game.Observers;
 
 public class ComboController : MonoBehaviour
 {
+    // La définition du Singleton et les autres variables restent les mêmes
     private static ComboController instance;
     public static ComboController Instance
     {
@@ -36,15 +38,19 @@ public class ComboController : MonoBehaviour
 
     private void OnEnable()
     {
-        // Subscribe to the new SequenceController events.
-        // These events should be fired from your reworked SequenceController.
-        SequenceController.OnSequenceSuccess += IncrementCombo;
+        // --- MODIFIÉ ICI ---
+        // On s'abonne à chaque touche correcte, pas seulement à la séquence réussie.
+        SequenceController.OnSequenceKeyPressed += HandleCorrectInput;
+        
+        // On garde la réinitialisation du combo en cas d'échec
         SequenceController.OnSequenceFail += ResetCombo;
     }
 
     private void OnDisable()
     {
-        SequenceController.OnSequenceSuccess -= IncrementCombo;
+        // --- MODIFIÉ ICI ---
+        // On se désabonne du même événement.
+        SequenceController.OnSequenceKeyPressed -= HandleCorrectInput;
         SequenceController.OnSequenceFail -= ResetCombo;
     }
 
@@ -56,6 +62,35 @@ public class ComboController : MonoBehaviour
         }
     }
 
+    // --- NOUVELLE MÉTHODE ---
+    /// <summary>
+    /// Gère un input correct et incrémente le combo.
+    /// La signature correspond à l'événement OnSequenceKeyPressed.
+    /// </summary>
+    private void HandleCorrectInput(string key, Color timingColor)
+    {
+        IncrementCombo();
+    }
+    
+    // La logique de ces méthodes reste la même
+    private void IncrementCombo()
+    {
+        comboCount++;
+        maxCombo = Mathf.Max(maxCombo, comboCount);
+        NotifyObservers();
+    }
+
+    private void ResetCombo()
+    {
+        // On ne réinitialise que si le combo était supérieur à 0, pour ne pas notifier inutilement.
+        if (comboCount > 0)
+        {
+            comboCount = 0;
+            NotifyComboReset();
+        }
+    }
+    
+    // Les méthodes d'observateur restent les mêmes
     public void AddObserver(IComboObserver observer)
     {
         if (!observers.Contains(observer))
@@ -72,14 +107,13 @@ public class ComboController : MonoBehaviour
 
     private void NotifyObservers()
     {
-        foreach (var observer in observers)
+        foreach (var observer in observers.ToArray()) // Utiliser ToArray pour éviter les problèmes si un observer se retire pendant la notification
         {
             if (observer != null)
             {
                 observer.OnComboUpdated(comboCount);
             }
         }
-        // Clean up any null observers.
         observers.RemoveAll(o => o == null);
     }
 
@@ -92,21 +126,7 @@ public class ComboController : MonoBehaviour
                 observer.OnComboReset();
             }
         }
-        // Clean up any null observers.
         observers.RemoveAll(o => o == null);
-    }
-
-    private void IncrementCombo()
-    {
-        comboCount++;
-        maxCombo = Mathf.Max(maxCombo, comboCount);
-        NotifyObservers();
-    }
-
-    private void ResetCombo()
-    {
-        comboCount = 0;
-        NotifyComboReset();
     }
 
     private void OnApplicationQuit()

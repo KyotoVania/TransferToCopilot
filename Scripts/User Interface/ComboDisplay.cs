@@ -2,127 +2,54 @@ using UnityEngine;
 using UnityEngine.UI;
 using System.Collections;
 using Game.Observers;
+
 public class AutoHorizontalComboDisplay : MonoBehaviour, IComboObserver
 {
     [Header("Sprites numériques (0 à 9)")]
-    [Tooltip("Tableau de 10 sprites correspondant aux chiffres 0 à 9.")]
     public Sprite[] digitSprites;
 
     [Header("Layout Settings")]
-    [Tooltip("Nombre de chiffres à afficher (par défaut 3).")]
     public int numDigits = 3;
-    [Tooltip("Espacement horizontal (en pixels) entre chaque chiffre.")]
     public float spacing = 50f;
 
     [Header("Dimensions des cellules")]
-    [Tooltip("Largeur (en pixels) de chaque cellule.")]
     public float childWidth = 100f;
-    [Tooltip("Hauteur (en pixels) de chaque cellule.")]
     public float childHeight = 100f;
 
-    [Header("Délai et animation")]
-    [Tooltip("Délai (en secondes) avant de lancer l'animation d'apparition lors de la première apparition.")]
-    public float displayDelay = 1.0f;
-    [Tooltip("Décalage vertical initial (en pixels) pour l'apparition.")]
+    [Header("Animation")]
+    [Tooltip("Délai (en secondes) avant de lancer l'animation à chaque fois que l'UI est activée.")]
+    public float displayDelay = 0.35f; // J'ai renommé cette variable pour plus de clarté
     public float ySpawnOffset = 100f;
-    [Tooltip("Durée (en secondes) de l'animation de descente vers la position finale.")]
     public float fallDuration = 0.5f;
 
+    private HorizontalLayoutGroup layoutGroup;
     private Image[] digitCells;
     private Vector2[] finalPositions;
     private int[] currentDigits;
-    private Coroutine displayCoroutine;
-    private int pendingCombo;
-    private bool firstAppearance = true;
+    private Coroutine displayUpdateCoroutine;
+    private bool isInitialized = false;
 
     private void Awake()
     {
+        layoutGroup = GetComponent<HorizontalLayoutGroup>();
         InitializeDisplay();
-    }
-
-    private void InitializeDisplay()
-    {
-        if (digitSprites == null || digitSprites.Length != 10)
-        {
-            Debug.LogError($"[{nameof(AutoHorizontalComboDisplay)}] Le tableau digitSprites doit contenir exactement 10 sprites (0 à 9).");
-            enabled = false;
-            return;
-        }
-
-        CreateMissingCells();
-        InitializeArrays();
-        SetupDigitCells();
-
-        pendingCombo = 0;
-        UpdateDisplay(0);
-    }
-
-    private void CreateMissingCells()
-    {
-        if (transform.childCount < numDigits)
-        {
-            int toCreate = numDigits - transform.childCount;
-            for (int i = 0; i < toCreate; i++)
-            {
-                GameObject newCell = new GameObject("DigitCell" + i, typeof(RectTransform), typeof(Image));
-                newCell.transform.SetParent(transform, false);
-            }
-        }
-    }
-
-    private void InitializeArrays()
-    {
-        digitCells = new Image[numDigits];
-        finalPositions = new Vector2[numDigits];
-        currentDigits = new int[numDigits];
-    }
-
-    private void SetupDigitCells()
-    {
-        for (int i = 0; i < numDigits; i++)
-        {
-            digitCells[i] = transform.GetChild(i).GetComponent<Image>();
-            if (digitCells[i] == null)
-            {
-                Debug.LogError($"[{nameof(AutoHorizontalComboDisplay)}] L'enfant {i} n'a pas de composant Image!");
-                enabled = false;
-                return;
-            }
-
-            SetupDigitCell(i);
-        }
-    }
-
-    private void SetupDigitCell(int index)
-    {
-        RectTransform rt = digitCells[index].GetComponent<RectTransform>();
-        rt.sizeDelta = new Vector2(childWidth, childHeight);
-
-        float posX = (index - (numDigits - 1)) * spacing;
-        rt.anchoredPosition = new Vector2(posX, rt.anchoredPosition.y);
-        finalPositions[index] = rt.anchoredPosition;
-
-        digitCells[index].sprite = digitSprites[0];
-        currentDigits[index] = -1;
-
-        Color c = digitCells[index].color;
-        c.a = 0f;
-        digitCells[index].color = c;
     }
 
     private void OnEnable()
     {
+        if (!isInitialized) InitializeDisplay();
         if (!enabled) return;
 
-        if (ComboController.Instance == null)
+        if (ComboController.Instance != null)
+        {
+            ComboController.Instance.AddObserver(this);
+            StartCoroutine(AnimateOnEnable());
+        }
+        else
         {
             Debug.LogError($"[{nameof(AutoHorizontalComboDisplay)}] ComboController.Instance is null!");
             enabled = false;
-            return;
         }
-
-        Debug.Log("Adding combo display as observer..."); // Add this
-        ComboController.Instance.AddObserver(this);
     }
 
     private void OnDisable()
@@ -131,60 +58,78 @@ public class AutoHorizontalComboDisplay : MonoBehaviour, IComboObserver
         {
             ComboController.Instance.RemoveObserver(this);
         }
+        StopAllCoroutines();
+        HideAllCells();
     }
 
-    // Implémentation de IComboObserver
+    private IEnumerator AnimateOnEnable()
+    {
+        // LOG DE DÉBOGAGE : Vérifiez cette ligne dans votre console pour voir la valeur du délai utilisé.
+        Debug.Log($"[{nameof(AutoHorizontalComboDisplay)}] AnimateOnEnable: En attente d'un délai de {displayDelay} secondes.");
+
+        // Attendre le délai à chaque activation.
+        yield return new WaitForSeconds(displayDelay);
+
+        // Lancer l'animation avec la valeur actuelle du combo.
+        if (ComboController.Instance != null)
+        {
+            TriggerDisplayUpdate(ComboController.Instance.comboCount);
+        }
+    }
+
+    private void TriggerDisplayUpdate(int comboValue)
+    {
+        if (displayUpdateCoroutine != null)
+        {
+            StopCoroutine(displayUpdateCoroutine);
+        }
+        displayUpdateCoroutine = StartCoroutine(AnimateDisplayUpdate(comboValue));
+    }
+
     public void OnComboUpdated(int newCombo)
     {
-        Debug.Log($"Combo display received update: {newCombo}"); // Add this
-        UpdateDisplay(newCombo);
+        TriggerDisplayUpdate(newCombo);
     }
 
     public void OnComboReset()
     {
-        ResetDisplay();
+        TriggerDisplayUpdate(0);
     }
 
-    private void UpdateDisplay(int comboCount)
+    private IEnumerator AnimateDisplayUpdate(int comboCount)
     {
-        pendingCombo = comboCount;
-        if (displayCoroutine == null)
-        {
-            displayCoroutine = StartCoroutine(UpdateDisplayCoroutine());
-        }
-    }
+        if (layoutGroup != null) layoutGroup.enabled = false;
 
-    private IEnumerator UpdateDisplayCoroutine()
-    {
-        if (firstAppearance)
-        {
-            yield return new WaitForSeconds(displayDelay);
-            firstAppearance = false;
-        }
+        string s = comboCount.ToString().PadLeft(numDigits, '0');
+        if (s.Length > numDigits) s = s.Substring(s.Length - numDigits);
 
-        string s = pendingCombo.ToString().PadLeft(numDigits, '0');
-        bool anyChange = false;
-
+        bool hasAnimated = false;
         for (int i = 0; i < numDigits; i++)
         {
             int newDigit = int.Parse(s[i].ToString());
-            if (newDigit != currentDigits[i])
+            if (newDigit != currentDigits[i] || (digitCells[i] != null && digitCells[i].color.a < 1f))
             {
-                anyChange = true;
-                yield return StartCoroutine(AnimateCell(i, newDigit));
+                hasAnimated = true;
+                StartCoroutine(AnimateCell(i, newDigit));
             }
         }
 
-        if (!anyChange)
-            displayCoroutine = null;
-        else
-            displayCoroutine = StartCoroutine(UpdateDisplayCoroutine());
+        if (hasAnimated)
+        {
+            yield return new WaitForSeconds(fallDuration);
+        }
+
+        if (layoutGroup != null) layoutGroup.enabled = true;
+
+        displayUpdateCoroutine = null;
     }
 
     private IEnumerator AnimateCell(int index, int newDigit)
     {
+        currentDigits[index] = newDigit;
         RectTransform rt = digitCells[index].GetComponent<RectTransform>();
         Vector2 startPos = finalPositions[index] + new Vector2(0, ySpawnOffset);
+
         digitCells[index].sprite = digitSprites[newDigit];
         rt.anchoredPosition = startPos;
 
@@ -197,16 +142,56 @@ public class AutoHorizontalComboDisplay : MonoBehaviour, IComboObserver
         {
             elapsed += Time.deltaTime;
             float t = Mathf.Clamp01(elapsed / fallDuration);
-            rt.anchoredPosition = Vector2.Lerp(startPos, finalPositions[index], t);
+            float easedT = 1f - Mathf.Pow(1f - t, 3);
+            rt.anchoredPosition = Vector2.LerpUnclamped(startPos, finalPositions[index], easedT);
             yield return null;
         }
 
         rt.anchoredPosition = finalPositions[index];
-        currentDigits[index] = newDigit;
     }
 
-    private void ResetDisplay()
+    // --- Méthodes d'initialisation (Setup) ---
+
+    private void InitializeDisplay(){ if (isInitialized) return; if (digitSprites == null || digitSprites.Length != 10) { enabled = false; return; } CreateMissingCells(); InitializeArrays(); SetupDigitCells(); isInitialized = true; }
+    private void CreateMissingCells(){ if (transform.childCount < numDigits){ int toCreate = numDigits - transform.childCount; for (int i = 0; i < toCreate; i++){ GameObject newCell = new GameObject("DigitCell" + (transform.childCount + i), typeof(RectTransform), typeof(Image)); newCell.transform.SetParent(transform, false);}}}
+    private void InitializeArrays(){ digitCells = new Image[numDigits]; finalPositions = new Vector2[numDigits]; currentDigits = new int[numDigits];}
+
+    private void SetupDigitCells()
     {
-        UpdateDisplay(0);
+        for (int i = 0; i < numDigits; i++)
+        {
+            digitCells[i] = transform.GetChild(i).GetComponent<Image>();
+            if (digitCells[i] == null) { enabled = false; return; }
+            SetupDigitCell(i);
+        }
+    }
+
+    private void SetupDigitCell(int index)
+    {
+        RectTransform rt = digitCells[index].GetComponent<RectTransform>();
+        rt.sizeDelta = new Vector2(childWidth, childHeight);
+        float posX = (index - (numDigits - 1)) * spacing;
+        rt.anchoredPosition = new Vector2(posX, rt.anchoredPosition.y);
+        finalPositions[index] = rt.anchoredPosition;
+        HideCell(index);
+    }
+
+    private void HideCell(int index)
+    {
+        if (digitCells[index] == null) return;
+        digitCells[index].sprite = digitSprites[0];
+        currentDigits[index] = -1;
+        Color c = digitCells[index].color;
+        c.a = 0f;
+        digitCells[index].color = c;
+    }
+
+    private void HideAllCells()
+    {
+        if (digitCells == null) return;
+        for (int i = 0; i < digitCells.Length; i++)
+        {
+            HideCell(i);
+        }
     }
 }
