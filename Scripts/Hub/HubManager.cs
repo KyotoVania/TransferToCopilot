@@ -5,37 +5,35 @@ using System.Collections.Generic;
 using UnityEngine.Events;
 using System.Linq;
 using ScriptableObjects;
+using System.Collections;
 
 public class HubManager : MonoBehaviour
 {
-    [Header("UI Panels")]
-    [SerializeField] private GameObject panelMainHub; // Peut être nul si la vue générale n'a pas de panel dédié
-    [SerializeField] private GameObject panelLevelSelection;
-    [SerializeField] private GameObject panelTeamManagement;
-
-    [Header("UI Elements - Global Hub Info (Optionnel)")]
-    [SerializeField] private TextMeshProUGUI textCurrency;
-    [SerializeField] private TextMeshProUGUI textExperience;
-    [SerializeField] private Button buttonBackToMainMenu;
-  	[Header("Debug Options")]
-    [Tooltip("Liste des SO d'équipement à donner au joueur via le bouton de débogage.")]
-    [SerializeField] private List<EquipmentData_SO> testEquipmentToGive;
-    // Classe interne pour les points d'intérêt
     [System.Serializable]
-    public class HubInterestPoint
+    public class HubPointOfInterest
     {
-        public string Name; // Pour l'inspecteur
-
-        // Utiliser UnityEvent pour pouvoir les assigner dans l'inspecteur
-        public UnityEvent ShowPanelAction;        // Action pour afficher le panel UI
-        public UnityEvent TransitionCameraAction; // Action pour la transition de caméra
+        public string Name;
+        public HubViewpoint Viewpoint;
+        public GameObject UIPanel;
     }
 
-    [Header("Navigation & Points d'Intérêt du Hub")]
-    [SerializeField] private List<HubInterestPoint> hubPointsOfInterest = new List<HubInterestPoint>();
-    private int currentInterestPointIndex = -1;
+    [Header("Navigation & Points d'Intérêt")]
+    [SerializeField] private List<HubPointOfInterest> hubPointsOfInterest = new List<HubPointOfInterest>();
 
-    private HubCameraManager _hubCameraManager; // Sera assigné ou trouvé
+    [Header("Panels & Dépendances")]
+    [SerializeField] private GameObject panelMainHub;
+    
+    // --- NOUVEAU ---
+    [Header("Timing des Transitions")]
+    [Tooltip("Petite pause en secondes sur la vue générale pour stabiliser la caméra avant la transition finale.")]
+    [SerializeField] private float pivotPauseDuration = 0.1f;
+
+    private HubViewpoint _currentViewpoint = HubViewpoint.General;
+    private HubCameraManager _hubCameraManager;
+    private bool _isTransitioning = false;
+	[Header("Debug Options")]
+    [Tooltip("Liste des SO d'équipement à donner au joueur via le bouton de débogage.")]
+    [SerializeField] private List<EquipmentData_SO> testEquipmentToGive;
 
     void Start()
     {
@@ -54,155 +52,129 @@ public class HubManager : MonoBehaviour
         Debug.Log("[HubManager] Initialisé.");
         GameManager.Instance.SetState(GameState.Hub);
 
-        if (buttonBackToMainMenu != null) buttonBackToMainMenu.onClick.AddListener(GoBackToMainMenu);
 
-        // Plus besoin d'InitializeHubPoints() si tout est configuré via l'inspecteur.
-        // Si vous vouliez ajouter dynamiquement des points, cette méthode serait utile.
-
-        UpdateCurrencyDisplay(PlayerDataManager.Instance.Data.Currency);
-        UpdateExperienceDisplay(PlayerDataManager.Instance.Data.Experience);
-        PlayerDataManager.OnCurrencyChanged += UpdateCurrencyDisplay;
-        PlayerDataManager.OnExperienceGained += UpdateExperienceDisplay;
-
-        currentInterestPointIndex = -1;
-        HideAllSectionPanels(); // Cache tous les panels spécifiques
-        _hubCameraManager?.TransitionToGeneralHubView(true);
+        _currentViewpoint = HubViewpoint.General;
+        ShowCorrectPanelForCurrentView();
     }
 
     private void OnDestroy()
     {
-        if (PlayerDataManager.Instance != null)
-        {
-            PlayerDataManager.OnCurrencyChanged -= UpdateCurrencyDisplay;
-            PlayerDataManager.OnExperienceGained -= UpdateExperienceDisplay;
-        }
+        
     }
 
+    
     void Update()
     {
+        if (_isTransitioning) return;
         HandleKeyboardNavigation();
     }
-
     private void HandleKeyboardNavigation()
     {
         if (hubPointsOfInterest.Count == 0) return;
 
-        bool navigated = false;
-        int previousIndex = currentInterestPointIndex;
+        HubViewpoint nextView = _currentViewpoint;
+        HubViewpoint previousView = _currentViewpoint; // --- NOUVEAU ---
 
-        if (Input.GetKeyDown(KeyCode.RightArrow) || Input.GetKeyDown(KeyCode.D))
+        switch (_currentViewpoint)
         {
-            currentInterestPointIndex++;
-            if (currentInterestPointIndex >= hubPointsOfInterest.Count)
-            {
-                currentInterestPointIndex = -1; // Retour à la vue générale
-            }
-            navigated = true;
-        }
-        else if (Input.GetKeyDown(KeyCode.LeftArrow) || Input.GetKeyDown(KeyCode.A))
-        {
-            currentInterestPointIndex--;
-            if (currentInterestPointIndex < -1)
-            {
-                currentInterestPointIndex = hubPointsOfInterest.Count - 1;
-            }
-            navigated = true;
-        }
+            case HubViewpoint.General:
+                if (Input.GetKeyDown(KeyCode.LeftArrow) || Input.GetKeyDown(KeyCode.A))
+                    nextView = HubViewpoint.LevelSelection;
+                else if (Input.GetKeyDown(KeyCode.RightArrow) || Input.GetKeyDown(KeyCode.D))
+                    nextView = HubViewpoint.TeamManagement;
+                break;
 
-        if (navigated)
-        {
-            // On a changé de point d'intérêt.
-            // On lance UNIQUEMENT la transition de caméra et on cache les panels.
-            TransitionToCurrentInterestPoint();
+            case HubViewpoint.LevelSelection:
+                if (Input.GetKeyDown(KeyCode.RightArrow) || Input.GetKeyDown(KeyCode.D))
+                    nextView = HubViewpoint.General;
+                break;
+
+            case HubViewpoint.TeamManagement:
+                if (Input.GetKeyDown(KeyCode.LeftArrow) || Input.GetKeyDown(KeyCode.A))
+                    nextView = HubViewpoint.General;
+                break;
         }
 
-        // NOUVELLE LOGIQUE : Confirmation pour afficher le panel
-        if (currentInterestPointIndex != -1 && (Input.GetKeyDown(KeyCode.Return) || Input.GetKeyDown(KeyCode.Space)))
+        if (nextView != _currentViewpoint)
         {
-            // Vérifie qu'on n'est pas déjà sur un panel affiché par erreur
-            // et que le point d'intérêt est valide.
-            if (currentInterestPointIndex >= 0 && currentInterestPointIndex < hubPointsOfInterest.Count)
-            {
-                Debug.Log($"[HubManager] Interaction avec {hubPointsOfInterest[currentInterestPointIndex].Name} confirmée.");
-                // Affiche le panel correspondant au point d'intérêt actuel.
-                hubPointsOfInterest[currentInterestPointIndex].ShowPanelAction?.Invoke();
-            }
+            StartCoroutine(TransitionToView(nextView, previousView));
+        }
+        else if (_currentViewpoint != HubViewpoint.General && (Input.GetKeyDown(KeyCode.Return) || Input.GetKeyDown(KeyCode.Space)))
+        {
+            ShowCorrectPanelForCurrentView();
         }
     }
-    private void TransitionToCurrentInterestPoint()
+
+ 	 private IEnumerator TransitionToView(HubViewpoint newView, HubViewpoint previousView)
     {
-        HideAllSectionPanels(); // Cacher tous les panels de section
+        _isTransitioning = true;
+        HideAllSectionPanels();
 
-        if (currentInterestPointIndex == -1) // Vue générale
+        // ÉTAPE 1 : Si on n'est pas déjà sur la vue générale et qu'on ne va pas vers elle,
+        // on y retourne d'abord comme point de pivot.
+        if (previousView != HubViewpoint.General && newView != HubViewpoint.General)
         {
-            _hubCameraManager?.TransitionToGeneralHubView();
-            Debug.Log("[HubManager] Navigation clavier : Transition vers la Vue Générale.");
+            Debug.Log($"[HubManager] Pivot: de {previousView} vers General.");
+            // Demande la transition vers la vue générale et attend la fin
+            yield return StartCoroutine(_hubCameraManager.TransitionTo(HubViewpoint.General));
+            
+            // Fait une petite pause pour que Cinemachine se stabilise
+            if (pivotPauseDuration > 0)
+            {
+                yield return new WaitForSeconds(pivotPauseDuration);
+            }
         }
-        else if (currentInterestPointIndex >= 0 && currentInterestPointIndex < hubPointsOfInterest.Count)
+        
+        // ÉTAPE 2 : Maintenant, on lance la transition vers notre destination finale.
+        Debug.Log($"[HubManager] Transition finale: vers {newView}.");
+        _currentViewpoint = newView; // Mettre à jour l'état logique *avant* la transition finale
+        yield return StartCoroutine(_hubCameraManager.TransitionTo(newView));
+
+        _isTransitioning = false;
+        
+        // Affiche le panel de la vue générale si on y est, sinon ne rien afficher.
+        if (_currentViewpoint == HubViewpoint.General)
         {
-            HubInterestPoint point = hubPointsOfInterest[currentInterestPointIndex];
-            point.TransitionCameraAction?.Invoke();
-            Debug.Log($"[HubManager] Navigation clavier : Transition vers le point d'intérêt '{point.Name}'.");
+            ShowCorrectPanelForCurrentView();
         }
     }
-    
+
+     private void ShowCorrectPanelForCurrentView()
+    {
+        HideAllSectionPanels();
+
+        if (_currentViewpoint == HubViewpoint.General)
+        {
+            if (panelMainHub != null) panelMainHub.SetActive(true);
+        }
+        else
+        {
+            var point = hubPointsOfInterest.FirstOrDefault(p => p.Viewpoint == _currentViewpoint);
+            if (point != null && point.UIPanel != null)
+            {
+                point.UIPanel.SetActive(true);
+            }
+        }
+    }
 
     private void HideAllSectionPanels()
     {
-        panelLevelSelection?.SetActive(false);
-        panelTeamManagement?.SetActive(false);
-        
-        if (panelMainHub != null)
+        if (panelMainHub != null) panelMainHub.SetActive(false);
+        foreach (var point in hubPointsOfInterest)
         {
-            // Affiche le panel principal seulement si on est en vue générale
-            panelMainHub.SetActive(currentInterestPointIndex == -1);
+            point.UIPanel?.SetActive(false);
         }
     }
     
-    // Méthodes publiques pour être appelées par UnityEvent ou HubInteractable
-    public void GoToLevelSelection() // Appelée par clic sur objet 3D ou par UnityEvent
+    public void GoToGeneralView()
     {
-        // Optionnel: mettre à jour currentInterestPointIndex si appelé par clic
-        currentInterestPointIndex = hubPointsOfInterest.FindIndex(p => p.Name == "Level Selection"); // Adapter le nom si besoin
-
-        HideAllSectionPanels();
-        if (panelMainHub != null) panelMainHub.SetActive(false);
-        panelLevelSelection?.SetActive(true);
-        _hubCameraManager?.TransitionToLevelSelectionView();
-        Debug.Log("[HubManager] Affichage Sélection de Niveaux.");
+        if (_isTransitioning) return;
+        // Pour le bouton retour, on ne passe pas par le pivot, on va juste à la vue générale.
+        StartCoroutine(TransitionToView(HubViewpoint.General, _currentViewpoint));
     }
+    
 
-    public void GoToTeamManagement() // Appelée par clic sur objet 3D ou par UnityEvent
-    {
-        // Optionnel: mettre à jour currentInterestPointIndex
-        currentInterestPointIndex = hubPointsOfInterest.FindIndex(p => p.Name == "Team Management"); // Adapter le nom
-
-        HideAllSectionPanels();
-        if (panelMainHub != null) panelMainHub.SetActive(false);
-        panelTeamManagement?.SetActive(true);
-        _hubCameraManager?.TransitionToTeamManagementView();
-        Debug.Log("[HubManager] Affichage Gestion d'Équipe.");
-    }
-     public void GoToGeneralView() // Pour revenir à la vue générale via un bouton UI par exemple
-    {
-        currentInterestPointIndex = -1;
-        HideAllSectionPanels();
-        if (panelMainHub != null) panelMainHub.SetActive(true);
-        _hubCameraManager?.TransitionToGeneralHubView();
-        Debug.Log("[HubManager] Retour à la vue générale demandée.");
-    }
-
-
-    private void UpdateCurrencyDisplay(int newAmount)
-    {
-        if (textCurrency != null) textCurrency.text = $"Monnaie: {newAmount}";
-    }
-
-    private void UpdateExperienceDisplay(int newAmount)
-    {
-        if (textExperience != null) textExperience.text = $"XP: {newAmount}";
-    }
-
+    
     public void StartLevel(LevelData_SO levelData)
     {
         if (levelData == null) { Debug.LogError("[HubManager] LevelData_SO est null."); return; }

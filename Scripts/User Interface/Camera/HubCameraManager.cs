@@ -1,27 +1,31 @@
 using UnityEngine;
-using Unity.Cinemachine; // Ou Cinemachine
+using Unity.Cinemachine;
 using System.Collections;
+using System.Collections.Generic;
 
-public class HubCameraManager : MonoBehaviour // Potentiellement un Singleton LOCAL à la scène Hub
+public enum HubViewpoint
 {
-    // --- Singleton Local (Optionnel mais pratique pour accès facile depuis HubManager) ---
+    General,
+    LevelSelection,
+    TeamManagement
+}
+
+public class HubCameraManager : MonoBehaviour
+{
     public static HubCameraManager Instance { get; private set; }
-    // ------------------------------------------------------------------------------------
+    
+    [System.Serializable]
+    public struct ViewpointCameraMapping
+    {
+        public HubViewpoint viewpoint;
+        public CinemachineCamera virtualCamera;
+    }
 
     [Header("Cinemachine Virtual Cameras")]
-    [SerializeField] private CinemachineCamera vcamGeneralHubView;    // Vue d'ensemble de la clairière
-    [SerializeField] private CinemachineCamera vcamLevelSelectionView; // Vue zoomée sur le "camp" de sélection de niveaux
-    [SerializeField] private CinemachineCamera vcamTeamManagementView; // Vue zoomée sur le "camp" de gestion d'équipe
-    // Ajoutez d'autres VCams pour d'autres camps/points d'intérêt
+    [Tooltip("Liez chaque point de vue à sa caméra virtuelle correspondante.")]
+    [SerializeField] private List<ViewpointCameraMapping> viewpointCameras;
 
-    [Header("Camera Targets (Transforms)")]
-    [Tooltip("Cible pour la vue générale du Hub")]
-    [SerializeField] private Transform targetGeneralHub;
-    [Tooltip("Cible pour la vue de la sélection de niveaux")]
-    [SerializeField] private Transform targetLevelSelection;
-    [Tooltip("Cible pour la vue de la gestion d'équipe")]
-    [SerializeField] private Transform targetTeamManagement;
-
+    private Dictionary<HubViewpoint, CinemachineCamera> _cameraDictionary = new Dictionary<HubViewpoint, CinemachineCamera>();
     private CinemachineBrain _cinemachineBrain;
     private bool _isTransitioning = false;
 
@@ -36,8 +40,17 @@ public class HubCameraManager : MonoBehaviour // Potentiellement un Singleton LO
         }
         else
         {
-            Destroy(gameObject); // Empêche les doublons si la scène est rechargée sans DontDestroyOnLoad
+            Destroy(gameObject);
             return;
+        }
+        
+        // Remplir le dictionnaire pour un accès rapide
+        foreach (var mapping in viewpointCameras)
+        {
+            if (mapping.virtualCamera != null)
+            {
+                _cameraDictionary[mapping.viewpoint] = mapping.virtualCamera;
+            }
         }
     }
 
@@ -46,71 +59,50 @@ public class HubCameraManager : MonoBehaviour // Potentiellement un Singleton LO
         if (Camera.main != null) _cinemachineBrain = Camera.main.GetComponent<CinemachineBrain>();
         if (_cinemachineBrain == null) Debug.LogError("[HubCameraManager] CinemachineBrain non trouvé sur la caméra principale !");
 
-        if (vcamGeneralHubView == null || vcamLevelSelectionView == null || vcamTeamManagementView == null ||
-            targetGeneralHub == null || targetLevelSelection == null || targetTeamManagement == null)
+        // Assurer que toutes les caméras ont une cible dans l'éditeur
+        foreach (var mapping in viewpointCameras)
         {
-            Debug.LogError("[HubCameraManager] Une ou plusieurs VCams ou Cibles ne sont pas assignées !");
-            enabled = false;
-            return;
+            if (mapping.virtualCamera.Follow == null || mapping.virtualCamera.LookAt == null)
+            {
+                Debug.LogWarning($"[HubCameraManager] La VCam pour '{mapping.viewpoint}' n'a pas de cible Follow/LookAt assignée dans l'inspecteur.");
+            }
         }
-
-        // Configurer les cibles des VCams
-        vcamGeneralHubView.Follow = targetGeneralHub;
-        vcamGeneralHubView.LookAt = targetGeneralHub; // Ou une cible LookAt spécifique
-
-        vcamLevelSelectionView.Follow = targetLevelSelection;
-        vcamLevelSelectionView.LookAt = targetLevelSelection;
-
-        vcamTeamManagementView.Follow = targetTeamManagement;
-        vcamTeamManagementView.LookAt = targetTeamManagement;
-
-
-        TransitionToGeneralHubView(true); // true pour une transition instantanée au démarrage
+        
+        // État initial
+        TransitionTo(HubViewpoint.General, true);
     }
 
-    private IEnumerator SwitchCameraCoroutine(CinemachineCamera camToActivate, CinemachineCamera[] otherCamsToDeactivate, bool instant = false)
+    public IEnumerator TransitionTo(HubViewpoint view, bool instant = false)
     {
-        if (_isTransitioning && !instant) yield break; // Empêche les transitions multiples
+        if (_isTransitioning && !instant) yield break;
+        if (!_cameraDictionary.ContainsKey(view))
+        {
+            Debug.LogError($"[HubCameraManager] Aucune VCam n'est configurée pour le point de vue '{view}'.");
+            yield break;
+        }
+
         _isTransitioning = true;
+        
+        CinemachineCamera camToActivate = _cameraDictionary[view];
 
+        // Mettre toutes les caméras en priorité basse
+        foreach (var cam in _cameraDictionary.Values)
+        {
+            cam.Priority = PRIORITY_INACTIVE;
+        }
+        
+        // Activer la bonne caméra
         camToActivate.Priority = PRIORITY_ACTIVE;
-        foreach (var cam in otherCamsToDeactivate)
+        
+        // Attendre la fin de la transition
+        if (!instant && _cinemachineBrain != null)
         {
-            if (cam != camToActivate) cam.Priority = PRIORITY_INACTIVE;
-        }
-
-        if (instant || _cinemachineBrain == null)
-        {
-            // Pour une transition instantanée ou si pas de brain, l'effet est immédiat
-            if (_cinemachineBrain != null) _cinemachineBrain.ManualUpdate(); // Forcer la mise à jour si possible
-        }
-        else if (_cinemachineBrain.IsBlending)
-        {
+            // Attendre une frame pour que le brain détecte le changement de priorité
+            yield return null; 
+            // Attendre que le blending soit terminé
             yield return new WaitUntil(() => !_cinemachineBrain.IsBlending);
-        } else {
-            // Si pas de blend en cours mais un brain existe, une petite attente peut aider
-            // si le blend par défaut est très court ou pour des raisons de timing.
-            // Alternativement, la durée du blend par défaut du Brain devrait suffire.
-            float blendTime = _cinemachineBrain.DefaultBlend.BlendTime;
-            if (blendTime > 0) yield return new WaitForSeconds(blendTime);
-            else yield return null; // Juste une frame si pas de blend time
         }
-
-        Debug.Log($"[HubCameraManager] Transition vers {camToActivate.Name} complétée.");
+        
         _isTransitioning = false;
-    }
-
-    // Méthodes publiques appelées par HubManager
-    public void TransitionToGeneralHubView(bool instant = false)
-    {
-        StartCoroutine(SwitchCameraCoroutine(vcamGeneralHubView, new[] { vcamLevelSelectionView, vcamTeamManagementView }, instant));
-    }
-    public void TransitionToLevelSelectionView(bool instant = false)
-    {
-        StartCoroutine(SwitchCameraCoroutine(vcamLevelSelectionView, new[] { vcamGeneralHubView, vcamTeamManagementView }, instant));
-    }
-    public void TransitionToTeamManagementView(bool instant = false)
-    {
-        StartCoroutine(SwitchCameraCoroutine(vcamTeamManagementView, new[] { vcamGeneralHubView, vcamLevelSelectionView }, instant));
     }
 }
