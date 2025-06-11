@@ -63,8 +63,7 @@ public class Character3DPreview : MonoBehaviour, IPointerDownHandler, IPointerUp
         }
     }
 
-    // --- Les autres méthodes (ShowCharacter, ClearPreview, etc.) restent inchangées ---
-    public void ShowCharacter(GameObject characterPrefab)
+        public void ShowCharacter(GameObject characterPrefab)
     {
         ClearPreview();
         if (characterPrefab == null) return;

@@ -229,4 +229,12 @@ public class CharacterSelectionUI : MonoBehaviour
         // C'est SEULEMENT MAINTENANT, à la toute fin, qu'on désactive l'ancien panel.
         gameObject.SetActive(false);
     }
+    
+    private void OnDisable()
+    {
+        if (characterPreview != null)
+        {
+            characterPreview.ClearPreview();
+        }
+    }
 }

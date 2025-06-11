@@ -30,7 +30,8 @@ public enum ActionType
     EndLevel,
     TriggerVictory,
     TriggerDefeat,
-    TriggerGameObject
+    TriggerGameObject,
+    ShowBossWarningBanner
 }
 
 // --- Classe sérialisable pour un événement ---

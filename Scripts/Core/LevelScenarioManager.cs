@@ -14,7 +14,7 @@ public class LevelScenarioManager : MonoBehaviour
     private LevelScenario_SO _currentScenario;
     private readonly Dictionary<ScenarioEvent, bool> _processedEvents = new Dictionary<ScenarioEvent, bool>();
     private float _levelStartTime;
-
+  
     // Structure de suivi simplifiée pour les objectifs "Détruire tout"
     private class ObjectiveTracker
     {
@@ -201,14 +201,13 @@ public class LevelScenarioManager : MonoBehaviour
                 else
                     Debug.LogError("[LevelScenarioManager] WinLoseController.Instance non trouvé pour TriggerDefeat !");
                 break;
-
-            // AJOUT DE LA NOUVELLE LOGIQUE
+           
             case ActionType.TriggerGameObject:
                 TriggerGameObjectByName(scenarioEvent.actionParameter_GameObjectName);
                 break;
         }
     }
-
+    
 
     private void SetSpawnerBuildingActive(string tag, bool isActive)
     {

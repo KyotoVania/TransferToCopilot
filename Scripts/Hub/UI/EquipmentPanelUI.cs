@@ -248,12 +248,25 @@
             RefreshAll();
         }
 
-        public void HidePanel()
+        private void HidePanel()
         {
-            gameObject.SetActive(false);
+            if (characterPreview != null)
+            {
+                characterPreview.ClearPreview();
+            }
+    
             if (teamManagementPanel != null)
             {
                 teamManagementPanel.SetActive(true);
+            }
+    
+            gameObject.SetActive(false);
+        }
+        private void OnDisable()
+        {
+            if (characterPreview != null)
+            {
+                characterPreview.ClearPreview();
             }
         }
     }   
