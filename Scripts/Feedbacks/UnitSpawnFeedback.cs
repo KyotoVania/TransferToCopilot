@@ -19,7 +19,8 @@ public class UnitSpawnFeedback : MonoBehaviour
     [Tooltip("Délai avant de commencer la séquence")]
     public float DelayBeforeSpawn = 0f;
     
-    [Tooltip("Synchroniser avec le beat du RhythmManager")]
+    // --- MODIFICATION : Texte du Tooltip mis à jour ---
+    [Tooltip("Synchroniser avec le beat du MusicManager")]
     public bool SyncWithRhythm = false;
     
     [Header("Debug")]
@@ -161,9 +162,5 @@ public class UnitSpawnFeedback : MonoBehaviour
                     Debug.Log($"[UnitSpawnFeedback] MMF_Player auto-assigné: {mmfPlayer.name}");
             }
         }
-    }
-
-    
-
-   
+    }   
 }

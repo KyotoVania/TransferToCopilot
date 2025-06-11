@@ -3,6 +3,7 @@ using Unity.Behavior;
 using System.Collections;
 using System;
 using Unity.Properties;
+using Unity.Behavior.GraphFramework; 
 
 [Serializable]
 [GeneratePropertyBag]
@@ -10,14 +11,14 @@ using Unity.Properties;
     name: "Move To Target (Step)",
     story: "Move To Target (Step)",
     category: "My Actions",
-    id: "YOUR_UNIQUE_ID_MoveToTarget_Step" // ID mis à jour pour une nouvelle version
+    id: "YOUR_UNIQUE_ID_MoveToTarget_Step1" // ID mis à jour pour une nouvelle version
 )]
 public class MoveToTargetNode_WithInternalBeatWait : Unity.Behavior.Action
 {
     // --- Blackboard Variable Noms ---
     private const string SELF_UNIT_VAR = "SelfUnit";
     private const string MOVEMENT_TARGET_POS_VAR = "MovementTargetPosition";
-    private const string IS_MOVING_BB_VAR = "IsMoving"; // Flag global sur le BB
+    private const string IS_MOVING_BB_VAR = "IsMoving";
 
     // --- Références Blackboard mises en cache ---
     private BlackboardVariable<Unit> bbSelfUnit;
@@ -30,22 +31,18 @@ public class MoveToTargetNode_WithInternalBeatWait : Unity.Behavior.Action
     private int requiredMovementDelayInternal = 0;
     private bool isSubscribedToBeat = false;
     private bool delayPhaseComplete = false;
-    private bool movementActionStarted = false; // True si la coroutine MoveToTile de l'unité a été appelée
-    private Coroutine unitStepCoroutineHandle;   // Pour potentiellement arrêter la coroutine de l'unité si le noeud est interrompu
+    private bool movementActionStarted = false;
+    private Coroutine unitStepCoroutineHandle;
 
-    private string nodeInstanceId; // Pour des logs plus clairs si plusieurs instances tournent
-    private bool blackboardVariablesAreValid = false; // Flag pour le cache
-
-    // =================================================================================================================
-    // CYCLE DE VIE DU NŒUD
-    // =================================================================================================================
+    private string nodeInstanceId;
+    private bool blackboardVariablesAreValid = false;
 
     protected override Status OnStart()
     {
         nodeInstanceId = Guid.NewGuid().ToString("N").Substring(0, 6);
-        ResetInternalState(); // Toujours réinitialiser l'état au démarrage
+        ResetInternalState();
 
-        if (!CacheBlackboardVariables()) // Tente de mettre en cache les variables du BB
+        if (!CacheBlackboardVariables())
         {
             return Status.Failure;
         }
@@ -54,132 +51,120 @@ public class MoveToTargetNode_WithInternalBeatWait : Unity.Behavior.Action
         if (selfUnitInstanceInternal == null)
             return Status.Failure;
 
-        // Mettre à jour le Blackboard : l'unité est maintenant engagée dans ce processus de mouvement.
         SetBlackboardIsMoving(true);
 
-        // Vérifier si l'unité est déjà à la destination finale
         Vector2Int finalDestination = bbMovementTargetPosition.Value;
         Tile currentTile = selfUnitInstanceInternal.GetOccupiedTile();
         if (currentTile != null && currentTile.column == finalDestination.x && currentTile.row == finalDestination.y)
         {
-            // SetBlackboardIsMoving(false); // L'état sera remis à false dans OnEnd
-            return Status.Success; // Objectif déjà atteint
+            return Status.Success;
         }
 
         requiredMovementDelayInternal = selfUnitInstanceInternal.MovementDelay;
 
         if (requiredMovementDelayInternal > 0)
         {
-            if (RhythmManager.Instance != null)
+            // --- MODIFICATION : Utilisation de MusicManager ---
+            if (MusicManager.Instance != null)
             {
-                RhythmManager.OnBeat += OnBeatReceived;
+                MusicManager.Instance.OnBeat += OnBeatReceived;
                 isSubscribedToBeat = true;
             }
             else
-                return Status.Failure; // Le délai ne peut pas être respecté
+                return Status.Failure;
         }
         else
-            delayPhaseComplete = true; // Pas de délai, on passe directement à la phase de mouvement
+            delayPhaseComplete = true;
 
-        return Status.Running; // Le nœud commence à s'exécuter (soit en attente de délai, soit prêt à bouger)
+        return Status.Running;
     }
 
     protected override Status OnUpdate()
     {
-        LogNodeMessage("OnUpdate BEGIN", false, true);
-        if (selfUnitInstanceInternal == null) // Sécurité si l'unité a été détruite pendant que le nœud tournait
+        // ... (La logique interne reste la même, car elle ne dépend que des flags internes)
+        if (selfUnitInstanceInternal == null)
             return Status.Failure;
 
-        // --- Phase 1: Attente du délai de battement ---
         if (!delayPhaseComplete)
         {
-            return Status.Running; // On attend que OnBeatReceived mette delayPhaseComplete à true
+            return Status.Running;
         }
         
-        // --- Phase 2: Exécution de l'action de mouvement (si pas encore démarrée) ---
         if (!movementActionStarted)
             return AttemptMovementStep();
 
-        // --- Phase 3: Mouvement en cours, surveillance de selfUnitInstanceInternal.IsMoving ---
-        // Si movementActionStarted est true, cela signifie qu'on a lancé la coroutine de l'unité.
         if (selfUnitInstanceInternal.IsMoving)
         {
-            return Status.Running; // L'unité signale qu'elle est toujours en train de bouger
+            return Status.Running;
         }
         else
         {
-            // Unit.IsMoving est false. Cela signifie que la coroutine Unit.MoveToTile s'est terminée.
-            return Status.Success; // Le pas de mouvement est terminé
+            return Status.Success;
         }
     }
 
     protected override void OnEnd()
     {
-
-        if (isSubscribedToBeat && RhythmManager.Instance != null)
+        // --- MODIFICATION : Utilisation de MusicManager ---
+        if (isSubscribedToBeat && MusicManager.Instance != null)
         {
-            RhythmManager.OnBeat -= OnBeatReceived;
+            MusicManager.Instance.OnBeat -= OnBeatReceived;
         }
         isSubscribedToBeat = false;
-
-        // Si le nœud est terminé (ou interrompu) alors qu'une coroutine de mouvement de l'unité était potentiellement en cours
+        
+        // ... (Le reste de la logique de OnEnd reste inchangé)
         if (movementActionStarted && selfUnitInstanceInternal != null && unitStepCoroutineHandle != null)
         {
             selfUnitInstanceInternal.StopCoroutine(unitStepCoroutineHandle);
-            unitStepCoroutineHandle = null; // Important
+            unitStepCoroutineHandle = null;
 
-            // Si la coroutine de l'unité a été interrompue par le Behavior Graph,
-            // il faut s'assurer que l'état de l'unité est cohérent.
             if (selfUnitInstanceInternal.IsMoving)
             {
                 selfUnitInstanceInternal.IsMoving = false;
-                selfUnitInstanceInternal.ReleaseCurrentReservation(); // Crucial
+                selfUnitInstanceInternal.ReleaseCurrentReservation();
             }
         }
-
-        // Assurer que le Blackboard reflète que CETTE action de mouvement spécifique est terminée.
+        
         SetBlackboardIsMoving(false);
-
-        ResetInternalState(); // Prêt pour la prochaine exécution
+        ResetInternalState();
     }
-
-    // =================================================================================================================
-    // LOGIQUE SPÉCIFIQUE DU NŒUD
-    // =================================================================================================================
-
-    private void OnBeatReceived()
+    
+    // --- MODIFICATION : Signature de la méthode mise à jour ---
+    private void OnBeatReceived(float beatDuration)
     {
-        if (selfUnitInstanceInternal == null) // Unité détruite entre-temps ?
+        if (selfUnitInstanceInternal == null)
         {
-            if (isSubscribedToBeat && RhythmManager.Instance != null) RhythmManager.OnBeat -= OnBeatReceived;
+            // --- MODIFICATION : Utilisation de MusicManager ---
+            if (isSubscribedToBeat && MusicManager.Instance != null) MusicManager.Instance.OnBeat -= OnBeatReceived;
             isSubscribedToBeat = false;
             return;
         }
 
-        if (!delayPhaseComplete) // Si on est toujours dans la phase d'attente
+        if (!delayPhaseComplete)
         {
             beatCounterInternal++;
-
             if (beatCounterInternal >= requiredMovementDelayInternal)
             {
                 delayPhaseComplete = true;
-                if (isSubscribedToBeat && RhythmManager.Instance != null)
+                // --- MODIFICATION : Utilisation de MusicManager ---
+                if (isSubscribedToBeat && MusicManager.Instance != null)
                 {
-                    RhythmManager.OnBeat -= OnBeatReceived; // Se désabonner dès que le délai est passé
+                    MusicManager.Instance.OnBeat -= OnBeatReceived;
                     isSubscribedToBeat = false;
                 }
             }
         }
-        else // Reçu un battement alors que le délai est déjà passé (ne devrait pas arriver si désabonnement correct)
+        else
         {
-             if (isSubscribedToBeat && RhythmManager.Instance != null) RhythmManager.OnBeat -= OnBeatReceived;
+             // --- MODIFICATION : Utilisation de MusicManager ---
+             if (isSubscribedToBeat && MusicManager.Instance != null) MusicManager.Instance.OnBeat -= OnBeatReceived;
              isSubscribedToBeat = false;
         }
     }
 
     private Status AttemptMovementStep()
     {
-        movementActionStarted = true; // Marquer que l'on a tenté de démarrer le mouvement
+        movementActionStarted = true;
 
         Vector2Int finalDestination = bbMovementTargetPosition.Value;
         Tile currentUnitTile = selfUnitInstanceInternal.GetOccupiedTile();
@@ -189,12 +174,9 @@ public class MoveToTargetNode_WithInternalBeatWait : Unity.Behavior.Action
             LogNodeMessage($"AttemptMovementStep: L'unité {selfUnitInstanceInternal.name} n'est pas sur une tuile valide. Échec.", true, true);
             return Status.Failure;
         }
-        // Vérification (redondante si OnStart l'a fait, mais bonne sécurité si délai=0)
         if (currentUnitTile.column == finalDestination.x && currentUnitTile.row == finalDestination.y)
         {
-            LogNodeMessage(
-                $"AttemptMovementStep: L'unité {selfUnitInstanceInternal.name} est déjà sur la destination finale ({finalDestination.x},{finalDestination.y}).",
-                false, true);
+            LogNodeMessage($"AttemptMovementStep: L'unité {selfUnitInstanceInternal.name} est déjà sur la destination finale ({finalDestination.x},{finalDestination.y}).", false, true);
             return Status.Success;
         }
 
@@ -205,74 +187,53 @@ public class MoveToTargetNode_WithInternalBeatWait : Unity.Behavior.Action
 
         if (nextStepTile == null)
         {
-            // Si GetNextTile... retourne null, cela signifie soit qu'on EST sur la cible (déjà géré au-dessus),
-            // soit qu'aucun chemin n'est possible vers la tuile finale.
             LogNodeMessage($"AttemptMovementStep: GetNextTileTowardsDestinationForBG n'a retourné aucun pas valide vers ({finalDestination.x},{finalDestination.y}) depuis ({currentUnitTile.column},{currentUnitTile.row}). Échec du pathfinding pour ce pas.", true, true);
-            return Status.Failure; // Pas de chemin trouvé pour ce pas.
+            return Status.Failure;
         }
         LogNodeMessage($"AttemptMovementStep: Prochain pas vers ({finalDestination.x},{finalDestination.y}) est la tuile ({nextStepTile.column},{nextStepTile.row}).", false, true);
 
-        // Démarrer la coroutine de mouvement sur l'instance de l'unité.
-        // Unit.MoveToTile est responsable de mettre Unit.IsMoving = true au début et false à la fin.
         if(selfUnitInstanceInternal.gameObject.activeInHierarchy && selfUnitInstanceInternal.enabled)
         {
             unitStepCoroutineHandle = selfUnitInstanceInternal.StartCoroutine(selfUnitInstanceInternal.MoveToTile(nextStepTile));
             if (unitStepCoroutineHandle == null)
             {
-                movementActionStarted = false; // N'a pas pu démarrer
+                movementActionStarted = false;
                 return Status.Failure;
             }
-            // À ce stade, on s'attend à ce que Unit.MoveToTile mette selfUnitInstanceInternal.IsMoving à true si le mouvement commence réellement.
-            // OnUpdate va ensuite surveiller selfUnitInstanceInternal.IsMoving.
         }
         else
         {
-            movementActionStarted = false; // N'a pas pu démarrer
+            movementActionStarted = false;
             return Status.Failure;
         }
 
-        return Status.Running; // Le mouvement a été initié, OnUpdate surveillera la suite.
+        return Status.Running;
     }
-
-    // =================================================================================================================
-    // MÉTHODES UTILITAIRES ET DE NETTOYAGE
-    // =================================================================================================================
-
+    
+    // --- Le reste du script reste inchangé (méthodes utilitaires) ---
     private void ResetInternalState()
     {
-        // Références Blackboard (le cache est géré par blackboardVariablesAreValid)
-        // selfUnitInstanceInternal sera mis à jour par CacheBlackboardVariables
-
-        // État du nœud
         beatCounterInternal = 0;
         requiredMovementDelayInternal = 0;
-        // isSubscribedToBeat est géré par OnStart/OnEnd
         delayPhaseComplete = false;
         movementActionStarted = false;
-        unitStepCoroutineHandle = null; // Important de nullifier
-
+        unitStepCoroutineHandle = null;
     }
 
     private bool CacheBlackboardVariables()
     {
         if (blackboardVariablesAreValid) return true;
-
-        var agent = this.GameObject.GetComponent<BehaviorGraphAgent>(); // this.GameObject est le GameObject de l'agent
+        var agent = this.GameObject.GetComponent<BehaviorGraphAgent>();
         if (agent == null || agent.BlackboardReference == null)
         {
-            Debug.LogError($"[{nodeInstanceId}] CacheBlackboardVariables: BehaviorGraphAgent or BlackboardReference is null on GameObject '{this.GameObject?.name}'.");
             return false;
         }
-
         var blackboard = agent.BlackboardReference;
         bool allFound = true;
-
-        if (!blackboard.GetVariable(SELF_UNIT_VAR, out bbSelfUnit)) { Debug.LogError($"[{nodeInstanceId}] BBVar '{SELF_UNIT_VAR}' missing."); allFound = false; }
-        if (!blackboard.GetVariable(MOVEMENT_TARGET_POS_VAR, out bbMovementTargetPosition)) { Debug.LogError($"[{nodeInstanceId}] BBVar '{MOVEMENT_TARGET_POS_VAR}' missing."); allFound = false; }
-        if (!blackboard.GetVariable(IS_MOVING_BB_VAR, out bbIsMoving)) { Debug.LogError($"[{nodeInstanceId}] BBVar '{IS_MOVING_BB_VAR}' missing (CRITICAL)."); allFound = false; }
-
+        if (!blackboard.GetVariable(SELF_UNIT_VAR, out bbSelfUnit)) { allFound = false; }
+        if (!blackboard.GetVariable(MOVEMENT_TARGET_POS_VAR, out bbMovementTargetPosition)) { allFound = false; }
+        if (!blackboard.GetVariable(IS_MOVING_BB_VAR, out bbIsMoving)) { allFound = false; }
         blackboardVariablesAreValid = allFound;
-        if (!allFound) Debug.LogError($"[{nodeInstanceId}] CacheBlackboardVariables: Failed to cache one or more critical Blackboard variables.");
         return allFound;
     }
 
@@ -280,34 +241,30 @@ public class MoveToTargetNode_WithInternalBeatWait : Unity.Behavior.Action
     {
         if (bbIsMoving != null)
         {
-            if (bbIsMoving.Value != value) // Évite écritures inutiles
+            if (bbIsMoving.Value != value)
             {
                 bbIsMoving.Value = value;
             }
         }
         else
         {
-            // Tenter de recacher si bbIsMoving est null mais que les variables n'étaient pas valides avant
             if (!blackboardVariablesAreValid && CacheBlackboardVariables() && bbIsMoving != null)
             {
                 bbIsMoving.Value = value;
             }
         }
     }
+    
     private void LogNodeMessage(string message, bool isError = false, bool forceLog = false)
     {
-        if(!blackboardVariablesAreValid && !isError) return; // Ne pas logger les messages normaux si BB pas prêt
-
+        if(!blackboardVariablesAreValid && !isError) return;
         string unitName = selfUnitInstanceInternal != null ? selfUnitInstanceInternal.name : (bbSelfUnit?.Value != null ? bbSelfUnit.Value.name : "NoUnit");
-        // string log = $"[{nodeInstanceId} | {unitName} | MoveToTargetNode] {message}";
         string logPrefix = $"<color=orange>[{nodeInstanceId} | {unitName} | MoveToTargetNode]</color>";
-
-
         if (isError)
         {
             Debug.LogError($"{logPrefix} {message}", this.GameObject);
         }
-        else if (forceLog || (selfUnitInstanceInternal != null /* && selfUnitInstanceInternal.enableVerboseLogging // Adaptez si vous avez un tel flag */))
+        else if (forceLog)
         {
             Debug.Log($"{logPrefix} {message}", this.GameObject);
         }

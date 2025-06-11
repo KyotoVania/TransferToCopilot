@@ -13,7 +13,6 @@ public enum UnitState
     Capturing,
 }
 
-
 public abstract class Unit : MonoBehaviour, ITileReservationObserver
 {
     protected abstract Vector2Int? TargetPosition { get; }
@@ -48,7 +47,6 @@ public abstract class Unit : MonoBehaviour, ITileReservationObserver
     public void SetSpawningState(bool isCurrentlySpawning)
     {
         IsSpawning = isCurrentlySpawning;
-      
     }
 
     public int Health { get; protected set; }
@@ -57,7 +55,7 @@ public abstract class Unit : MonoBehaviour, ITileReservationObserver
     {
         get
         {
-            float baseAttack = unitStats?.Attack ?? 0; //
+            float baseAttack = unitStats?.Attack ?? 0;
             float multiplier = 1f;
             foreach (var buff in activeBuffs.Where(b => b.Stat == StatToBuff.Attack))
             {
@@ -66,12 +64,11 @@ public abstract class Unit : MonoBehaviour, ITileReservationObserver
             return Mathf.Max(0, Mathf.RoundToInt(baseAttack * multiplier));
         }
     }
-
     public virtual int Defense
     {
         get
         {
-            float baseDefense = unitStats?.Defense ?? 0; //
+            float baseDefense = unitStats?.Defense ?? 0;
             float multiplier = 1f;
             foreach (var buff in activeBuffs.Where(b => b.Stat == StatToBuff.Defense))
             {
@@ -113,7 +110,6 @@ public abstract class Unit : MonoBehaviour, ITileReservationObserver
     protected bool isInteractingWithBuilding = false;
     protected NeutralBuilding buildingBeingCaptured = null;
     protected int beatsSpentCapturing = 0;
-
     
     protected List<ActiveBuff> activeBuffs = new List<ActiveBuff>();
 
@@ -124,7 +120,6 @@ public abstract class Unit : MonoBehaviour, ITileReservationObserver
         if (occupiedTile == null || HexGridManager.Instance == null) return new List<Tile>();
         return HexGridManager.Instance.GetTilesWithinRange(occupiedTile.column, occupiedTile.row, Mathf.CeilToInt(AttackRange));
     }
-
 
     protected virtual IEnumerator Start()
     {
@@ -165,30 +160,27 @@ public abstract class Unit : MonoBehaviour, ITileReservationObserver
 
     protected virtual void OnEnable()
     {
-       // Si l'unité est déjà attachée (après un premier Start) et qu'on la réactive
-       if (isAttached && RhythmManager.Instance != null)
+       // --- MODIFICATION : Utilisation de MusicManager ---
+       if (isAttached && MusicManager.Instance != null)
        {
-            RhythmManager.OnBeat -= OnRhythmBeatInternal; // Éviter double abonnement
-            RhythmManager.OnBeat += OnRhythmBeatInternal;
+            MusicManager.Instance.OnBeat -= OnRhythmBeatInternal;
+            MusicManager.Instance.OnBeat += OnRhythmBeatInternal;
        }
     }
 
     protected virtual void OnDisable()
     {
-       if (RhythmManager.Instance != null)
+       // --- MODIFICATION : Utilisation de MusicManager ---
+       if (MusicManager.Instance != null)
        {
-            // Se désabonner de l'événement OnBeat pour éviter les fuites de mémoire
             if (isAttached)
-            RhythmManager.OnBeat -= OnRhythmBeatInternal;
+                MusicManager.Instance.OnBeat -= OnRhythmBeatInternal;
        }
-        // Si l'unité est en train de bouger ou capturer, tu pourrais vouloir
-        // annuler ces actions proprement ici.
         IsMoving = false;
         _isAttacking = false;
         if (currentState == UnitState.Capturing) StopCapturing();
     }
 
-//public getter to get the unitStats.UnitType
     public UnitType GetUnitType()
     {
         return unitStats?.Type ?? UnitType.Null; 
@@ -228,7 +220,13 @@ public abstract class Unit : MonoBehaviour, ITileReservationObserver
                     {
                         AttachToTile(nearestTile);
                         isAttached = true;
-                        RhythmManager.OnBeat += OnRhythmBeatInternal;
+                        
+                        // --- MODIFICATION : Utilisation de MusicManager ---
+                        if (MusicManager.Instance != null)
+                        {
+                            MusicManager.Instance.OnBeat += OnRhythmBeatInternal;
+                        }
+                        
                         if (debugUnitMovement) Debug.Log($"[{name}] Attached to tile ({nearestTile.column}, {nearestTile.row}) and subscribed to OnRhythmBeat.");
                         yield break;
                     }
@@ -240,12 +238,12 @@ public abstract class Unit : MonoBehaviour, ITileReservationObserver
 
     public virtual void OnCaptureBeat()
     {
-        if (currentState != UnitState.Capturing) return; // Sécurité
+        if (currentState != UnitState.Capturing) return;
 
-        beatsSpentCapturing++; // Compteur interne de l'unité pour info, la logique principale est dans NeutralBuilding
+        beatsSpentCapturing++;
         if (useAnimations && animator != null)
         {
-            animator.SetTrigger(CaptureTriggerId); // Assurez-vous que ce trigger est réinitialisé ailleurs ou est bien un trigger one-shot
+            animator.SetTrigger(CaptureTriggerId);
         }
     }
 
@@ -255,7 +253,7 @@ public abstract class Unit : MonoBehaviour, ITileReservationObserver
         {
             if (buildingBeingCaptured != null)
             {
-                buildingBeingCaptured.StopCapturing(this); // Notifier le bâtiment
+                buildingBeingCaptured.StopCapturing(this);
                 buildingBeingCaptured = null;
             }
             beatsSpentCapturing = 0;
@@ -263,12 +261,14 @@ public abstract class Unit : MonoBehaviour, ITileReservationObserver
         }
     }
 
-    private void OnRhythmBeatInternal()
+    // --- MODIFICATION : Signature de la méthode mise à jour ---
+    private void OnRhythmBeatInternal(float beatDuration)
     {
-        OnRhythmBeat();
+        OnRhythmBeat(beatDuration);
     }
 
-    protected virtual void OnRhythmBeat()
+    // --- MODIFICATION : Signature de la méthode mise à jour ---
+    protected virtual void OnRhythmBeat(float beatDuration)
     {
         HandleMovementOnBeat();
         if (!IsMoving)
@@ -282,6 +282,8 @@ public abstract class Unit : MonoBehaviour, ITileReservationObserver
         if (currentState == UnitState.Capturing) { HandleCaptureOnBeat(); }
     }
 
+    // --- Les autres méthodes (HandleMovementOnBeat, HandleAttackOnBeat, etc.) restent inchangées car elles ne dépendent pas directement du manager ---
+    #region Unchanged Methods
     protected virtual void HandleMovementOnBeat()
     {
         if (IsMoving || currentState == UnitState.Capturing) return;
@@ -368,7 +370,7 @@ public abstract class Unit : MonoBehaviour, ITileReservationObserver
 
     public IEnumerator MoveToTile(Tile targetTile)
     {
-        string context = $"[{name}/{GetInstanceID()}]"; // Pour les logs de cette instance de coroutine
+        string context = $"[{name}/{GetInstanceID()}]";
 
         if (MovementSystem == null || targetTile == null)
         {
@@ -389,18 +391,17 @@ public abstract class Unit : MonoBehaviour, ITileReservationObserver
 
         if (TileReservationController.Instance != null)
         {
-            // Si on avait une _reservedTile (future cible) et que targetTile est différente, on la libère.
             if (_reservedTile != null && _reservedTile != targetTile)
             {
                 if (debugUnitMovement) Debug.Log($"{context} MoveToTile: _reservedTile ({_reservedTile.name}) is different from targetTile ({targetTile.name}). Releasing _reservedTile.", this);
                 TileReservationController.Instance.ReleaseTileReservation(new Vector2Int(_reservedTile.column, _reservedTile.row), this);
-                _reservedTile = null; // Important de la nullifier si on la relâche
+                _reservedTile = null;
             }
             reservationSuccess = TileReservationController.Instance.TryReserveTile(targetTilePos, this);
         }
         else
         {
-            reservationSuccess = !targetTile.IsOccupied && targetTile.tileType == TileType.Ground; // Simplifié si pas de contrôleur
+            reservationSuccess = !targetTile.IsOccupied && targetTile.tileType == TileType.Ground;
         }
 
         if (!reservationSuccess)
@@ -409,10 +410,9 @@ public abstract class Unit : MonoBehaviour, ITileReservationObserver
             IsMoving = false; SetState(UnitState.Idle);
             yield break;
         }
-        _reservedTile = targetTile; // La tuile cible est maintenant notre _reservedTile pour ce mouvement
+        _reservedTile = targetTile;
         if (debugUnitMovement) Debug.Log($"{context} MoveToTile: Successfully reserved targetTile {targetTile.name}. _reservedTile is now {targetTile.name}.", this);
 
-        // --- DÉBUT SECTION CRITIQUE DU MOUVEMENT ---
         IsMoving = true;
         SetState(UnitState.Moving);
         Tile originalTile = occupiedTile;
@@ -423,37 +423,34 @@ public abstract class Unit : MonoBehaviour, ITileReservationObserver
             if (debugUnitMovement) Debug.Log($"{context} MoveToTile: In try block. About to rotate.", this);
             yield return StartCoroutine(RotateToFaceTile(targetTile));
 
-            if (originalTile != null) // Si on était effectivement sur une tuile
+            if (originalTile != null)
             {
                 if (TileReservationController.Instance != null)
                 {
-                    // Libérer la réservation de la tuile que l'on quitte PHYSIQUEMENT
                     TileReservationController.Instance.ReleaseTileReservation(new Vector2Int(originalTile.column, originalTile.row), this);
                     if (debugUnitMovement) Debug.Log($"{context} MoveToTile: Released reservation for originalTile {originalTile.name} via Controller.", this);
                 }
-                originalTile.RemoveUnit(); // La tuile met son currentUnit à null
+                originalTile.RemoveUnit();
                 if (debugUnitMovement) Debug.Log($"{context} MoveToTile: Called RemoveUnit on originalTile {originalTile.name}.", this);
             }
-            transform.SetParent(null, true); // Se détacher pour le mouvement
+            transform.SetParent(null, true);
 
-            Vector3 currentWorldPosition = transform.position; // Position de départ du mouvement physique
+            Vector3 currentWorldPosition = transform.position;
             Vector3 targetWorldPosition = targetTile.transform.position + Vector3.up * yOffset;
 
             if (debugUnitMovement) Debug.Log($"{context} MoveToTile: Calling MovementSystem.MoveToTile from {currentWorldPosition} to {targetWorldPosition}.", this);
 
-            yield return StartCoroutine(MovementSystem.MoveToTile(transform, currentWorldPosition, targetWorldPosition, 0.45f)); // Durée du mouvement
+            yield return StartCoroutine(MovementSystem.MoveToTile(transform, currentWorldPosition, targetWorldPosition, 0.45f));
 
             if (debugUnitMovement) Debug.Log($"{context} MoveToTile: MovementSystem.MoveToTile FINISHED.", this);
 
-            // Vérifications post-mouvement (si l'unité ou la tuile cible existent toujours)
             if (this == null || !this.gameObject.activeInHierarchy) {
                 if (debugUnitMovement) Debug.LogWarning($"{context} MoveToTile: Unit became inactive/destroyed during MovementSystem.MoveToTile. Aborting Attach.", this);
-                // Si l'unité est détruite, le OnDestroy devrait s'occuper de _reservedTile
                 yield break;
             }
             if (targetTile == null || !targetTile.gameObject.activeInHierarchy) {
                  if (debugUnitMovement) Debug.LogWarning($"{context} MoveToTile: targetTile {targetTilePos} became inactive/destroyed. Aborting Attach.", this);
-                 if (_reservedTile == targetTile && TileReservationController.Instance != null) { // targetTile était notre _reservedTile
+                 if (_reservedTile == targetTile && TileReservationController.Instance != null) {
                      TileReservationController.Instance.ReleaseTileReservation(targetTilePos, this);
                      _reservedTile = null;
                  }
@@ -461,33 +458,28 @@ public abstract class Unit : MonoBehaviour, ITileReservationObserver
             }
 
             if (debugUnitMovement) Debug.Log($"{context} MoveToTile: About to call AttachToTile for {targetTile.name}.", this);
-            AttachToTile(targetTile); // S'attache à la nouvelle tuile (et gère la réservation de cette tuile)
+            AttachToTile(targetTile);
             if (debugUnitMovement) Debug.Log($"{context} MoveToTile: AttachToTile for {targetTile.name} COMPLETED. OccupiedTile: {(occupiedTile?.name ?? "null")}", this);
         }
         finally
         {
-            IsMoving = false; // Mouvement terminé ou interrompu
+            IsMoving = false;
             if (debugUnitMovement) Debug.Log($"{context} MoveToTile: In FINALLY. IsMoving set to false. Occupied: {(occupiedTile?.name ?? "null")}, _reservedTile: {(_reservedTile?.name ?? "null")}, targetTile: {targetTile.name}", this);
 
-            if (currentState == UnitState.Moving) // Si on était en mouvement, on redevient Idle (ou autre si une action est enchaînée)
+            if (currentState == UnitState.Moving)
             {
                  SetState(UnitState.Idle);
             }
 
-            // Vérification cruciale : si on n'a PAS réussi à s'attacher à targetTile
             if (occupiedTile != targetTile)
             {
-                // Si _reservedTile pointait vers targetTile (ce qui devrait être le cas si la réservation initiale a réussi)
                 if (_reservedTile == targetTile && TileReservationController.Instance != null)
                 {
                     TileReservationController.Instance.ReleaseTileReservation(new Vector2Int(targetTile.column, targetTile.row), this);
                     if (debugUnitMovement) Debug.LogWarning($"{context} MoveToTile FINALLY: Movement FAILED/INTERRUPTED after reserving {targetTile.name} and before attaching. Reservation released.", this);
-                    // Si on a libéré targetTile, elle ne peut plus être notre _reservedTile
                     _reservedTile = null;
                 }
             }
-            // else: mouvement réussi, on est sur targetTile. AttachToTile a mis à jour _reservedTile pour être targetTile.
-            // La réservation est donc correcte et maintenue.
         }
     }
 
@@ -496,14 +488,14 @@ public abstract class Unit : MonoBehaviour, ITileReservationObserver
         if (AttackSystem == null || target == null || target.Health <= 0)
         {
             if (debugUnitCombat) Debug.LogWarning($"[{name}] PerformAttackCoroutine: Conditions non remplies (AttackSystem null, cible nulle ou cible morte). Cible: {(target?.name ?? "NULL")}, Cible PV: {target?.Health ?? -1}");
-            _isAttacking = false; // Assurez-vous que le flag est bien réinitialisé
-            SetState(UnitState.Idle); // Repasser en Idle si l'attaque ne peut pas commencer
+            _isAttacking = false;
+            SetState(UnitState.Idle);
             yield break;
         }
 
-        _isAttacking = true; // L'unité commence son action d'attaque
-        SetState(UnitState.Attacking); // Met à jour l'état logique de l'unité
-        FaceUnitTarget(target); // S'orienter vers la cible
+        _isAttacking = true;
+        SetState(UnitState.Attacking);
+        FaceUnitTarget(target);
 
         if (useAnimations && animator != null)
         {
@@ -515,45 +507,27 @@ public abstract class Unit : MonoBehaviour, ITileReservationObserver
             if (useAnimations && animator == null && debugUnitCombat) Debug.LogWarning($"[{name}] PerformAttackCoroutine: Animator non assigné mais useAnimations est true.", this);
         }
 
-        // Calculer les dégâts ici car c'est une stat de l'attaquant
-        int calculatedDamage = Mathf.Max(1, Attack - target.Defense); // Attack et Defense viennent des Stats de l'unité
-
-        // La durée passée ici est pour l'animation de l'ATTAQUANT.
-        // Pour RangedAttack, le projectile aura sa propre durée de vie/vol.
-        // Pour MeleeAttack, le MeleeAttack.cs pourrait utiliser cette durée pour son timing d'impact.
-        float attackerAnimationDuration = 0.5f; // Durée typique de l'animation d'attaque de l'unité elle-même
+        int calculatedDamage = Mathf.Max(1, Attack - target.Defense);
+        float attackerAnimationDuration = 0.5f;
 
         if (AttackSystem != null)
         {
              if (debugUnitCombat) Debug.Log($"[{name}] PerformAttackCoroutine: Appel de AttackSystem.PerformAttack sur {target.name} avec {calculatedDamage} dégâts potentiels et une durée d'animation de {attackerAnimationDuration}s.", this);
-            // Pour RangedAttack, cela va instancier et lancer le projectile.
-            // Pour MeleeAttack, cela pourrait jouer un VFX et attendre avant d'appliquer les dégâts (si MeleeAttack le gère).
             yield return StartCoroutine(
                 AttackSystem.PerformAttack(
                     transform,
                     target.transform,
-                    calculatedDamage,       // Les dégâts sont passés au système d'attaque
+                    calculatedDamage,
                     attackerAnimationDuration
                 )
             );
         }
-
-        // IMPORTANT:
-        // Pour RangedAttack: Les dégâts sont appliqués par le Projectile.cs à l'impact.
-        // Pour MeleeAttack: MeleeAttack.cs DEVRAIT appliquer les dégâts dans son PerformAttack.
-        // DONC, Unit.cs ne devrait PLUS appliquer les dégâts ici si c'est délégué.
-
-        // Si vous voulez garder un événement générique ici :
-        // OnUnitAttacked?.Invoke(this, target, calculatedDamage); // Mais cela pourrait être redondant si le projectile/melee le fait déjà.
-        // Il est préférable que l'événement OnUnitAttacked soit déclenché par celui qui APPLIQUE réellement les dégâts.
-
+        
         if (debugUnitCombat) Debug.Log($"[{name}] PerformAttackCoroutine: Action d'attaque (lancement/coup) terminée pour {target.name}. _isAttacking sera mis à false.", this);
-        _isAttacking = false; // L'action spécifique de ce "coup" ou "tir" est terminée du point de vue de l'unité.
-                            // Si c'est une attaque à distance, le projectile continue sa course.
-        SetState(UnitState.Idle); // Retour à l'état Idle après l'action, le Behavior Graph décidera de la suite.
+        _isAttacking = false;
+        SetState(UnitState.Idle);
     }
-
-    // COROUTINE POUR ATTAQUER UN BÂTIMENT (Version Corrigée)
+    
     public IEnumerator PerformAttackBuildingCoroutine(Building target)
     {
         if (AttackSystem == null || target == null || target.CurrentHealth <= 0)
@@ -578,9 +552,7 @@ public abstract class Unit : MonoBehaviour, ITileReservationObserver
             if (useAnimations && animator == null && debugUnitCombat) Debug.LogWarning($"[{name}] PerformAttackBuildingCoroutine: Animator non assigné mais useAnimations est true.", this);
         }
 
-        int attackDamage = Attack; // Les bâtiments peuvent avoir une défense différente ou pas de défense via les stats de l'attaquant.
-                                   // Building.TakeDamage() appliquera la défense du bâtiment.
-
+        int attackDamage = Attack;
         float attackerAnimationDuration = 0.5f;
 
         if (AttackSystem != null)
@@ -595,10 +567,7 @@ public abstract class Unit : MonoBehaviour, ITileReservationObserver
                 )
             );
         }
-
-        // De même, les dégâts sont gérés par le projectile ou MeleeAttack.cs.
-        // OnUnitAttackedBuilding?.Invoke(this, target, attackDamage); // Préférable dans le système qui applique les dégâts.
-
+        
         if (debugUnitCombat) Debug.Log($"[{name}] PerformAttackBuildingCoroutine: Action d'attaque (lancement/coup) terminée pour {target.name}. _isAttacking sera mis à false.", this);
         _isAttacking = false;
         SetState(UnitState.Idle);
@@ -607,7 +576,7 @@ public abstract class Unit : MonoBehaviour, ITileReservationObserver
     protected virtual Unit FindAttackableUnitTarget()
     {
         if (occupiedTile == null || AttackSystem == null) return null;
-        List<Tile> tilesInRange = GetTilesInAttackRange(); // Utilise la méthode déjà définie
+        List<Tile> tilesInRange = GetTilesInAttackRange();
         Unit closestValidTarget = null;
         float minDistanceSq = float.MaxValue;
 
@@ -632,7 +601,7 @@ public abstract class Unit : MonoBehaviour, ITileReservationObserver
     protected virtual Building FindAttackableBuildingTarget()
     {
         if (occupiedTile == null || AttackSystem == null) return null;
-        List<Tile> tilesInRange = GetTilesInAttackRange(); // Utilise la méthode déjà définie
+        List<Tile> tilesInRange = GetTilesInAttackRange();
         Building closestValidTarget = null;
         float minDistanceSq = float.MaxValue;
 
@@ -658,14 +627,13 @@ public abstract class Unit : MonoBehaviour, ITileReservationObserver
     public virtual void TakeDamage(int damage, Unit attacker = null)
     {
         if (debugUnitCombat) Debug.Log($"[{name}] TakeDamage called with {damage} damage from {attacker?.name ?? "unknown attacker"}.");
-        if (damage <= 0) return; // Pas de dégâts négatifs ou nuls
+        if (damage <= 0) return;
 
         if (attacker != null && OnUnitAttacked != null)
         {
             OnUnitAttacked(attacker, this, damage);
         }
 
-        // Appliquer les dégâts en 
         int actualDamage = Mathf.Max(0, damage - Defense);
         Health -= actualDamage;
         if (debugUnitCombat) Debug.Log($"[{name}] took {actualDamage} damage. Health: {Health}/{Stats?.Health ?? 0}");
@@ -686,17 +654,6 @@ public abstract class Unit : MonoBehaviour, ITileReservationObserver
         {
             SetState(UnitState.Idle);
             _isAttacking = false;
-        	/* 
-		   animator.SetTrigger(DieTriggerId);
-         
-		   float destroyDelay = 2.0f;
-            foreach (var clip in animator.runtimeAnimatorController.animationClips)
-            {
-                if (clip.name.ToLower().Contains("die")) { destroyDelay = clip.length; break; }
-            }
-            Destroy(gameObject, destroyDelay);
-
-			*/
             Destroy(gameObject);
 
         }
@@ -707,36 +664,33 @@ public abstract class Unit : MonoBehaviour, ITileReservationObserver
     {
         if (tile == null) { Debug.LogError($"[{name}] AttachToTile: tile is null!"); return; }
 
-        // Libérer une réservation précédente si elle est différente de la nouvelle tuile
         if (_reservedTile != null && _reservedTile != tile && TileReservationController.Instance != null) {
              TileReservationController.Instance.ReleaseTileReservation(new Vector2Int(_reservedTile.column, _reservedTile.row), this);
              if (debugUnitMovement) Debug.Log($"[{name}] AttachToTile: Released PREVIOUS _reservedTile ({_reservedTile.column},{_reservedTile.row}).");
-             _reservedTile = null; // Important
+             _reservedTile = null;
         }
 
         Quaternion currentRotation = transform.rotation;
         occupiedTile = tile;
-        transform.SetParent(tile.transform, true); // Utilisez true pour conserver la position/rotation/échelle mondiale lors du reparentage initial
-        transform.position = tile.transform.position + Vector3.up * yOffset; // Puis ajustez la position
-        transform.rotation = currentRotation; // Réappliquez la rotation
+        transform.SetParent(tile.transform, true);
+        transform.position = tile.transform.position + Vector3.up * yOffset;
+        transform.rotation = currentRotation;
         tile.AssignUnit(this);
 
-        // S'assurer que la tuile que nous occupons maintenant est marquée comme réservée par nous
         if (TileReservationController.Instance != null) {
             bool reservedSuccessfully = TileReservationController.Instance.TryReserveTile(new Vector2Int(tile.column, tile.row), this);
             if (reservedSuccessfully)
             {
-                _reservedTile = tile; // --- MODIFICATION IMPORTANTE ---
+                _reservedTile = tile;
                 if (debugUnitMovement) Debug.Log($"[{name}] AttachToTile: Successfully reserved and attached to tile ({tile.column}, {tile.row}). _reservedTile updated.");
             }
             else
             {
-                // Cela ne devrait pas arriver si IsOccupied est bien géré et que la tuile était libre
                  if (debugUnitMovement) Debug.LogError($"[{name}] AttachToTile: FAILED to reserve tile ({tile.column}, {tile.row}) even though attaching to it. This indicates a logic flaw!");
-                _reservedTile = null; // S'assurer que _reservedTile est null si la réservation échoue
+                _reservedTile = null;
             }
         } else {
-             _reservedTile = tile; // Si pas de controller, on suppose que c'est bon
+             _reservedTile = tile;
         }
 
         if (debugUnitMovement && occupiedTile != null) Debug.Log($"[{name}] Attached to tile ({occupiedTile.column}, {occupiedTile.row}). Position: {transform.position}");
@@ -782,13 +736,12 @@ public abstract class Unit : MonoBehaviour, ITileReservationObserver
             occupiedTile.row,
             finalDestination.x,
             finalDestination.y,
-            this // 'this' est l'unité qui demande
+            this
         );
 
         if (nextTile != null)
         {
             if (debugUnitMovement) Debug.Log($"[{name}] GetNextTileForBG: Next tile towards ({finalDestination.x},{finalDestination.y}) is ({nextTile.column},{nextTile.row}).");
-            // La logique de réservation de la tuile `nextTile` sera gérée par MoveToTile.
         }
         else
         {
@@ -898,98 +851,84 @@ public abstract class Unit : MonoBehaviour, ITileReservationObserver
     }
      protected void UpdateFacingDirectionSafe() { if (!_isAttacking && currentState != UnitState.Capturing && !IsMoving) UpdateFacingDirection(); }
 
-protected virtual void SetState(UnitState newState)
-{
-    if (currentState == newState && !(newState == UnitState.Attacking || newState == UnitState.Capturing))
+    protected virtual void SetState(UnitState newState)
     {
-        // Optionnel: Log ou return si l'état C# ne change pas et que ce n'est pas un état "actif".
-        // if (debugUnitMovement) Debug.Log($"[{name} ({Time.frameCount})] SetState: newState ({newState}) already current C# state.");
-        // return; // Peut être activé si pas d'effets de bord désirés lors de la réaffirmation de l'état.
-    }
-
-    if (debugUnitMovement || debugUnitCombat)
-    {
-        Debug.Log($"[{name} ({Time.frameCount})] SetState: Changing C# State from '{currentState}' to '{newState}'.", this);
-    }
-
-    UnitState previousCSharpState = currentState;
-    currentState = newState;
-
-    if (useAnimations && animator != null)
-    {
-        bool setAnimIdle = (newState == UnitState.Idle);
-        bool setAnimMoving = (newState == UnitState.Moving);
-
-        // Si l'unité entre dans un état logique C# d'attaque ou de capture,
-        // elle n'est généralement ni inactive (Idle) ni en mouvement (Moving) du point de vue de l'animation principale.
-        if (newState == UnitState.Attacking || newState == UnitState.Capturing)
+        if (currentState == newState && !(newState == UnitState.Attacking || newState == UnitState.Capturing))
         {
-            setAnimIdle = false;
-            setAnimMoving = false;
+            return;
         }
-
-        animator.SetBool(IdleParamId, setAnimIdle);
-        animator.SetBool(MovingParamId, setAnimMoving);
 
         if (debugUnitMovement || debugUnitCombat)
         {
-            Debug.Log($"[{name} ({Time.frameCount})] SetState: Animator Booleans Set -> IsIdle: {setAnimIdle}, IsMoving: {setAnimMoving}", this);
+            Debug.Log($"[{name} ({Time.frameCount})] SetState: Changing C# State from '{currentState}' to '{newState}'.", this);
         }
 
-        // Gestion des Triggers
-        // Si l'état N'EST PLUS Attacking (C#) et qu'il l'ÉTAIT avant, réinitialiser le trigger d'attaque.
-        // Cela est utile si le trigger a été activé mais que l'état C# change avant que l'animation ne se termine
-        // (par exemple, une interruption).
-        if (newState != UnitState.Attacking && previousCSharpState == UnitState.Attacking)
+        UnitState previousCSharpState = currentState;
+        currentState = newState;
+
+        if (useAnimations && animator != null)
         {
-            // Si vous avez encore un trigger "Attack" et que vous voulez le nettoyer
-            // quand l'état logique d'attaque se termine.
-            animator.ResetTrigger(AttackTriggerId);
-            if (debugUnitCombat) Debug.Log($"[{name} ({Time.frameCount})] SetState: Resetting AttackTriggerId because newState is no longer Attacking.", this);
-        }
+            bool setAnimIdle = (newState == UnitState.Idle);
+            bool setAnimMoving = (newState == UnitState.Moving);
+            
+            if (newState == UnitState.Attacking || newState == UnitState.Capturing)
+            {
+                setAnimIdle = false;
+                setAnimMoving = false;
+            }
 
-        if (newState != UnitState.Capturing && previousCSharpState == UnitState.Capturing)
+            animator.SetBool(IdleParamId, setAnimIdle);
+            animator.SetBool(MovingParamId, setAnimMoving);
+
+            if (debugUnitMovement || debugUnitCombat)
+            {
+                Debug.Log($"[{name} ({Time.frameCount})] SetState: Animator Booleans Set -> IsIdle: {setAnimIdle}, IsMoving: {setAnimMoving}", this);
+            }
+            
+            if (newState != UnitState.Attacking && previousCSharpState == UnitState.Attacking)
+            {
+                animator.ResetTrigger(AttackTriggerId);
+                if (debugUnitCombat) Debug.Log($"[{name} ({Time.frameCount})] SetState: Resetting AttackTriggerId because newState is no longer Attacking.", this);
+            }
+
+            if (newState != UnitState.Capturing && previousCSharpState == UnitState.Capturing)
+            {
+                animator.ResetTrigger(CaptureTriggerId);
+                if (debugUnitCombat) Debug.Log($"[{name} ({Time.frameCount})] SetState: Resetting CaptureTriggerId because newState is no longer Capturing.", this);
+            }
+        }
+        else if (useAnimations && animator == null)
         {
-            animator.ResetTrigger(CaptureTriggerId);
-            if (debugUnitCombat) Debug.Log($"[{name} ({Time.frameCount})] SetState: Resetting CaptureTriggerId because newState is no longer Capturing.", this);
+            Debug.LogError($"[{name} ({Time.frameCount})] SetState: Animator is NULL for state {newState}.", this);
+        }
+
+        switch (newState)
+        {
+            case UnitState.Idle:
+                isInteractingWithBuilding = false;
+                if (buildingBeingCaptured != null) { buildingBeingCaptured.StopCapturing(this); buildingBeingCaptured = null; }
+                beatsSpentCapturing = 0;
+                if (!(this is AllyUnit)) { targetUnit = null; targetBuilding = null; }
+                break;
+
+            case UnitState.Attacking:
+                if (buildingBeingCaptured != null) { buildingBeingCaptured.StopCapturing(this); buildingBeingCaptured = null; }
+                beatsSpentCapturing = 0;
+                break;
+
+            case UnitState.Capturing:
+                beatsSpentCapturing = 0;
+                targetUnit = null;
+                isInteractingWithBuilding = true;
+                break;
+
+            case UnitState.Moving:
+                if (buildingBeingCaptured != null) { buildingBeingCaptured.StopCapturing(this); buildingBeingCaptured = null; }
+                isInteractingWithBuilding = false;
+                beatsSpentCapturing = 0;
+                break;
         }
     }
-    else if (useAnimations && animator == null)
-    {
-        Debug.LogError($"[{name} ({Time.frameCount})] SetState: Animator is NULL for state {newState}.", this);
-    }
-
-    // --- Logique métier pour les états C# ---
-    switch (newState)
-    {
-        case UnitState.Idle:
-            isInteractingWithBuilding = false;
-            if (buildingBeingCaptured != null) { buildingBeingCaptured.StopCapturing(this); buildingBeingCaptured = null; }
-            beatsSpentCapturing = 0;
-            if (!(this is AllyUnit)) { targetUnit = null; targetBuilding = null; }
-            break;
-
-        case UnitState.Attacking: // État logique C# d'être en mode attaque
-            if (buildingBeingCaptured != null) { buildingBeingCaptured.StopCapturing(this); buildingBeingCaptured = null; }
-            beatsSpentCapturing = 0;
-            // L'animation elle-même est déclenchée par AttackTriggerId dans PerformAttackCoroutine.
-            // Cet état C# indique juste que l'unité est engagée dans un comportement d'attaque.
-            break;
-
-        case UnitState.Capturing:
-            beatsSpentCapturing = 0;
-            targetUnit = null;
-            isInteractingWithBuilding = true; // La capture est une interaction avec un bâtiment
-            break;
-
-        case UnitState.Moving:
-            if (buildingBeingCaptured != null) { buildingBeingCaptured.StopCapturing(this); buildingBeingCaptured = null; }
-            isInteractingWithBuilding = false;
-            beatsSpentCapturing = 0;
-            // Laisser le Behavior Graph gérer la logique de conservation/annulation des cibles.
-            break;
-    }
-}
 
     protected bool IsAtTargetLocation() => TargetPosition.HasValue && occupiedTile != null && occupiedTile.column == TargetPosition.Value.x && occupiedTile.row == TargetPosition.Value.y;
 
@@ -1093,11 +1032,6 @@ protected virtual void SetState(UnitState newState)
     {
         if (duration <= 0) return;
 
-        // Optionnel : Vérifier si un buff similaire existe déjà et le cumuler/remplacer/ignorer
-        // Pour cet exemple, on ajoute simplement le nouveau buff.
-        // Si vous voulez un remplacement :
-        // activeBuffs.RemoveAll(b => b.Stat == stat);
-
         ActiveBuff newBuff = new ActiveBuff
         {
             Stat = stat,
@@ -1124,37 +1058,36 @@ protected virtual void SetState(UnitState newState)
             Debug.Log($"[{name}] Buff expiré/retiré: {buff.Stat}. Att actuelle: {Attack}, Def actuelle: {Defense}");
         }
     }
-
-    // Assurez-vous de nettoyer les coroutines de buff si l'unité est détruite
     
     public virtual void OnDestroy()
     {
-        if (RhythmManager.Instance != null) RhythmManager.OnBeat -= OnRhythmBeatInternal;
+        // --- MODIFICATION : Utilisation de MusicManager ---
+        if (MusicManager.Instance != null)
+        {
+            MusicManager.Instance.OnBeat -= OnRhythmBeatInternal;
+        }
 
         if (TileReservationController.Instance != null)
         {
-            // Libère la tuile actuellement occupée SI ELLE EXISTE
             if (occupiedTile != null)
             {
                 TileReservationController.Instance.ReleaseTileReservation(new Vector2Int(occupiedTile.column, occupiedTile.row), this);
                 if (debugUnitMovement) Debug.Log($"[{name}] OnDestroy: Released reservation for occupiedTile ({occupiedTile.column},{occupiedTile.row}).");
             }
-            // Libère la tuile _reservedTile si elle est différente de occupiedTile et non null
-            // Cela peut arriver si l'unité est détruite pendant un mouvement vers _reservedTile
             if (_reservedTile != null && _reservedTile != occupiedTile)
             {
                 TileReservationController.Instance.ReleaseTileReservation(new Vector2Int(_reservedTile.column, _reservedTile.row), this);
                 if (debugUnitMovement) Debug.Log($"[{name}] OnDestroy: Released reservation for _reservedTile ({_reservedTile.column},{_reservedTile.row}).");
             }
-            TileReservationController.Instance.RemoveObserver(this); // Se désabonner
+            TileReservationController.Instance.RemoveObserver(this);
         }
 
         if (occupiedTile != null)
         {
-            occupiedTile.RemoveUnit(); // Notifie la tuile elle-même
+            occupiedTile.RemoveUnit();
         }
-        _reservedTile = null; // Nettoyage
-        occupiedTile = null;  // Nettoyage
+        _reservedTile = null;
+        occupiedTile = null;
         
         foreach (var buff in activeBuffs)
         {
@@ -1166,30 +1099,22 @@ protected virtual void SetState(UnitState newState)
         activeBuffs.Clear();
     }
 
-        public IEnumerator PerformCheerAndDespawnCoroutine()
+    public IEnumerator PerformCheerAndDespawnCoroutine()
     {
-        // 1. Set state to prevent other actions (optional, graph might handle this)
-        // SetState(UnitState.Cheering); // You'd need a Cheering state in your UnitState enum
-
-        // 2. Trigger Cheer Animation
         if (useAnimations && animator != null)
         {
-            animator.SetBool(IdleParamId, false); // Ensure not stuck in idle
+            animator.SetBool(IdleParamId, false);
             animator.SetBool(MovingParamId, false);
-            animator.SetTrigger(CheerTriggerId); // Use the ID from Unit.cs
+            animator.SetTrigger(CheerTriggerId);
         }
-
-        // 3. Wait for animation duration
-        //    This is a bit tricky. Best way is to get actual clip length.
-        //    For simplicity, using a fixed delay or assuming you have an event at the end of cheer animation.
-        float cheerAnimationDuration = 2.0f; // Default if clip length not found
+        
+        float cheerAnimationDuration = 2.0f;
         if (useAnimations && animator != null)
         {
             AnimationClip[] clips = animator.runtimeAnimatorController.animationClips;
             foreach (AnimationClip clip in clips)
             {
-                // Make sure your cheer animation clip is uniquely named or identifiable
-                if (clip.name.ToLower().Contains("cheer")) // Adjust "cheer" if your clip is named differently
+                if (clip.name.ToLower().Contains("cheer"))
                 {
                     cheerAnimationDuration = clip.length;
                     break;
@@ -1197,21 +1122,18 @@ protected virtual void SetState(UnitState newState)
             }
         }
         yield return new WaitForSeconds(cheerAnimationDuration);
-
-        // 4. Despawn (Effectively Die, but with a "victory" context)
-        // You can call Die() or a new method if you want different effects for despawning vs. combat death.
-        // For simplicity, let's use Die() which should already handle particle effects/sound.
-        Die(); // Die() will handle Destroy(gameObject)
+        
+        Die();
     }
+    
     public virtual void InitializeFromCharacterData(CharacterData_SO characterData)
     {
         if (characterData == null)
         {
             Debug.LogError($"[{name}] Attempted to initialize with null CharacterData_SO.", this);
-            if (this.unitStats == null) // Si aucun stats n'est même assigné dans l'inspecteur du prefab
+            if (this.unitStats == null)
             {
                 Debug.LogError($"[{name}] CRITICAL: No UnitStats_SO assigned from CharacterData and no fallback stats on prefab. Unit may not function.", this);
-                // Pour l'instant, on logue l'erreur.
             }
             return;
         }
@@ -1231,14 +1153,14 @@ protected virtual void SetState(UnitState newState)
         {
             characterLevel = PlayerDataManager.Instance.Data.CharacterProgressData[characterData.CharacterID].CurrentLevel;
         }
-
-        // Calculer les stats pour le niveau actuel en utilisant l'asset de progression
+        
         this.unitStats = characterData.ProgressionData.GetStatsForLevel(characterData.BaseStats, characterLevel);
         this.Health = this.unitStats.Health;
         
-        if (debugUnitCombat || debugUnitMovement) // Utilisez un de vos flags de debug existants ou créez-en un nouveau
+        if (debugUnitCombat || debugUnitMovement)
         {
             Debug.Log($"[{name}] Stats initialisées depuis CharacterData '{characterData.DisplayName}' (Stats Asset: '{this.unitStats.name}'). Santé: {this.Health}", this);
         }
     }
+    #endregion
 }

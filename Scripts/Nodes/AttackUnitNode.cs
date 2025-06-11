@@ -1,9 +1,9 @@
-// Fichier: Scripts/Nodes/AttackUnitNode.cs
 using UnityEngine;
 using Unity.Behavior;
 using System.Collections;
 using System;
 using Unity.Properties;
+using Unity.Behavior.GraphFramework; // Ajout du using manquant
 
 [Serializable]
 [GeneratePropertyBag]
@@ -17,14 +17,14 @@ public class AttackUnitNode : Unity.Behavior.Action
 {
     // Constants for Blackboard variable names
     private const string SELF_UNIT_VAR = "SelfUnit";
-    private const string TARGET_UNIT_VAR = "DetectedEnemyUnit"; // Ou InteractionTargetUnit si défini par SelectTargetNode
+    private const string TARGET_UNIT_VAR = "DetectedEnemyUnit";
     private const string IS_ATTACKING_VAR = "IsAttacking";
 
     // --- Node State ---
     private bool blackboardVariablesCached = false;
-    private Coroutine nodeManagedAttackCycleCoroutine = null; // Coroutine gérée par ce noeud pour le cycle complet
+    private Coroutine nodeManagedAttackCycleCoroutine = null;
     private Unit selfUnitInstance = null;
-    private Unit currentTargetUnitForThisNode = null; // Cible au démarrage du nœud
+    private Unit currentTargetUnitForThisNode = null;
 
     // --- Blackboard Variable Cache ---
     private BlackboardVariable<Unit> bbSelfUnit;
@@ -65,8 +65,6 @@ public class AttackUnitNode : Unity.Behavior.Action
         {
             LogNodeMessage($"OnStart: Target Unit '{(currentTargetUnitForThisNode?.name ?? "Unknown/Dead")}' is null or already dead. Node SUCCESS (target gone).", isVerbose: true, forceLog: true);
             SetIsAttackingBlackboardVar(false);
-            // Potentiellement, bbDetectedEnemyUnit devrait aussi être nullifié ici si ce noeud est responsable.
-            // Normalement, ScanForNearbyTargets s'en chargerait au prochain tick.
             return Status.Success;
         }
 
@@ -108,31 +106,25 @@ public class AttackUnitNode : Unity.Behavior.Action
         if (currentTargetUnitForThisNode == null|| !currentTargetUnitForThisNode.gameObject.activeInHierarchy)
         {
             LogNodeMessage($"OnUpdate: Target UnitUnknown/Dead is null or dead. Node SUCCESS.", isVerbose: true, forceLog: true);
-            // Le flag bbIsAttacking sera géré dans OnEnd(), qui sera appelé après ce Success.
             return Status.Success;
         }
         if ( currentTargetUnitForThisNode.Health <= 0 )
         {
             LogNodeMessage($"OnUpdate: Target Unit '{(currentTargetUnitForThisNode?.name ?? "Unknown/Dead")}' is null or dead. Node SUCCESS.", isVerbose: true, forceLog: true);
-        // Le flag bbIsAttacking sera géré dans OnEnd(), qui sera appelé après ce Success.
-        return Status.Success;
+            return Status.Success;
         }   
-        // Optionnel : revérifier la portée ici si la cible peut bouger pendant le délai d'attaque.
-        // Si l'ennemi sort de la portée pendant qu'on attend le délai, on devrait peut-être retourner Failure
-        // pour que SelectTargetNode choisisse MoveToUnit.
         if (isWaitingForAttackDelay && !selfUnitInstance.IsUnitInRange(currentTargetUnitForThisNode))
         {
             LogNodeMessage($"OnUpdate: Target '{currentTargetUnitForThisNode.name}' moved out of range while waiting for attack delay. Node FAILURE.", isVerbose: true, forceLog:true);
-            return Status.Failure; // Forcera une réévaluation, potentiellement vers un MoveToUnitNode
+            return Status.Failure;
         }
 
 
         if (isWaitingForAttackDelay)
         {
-            return Status.Running; // On attend que HandleAttackBeatDelay mette isWaitingForAttackDelay à false
+            return Status.Running;
         }
 
-        // Si le délai est terminé (ou était de 0) et que la coroutine de cycle d'attaque n'est pas déjà lancée
         if (nodeManagedAttackCycleCoroutine == null)
         {
             if (currentTargetUnitForThisNode == null || currentTargetUnitForThisNode.Health <= 0)
@@ -143,7 +135,7 @@ public class AttackUnitNode : Unity.Behavior.Action
             LogNodeMessage($"OnUpdate: Delay complete. Starting PerformSingleAttackCycle for {currentTargetUnitForThisNode.name}.", isVerbose: true, forceLog: true);
             nodeManagedAttackCycleCoroutine = selfUnitInstance.StartCoroutine(PerformSingleAttackCycle());
         }
-        return Status.Running; // Le cycle d'attaque est en cours
+        return Status.Running;
     }
 
     private IEnumerator PerformSingleAttackCycle()
@@ -154,31 +146,26 @@ public class AttackUnitNode : Unity.Behavior.Action
         {
             LogNodeMessage($"PerformSingleAttackCycle: Target '{currentTargetUnitForThisNode?.name ?? "DESTROYED TARGET"}' already invalid before attack. Ending cycle.", isVerbose: true, forceLog: true);
             nodeManagedAttackCycleCoroutine = null;
-            yield break; // La coroutine se termine, OnUpdate retournera Success au prochain tick
+            yield break;
         }
-         // Revérifier la portée juste avant d'attaquer
         if (!selfUnitInstance.IsUnitInRange(currentTargetUnitForThisNode))
         {
             LogNodeMessage($"PerformSingleAttackCycle: Target '{currentTargetUnitForThisNode.name}' moved out of range before attack. Ending cycle, will fail in OnUpdate.", isVerbose: true, forceLog:true);
-            nodeManagedAttackCycleCoroutine = null; // Permet à OnUpdate de retourner Failure
+            nodeManagedAttackCycleCoroutine = null;
             yield break;
         }
 
-
         LogNodeMessage($"PerformSingleAttackCycle: Calling unit's PerformAttackCoroutine for {currentTargetUnitForThisNode.name}.", isVerbose: true, forceLog: true);
-        // La coroutine de l'unité doit gérer son propre flag interne _isAttacking pour la durée du coup.
         yield return selfUnitInstance.StartCoroutine(selfUnitInstance.PerformAttackCoroutine(currentTargetUnitForThisNode));
         LogNodeMessage($"PerformSingleAttackCycle: Unit's PerformAttackCoroutine completed for {(currentTargetUnitForThisNode != null ? currentTargetUnitForThisNode.name : "DESTROYED TARGET")}.", isVerbose: true, forceLog: true);
 
-        // Après que la coroutine de l'unité (UN coup) se soit terminée
         if (currentTargetUnitForThisNode == null || currentTargetUnitForThisNode.Health <= 0)
         {
             LogNodeMessage($"PerformSingleAttackCycle: Target {(currentTargetUnitForThisNode != null ? currentTargetUnitForThisNode.name : "DESTROYED TARGET")} defeated or became invalid AFTER attack. Ending cycle.", isVerbose: true, forceLog: true);
             nodeManagedAttackCycleCoroutine = null;
-            yield break; // La coroutine se termine, OnUpdate retournera Success au prochain tick
+            yield break;
         }
 
-        // La cible est toujours valide, préparer le prochain délai d'attaque
         currentAttackBeatCounter = 0;
         isWaitingForAttackDelay = (selfUnitInstance.AttackDelay > 0);
         LogNodeMessage($"PerformSingleAttackCycle: Attack landed on {currentTargetUnitForThisNode.name}. Target HP: {currentTargetUnitForThisNode.Health}. Preparing for next AttackDelay ({selfUnitInstance.AttackDelay} beats). isWaiting: {isWaitingForAttackDelay}", isVerbose: true, forceLog: true);
@@ -187,13 +174,13 @@ public class AttackUnitNode : Unity.Behavior.Action
         {
             SubscribeToBeatForAttackDelay();
         }
-        // Si pas de délai, OnUpdate relancera un nouveau cycle à la prochaine frame car nodeManagedAttackCycleCoroutine sera null.
 
-        nodeManagedAttackCycleCoroutine = null; // Ce cycle d'UN coup est terminé.
+        nodeManagedAttackCycleCoroutine = null;
         LogNodeMessage($"PerformSingleAttackCycle: END for {currentTargetUnitForThisNode?.name ?? "TARGET UNKNOWN"}. Coroutine handle set to null.", isVerbose: true, forceLog: true);
     }
 
-    private void HandleAttackBeatDelay()
+    // --- MODIFICATION : Signature de la méthode mise à jour ---
+    private void HandleAttackBeatDelay(float beatDuration)
     {
         if (!isWaitingForAttackDelay || selfUnitInstance == null)
         {
@@ -212,24 +199,26 @@ public class AttackUnitNode : Unity.Behavior.Action
 
     private void SubscribeToBeatForAttackDelay()
     {
-        if (RhythmManager.Instance != null && !hasSubscribedToBeatForAttackDelay)
+        // --- MODIFICATION : Utilisation de MusicManager.Instance ---
+        if (MusicManager.Instance != null && !hasSubscribedToBeatForAttackDelay)
         {
-            RhythmManager.OnBeat += HandleAttackBeatDelay;
+            MusicManager.Instance.OnBeat += HandleAttackBeatDelay;
             hasSubscribedToBeatForAttackDelay = true;
             LogNodeMessage("Subscribed to OnBeat for AttackDelay.", isVerbose: true, forceLog: true);
         }
-        else if (RhythmManager.Instance == null)
+        else if (MusicManager.Instance == null)
         {
-            LogNodeMessage("RhythmManager is null, cannot subscribe for AttackDelay. Attack will be continuous if delay was > 0.", true, forceLog: true);
-            isWaitingForAttackDelay = false; // Forcer à ne pas attendre
+            LogNodeMessage("MusicManager is null, cannot subscribe for AttackDelay. Attack will be continuous if delay was > 0.", true, forceLog: true);
+            isWaitingForAttackDelay = false;
         }
     }
 
     private void UnsubscribeFromBeatForAttackDelay()
     {
-        if (RhythmManager.Instance != null && hasSubscribedToBeatForAttackDelay)
+        // --- MODIFICATION : Utilisation de MusicManager.Instance ---
+        if (MusicManager.Instance != null && hasSubscribedToBeatForAttackDelay)
         {
-            RhythmManager.OnBeat -= HandleAttackBeatDelay;
+            MusicManager.Instance.OnBeat -= HandleAttackBeatDelay;
             hasSubscribedToBeatForAttackDelay = false;
             LogNodeMessage("Unsubscribed from OnBeat for AttackDelay.", isVerbose: true, forceLog: true);
         }
@@ -238,7 +227,7 @@ public class AttackUnitNode : Unity.Behavior.Action
     protected override void OnEnd()
     {
         LogNodeMessage($"OnEnd called. Status: {CurrentStatus}. Cleaning up.", isVerbose: true, forceLog: true);
-        UnsubscribeFromBeatForAttackDelay(); // Assurer le désabonnement
+        UnsubscribeFromBeatForAttackDelay();
 
         if (nodeManagedAttackCycleCoroutine != null && selfUnitInstance != null && selfUnitInstance.gameObject.activeInHierarchy)
         {
@@ -246,26 +235,24 @@ public class AttackUnitNode : Unity.Behavior.Action
             LogNodeMessage("Stopped nodeManagedAttackCycleCoroutine.", isVerbose: true, forceLog: true);
         }
 
-        SetIsAttackingBlackboardVar(false); // Crucial: Mettre IsAttacking à false sur le BB
+        SetIsAttackingBlackboardVar(false);
         LogNodeMessage($"OnEnd: Set BB '{IS_ATTACKING_VAR}' to false.", isVerbose: true, forceLog: true);
 
         ResetNodeInternalState();
     }
 
+    // --- Le reste des méthodes utilitaires reste inchangé ---
     private void ResetNodeInternalState()
     {
         nodeManagedAttackCycleCoroutine = null;
-        // selfUnitInstance et currentTargetUnitForThisNode sont gérés par OnStart/OnEnd
         currentAttackBeatCounter = 0;
         isWaitingForAttackDelay = false;
-        // hasSubscribedToBeatForAttackDelay est géré par les méthodes Subscribe/Unsubscribe
         LogNodeMessage("ResetNodeInternalState complete.", isVerbose: true, forceLog: true);
     }
 
     private bool CacheBlackboardVariables()
     {
         if (blackboardVariablesCached) return true;
-
         var agent = GameObject.GetComponent<BehaviorGraphAgent>();
         if (agent == null || agent.BlackboardReference == null)
         {
@@ -277,7 +264,6 @@ public class AttackUnitNode : Unity.Behavior.Action
         if (!blackboard.GetVariable(SELF_UNIT_VAR, out bbSelfUnit)) { LogNodeMessage($"BBVar '{SELF_UNIT_VAR}' missing.", true, forceLog:true); success = false; }
         if (!blackboard.GetVariable(TARGET_UNIT_VAR, out bbTargetUnit)) { LogNodeMessage($"BBVar '{TARGET_UNIT_VAR}' missing.", true, forceLog:true); success = false; }
         if (!blackboard.GetVariable(IS_ATTACKING_VAR, out bbIsAttackingBlackboard)) { LogNodeMessage($"BBVar '{IS_ATTACKING_VAR}' missing.", true, forceLog:true); success = false; }
-
         blackboardVariablesCached = success;
         if(!success) LogNodeMessage("CacheBlackboardVariables FAILED for one or more vars.", true, forceLog:true);
         else LogNodeMessage("CacheBlackboardVariables SUCCESS.", isVerbose:true, forceLog:true);
@@ -294,7 +280,6 @@ public class AttackUnitNode : Unity.Behavior.Action
                 return;
             }
         }
-
         if (bbIsAttackingBlackboard != null)
         {
             if (bbIsAttackingBlackboard.Value != value)
@@ -312,9 +297,8 @@ public class AttackUnitNode : Unity.Behavior.Action
     private void LogNodeMessage(string message, bool isError = false, bool isVerbose = false, bool forceLog = false)
     {
         string unitName = selfUnitInstance != null ? selfUnitInstance.name : (bbSelfUnit?.Value != null ? bbSelfUnit.Value.name : "NoUnit");
-        UnityEngine.Object contextObject = this.GameObject ?? (UnityEngine.Object)selfUnitInstance; // Pour le contexte du log dans Unity
+        UnityEngine.Object contextObject = this.GameObject ?? (UnityEngine.Object)selfUnitInstance;
         string log = $"[{nodeInstanceIdForLog} | {unitName} | AttackUnitNode] {message}";
-
         if (isError) Debug.LogError(log, contextObject);
     }
 }

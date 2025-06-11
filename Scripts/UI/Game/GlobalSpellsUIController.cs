@@ -216,7 +216,7 @@ public class GlobalSpellsUIController : MonoBehaviour
                         card.CooldownOverlay.enabled = true;
                         card.CooldownTimerText.enabled = true;
 
-                        float totalCooldown = card.SpellData.BeatCooldown * (60f / RhythmManager.Instance.bpm);
+                        float totalCooldown = card.SpellData.BeatCooldown * MusicManager.Instance.GetBeatDuration();
                         card.CooldownOverlay.fillAmount = remainingTime / totalCooldown;
                         card.CooldownTimerText.text = Mathf.CeilToInt(remainingTime).ToString();
                     }

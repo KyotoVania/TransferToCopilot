@@ -219,8 +219,9 @@ public class SummoningUIController : MonoBehaviour
                         card.CooldownOverlay.enabled = true;
                         card.CooldownTimerText.enabled = true;
 
-                        // Update the radial fill and timer text.
-                        float totalCooldown = card.CharacterData.InvocationCooldown * (60f / RhythmManager.Instance.bpm); // Approximate total duration
+                        // Update the radial fill and timer text using music manager's beat duration.
+                        float totalCooldown = card.CharacterData.InvocationCooldown *
+                                              MusicManager.Instance.GetBeatDuration();
                         card.CooldownOverlay.fillAmount = remainingTime / totalCooldown;
                         card.CooldownTimerText.text = Mathf.CeilToInt(remainingTime).ToString();
                     }

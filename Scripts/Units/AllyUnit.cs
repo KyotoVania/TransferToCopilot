@@ -43,30 +43,23 @@ public class AllyUnit : Unit, IBannerObserver
     [SerializeField] public bool enableVerboseLogging = true; // Public pour que les nœuds puissent vérifier
     // ... (autres variables comme prioritizeEnemyBuildings, healAmount etc.)
 
-    // Stockage direct de l'instance du bâtiment objectif initial pour s'abonner/désabonner aux événements
     private Building initialObjectiveBuildingInstance;
     private bool hasInitialObjectiveBeenSetThisLife = false;
-
-    //FEEDBACKS
-    private UnitSpawnFeedback spawnFeedbackPlayer; // Référence au composant de feedback
-
-	  // Variables pour le système de réserves
-      public PlayerBuilding currentReserveBuilding;
+    private UnitSpawnFeedback spawnFeedbackPlayer;
+    public PlayerBuilding currentReserveBuilding;
     public Tile currentReserveTile;
 
     protected override IEnumerator Start()
     {
-        yield return StartCoroutine(base.Start()); // Gère l'attachement à la tuile, etc.
+        yield return StartCoroutine(base.Start());
 
-        // Récupérer les composants nécessaires
         if (m_Agent == null) m_Agent = GetComponent<BehaviorGraphAgent>();
-        spawnFeedbackPlayer = GetComponent<UnitSpawnFeedback>(); // Assurez-vous que cette variable est déclarée dans la classe
+        spawnFeedbackPlayer = GetComponent<UnitSpawnFeedback>();
 
         if (m_Agent == null)
         {
             Debug.LogError($"[{name}] BehaviorGraphAgent component not found on {gameObject.name}! AI will not run.", gameObject);
-            SetSpawningState(false); // Assurer que l'unité n'est pas bloquée si l'IA ne peut pas démarrer
-            // Initialisation minimale sans IA si nécessaire ici
+            SetSpawningState(false);
             yield break;
         }
 
@@ -88,19 +81,16 @@ public class AllyUnit : Unit, IBannerObserver
             LogAlly("En attente de la fin de la séquence de spawn (WaitUntil)...");
             yield return new WaitUntil(() => localSpawnCompletedSignal); // Attend que le feedback soit terminé
             LogAlly("Fin de la séquence de spawn signalée.");
-            // UnitSpawnFeedback devrait déjà avoir appelé SetSpawningState(false)
         }
         else
         {
             LogAlly("UnitSpawnFeedback non trouvé. Passage direct à l'initialisation de l'IA.", true); // isWarning = true
             SetSpawningState(false); // Pas de feedback, donc pas en spawn
         }
-
-        // Réactiver l'agent et initialiser le Blackboard MAINTENANT que le spawn est terminé (ou skippé)
+        
         LogAlly($"Réactivation de l'agent '{m_Agent.name}'.");
         m_Agent.enabled = true;
 
-        // C'est SEULEMENT MAINTENANT que l'on initialise le Blackboard pour l'IA
         if (m_Agent.BlackboardReference == null)
         {
             Debug.LogError($"[{name}] BlackboardReference est null sur BehaviorGraphAgent APRES l'avoir réactivé! AI pourrait mal fonctionner.", gameObject);
@@ -109,16 +99,11 @@ public class AllyUnit : Unit, IBannerObserver
         else
         {
             LogAlly("Mise en cache des variables Blackboard...");
-            CacheBlackboardVariables(); // Doit être appelé quand l'agent est actif
-            InitializeBlackboardFlags(); // Initialise les flags du BB
-
-            // S'abonner à l'événement d'attaque sur bâtiment si on défend un bâtiment
+            CacheBlackboardVariables();
+            InitializeBlackboardFlags();
             Building.OnBuildingAttackedByUnit += HandleBuildingAttackedByUnit;
         }
 
-        // --- FIN DE LA MODIFICATION ---
-
-        // Le reste de votre logique Start (enregistrement, abonnement bannière, etc.)
         if (AllyUnitRegistry.Instance != null)
         {
             AllyUnitRegistry.Instance.RegisterUnit(this);
@@ -136,14 +121,12 @@ public class AllyUnit : Unit, IBannerObserver
             if (BannerController.Instance.HasActiveBanner && !hasInitialObjectiveBeenSetThisLife)
             {
                 LogAlly("Bannière active détectée au spawn, définition de l'objectif initial.");
-                //SetInitialObjectiveFromPosition(BannerController.Instance.CurrentBannerPosition);
             }
         }
         else
         {
             LogAlly("BannerController n'existe pas. Pas d'abonnement ni d'objectif initial via bannière.", true);
         }
-
         LogAlly("Initialisation de AllyUnit terminée. L'IA devrait prendre le relais.");
     }
     
@@ -406,8 +389,10 @@ public class AllyUnit : Unit, IBannerObserver
         return nearestUnit;
     }
 
-    protected override void OnRhythmBeat()
+    protected override void OnRhythmBeat(float beatDuration)
     {
+        // La logique de cette méthode était vide dans la classe AllyUnit, donc rien à changer à l'intérieur.
+        // Seule la signature est importante pour la compilation.
     }
 
     public Building FindNearestEnemyBuilding()
@@ -458,7 +443,7 @@ public class AllyUnit : Unit, IBannerObserver
         return building.Team == TeamType.Enemy || building.Team == TeamType.Player || building.Team == TeamType.Neutral;
     }
 
-    public bool PerformCapture(Building building)
+    public override  bool PerformCapture(Building building)
     {
         NeutralBuilding neutralBuilding = building as NeutralBuilding;
         if (neutralBuilding == null || !neutralBuilding.IsRecapturable || (neutralBuilding.Team != TeamType.Neutral && neutralBuilding.Team != TeamType.Enemy))
@@ -489,7 +474,7 @@ public class AllyUnit : Unit, IBannerObserver
     }
 
     public override void OnCaptureComplete() // Appelée par NeutralBuilding lorsque la capture est terminée par une unité.
-{
+    {
     Building buildingJustCaptured = this.buildingBeingCaptured; // Récupérer la référence AVANT de la nullifier
 
     if (enableVerboseLogging) Debug.Log($"[{name}] Received OnCaptureComplete notification for building '{(buildingJustCaptured != null ? buildingJustCaptured.name : "Unknown (was null)")}'.");

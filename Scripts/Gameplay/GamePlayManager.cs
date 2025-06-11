@@ -105,41 +105,36 @@ public class GameplayManager : MonoBehaviour
 
     void ConfigureAudioAndRhythm()
     {
-        if (RhythmManager.Instance != null && currentLevelData.RhythmBPM > 0)
+        // --- MODIFICATION : On utilise maintenant MusicManager ---
+        if (MusicManager.Instance != null && currentLevelData.RhythmBPM > 0)
         {
-            RhythmManager.Instance.SetBPM(currentLevelData.RhythmBPM);
-            Debug.Log($"[GameplayManager] BPM du niveau réglé à : {currentLevelData.RhythmBPM}");
+            // L'appel à SetBPM est maintenant déprécié mais conservé pour la forme.
+            // La vraie source de BPM est la musique Wwise.
+            MusicManager.Instance.SetBPM(currentLevelData.RhythmBPM);
+            Debug.Log($"[GameplayManager] BPM du niveau (info pour Wwise) : {currentLevelData.RhythmBPM}");
 
             // Stocker l'intervalle de battement pour utilisation dans les cooldowns
-            _beatInterval = RhythmManager.Instance.GetBeatDuration();
-            Debug.Log($"[GameplayManager] Intervalle de battement calculé : {_beatInterval} secondes.");
+            // On le récupère depuis MusicManager qui le tient de Wwise.
+            _beatInterval = MusicManager.Instance.GetBeatDuration();
+            Debug.Log($"[GameplayManager] Intervalle de battement initial (via MusicManager) : {_beatInterval} secondes.");
         }
 
         if (MusicManager.Instance != null)
         {
-            // Priorité au Switch spécifique du niveau s'il est défini
-            if (currentLevelData.MusicStateSwitch != null && currentLevelData.MusicStateSwitch.IsValid()) //
+            if (currentLevelData.MusicStateSwitch != null && currentLevelData.MusicStateSwitch.IsValid())
             {
-                // MusicManager a SetMusicState(string, bool). On pourrait l'étendre
-                // pour prendre un AK.Wwise.Switch ou utiliser son nom.
-                MusicManager.Instance.SetMusicState(currentLevelData.MusicStateSwitch.Name); //
+                MusicManager.Instance.SetMusicState(currentLevelData.MusicStateSwitch.Name);
                 Debug.Log($"[GameplayManager] Wwise Music Switch '{currentLevelData.MusicStateSwitch.Name}' appliqué pour le niveau.");
             }
-            // Sinon, si un Event musical de fond est défini
-            else if (currentLevelData.BackgroundMusic != null && currentLevelData.BackgroundMusic.IsValid()) //
+            else if (currentLevelData.BackgroundMusic != null && currentLevelData.BackgroundMusic.IsValid())
             {
-                // MusicManager pourrait avoir une méthode pour jouer un event musical principal,
-                // ou on pourrait le poster directement.
-                // MusicManager.Instance.PlayLevelMusic(currentLevelData.BackgroundMusic); // Méthode à créer
-                currentLevelData.BackgroundMusic.Post(MusicManager.Instance.gameObject); // Assumant que MusicManager a un GameObject pour poster les sons globaux
+                currentLevelData.BackgroundMusic.Post(MusicManager.Instance.gameObject);
                 Debug.Log($"[GameplayManager] Wwise BackgroundMusic Event '{currentLevelData.BackgroundMusic.Name}' posté.");
             }
             else
             {
-                // Si rien n'est spécifié, GameManager.SetState(GameState.InLevel)
-                // devrait déjà avoir mis un état musical par défaut (ex: "Exploration").
-                // GameManager.Instance.SetState(GameState.InLevel); // Déjà fait par le chargement de scène
                 Debug.Log("[GameplayManager] Aucune musique spécifique ou switch défini dans LevelData. Utilisation de l'état musical par défaut pour InLevel.");
+                MusicManager.Instance.SetMusicState("Exploration"); // Assurer un état de base
             }
         }
     }
@@ -159,7 +154,7 @@ public class GameplayManager : MonoBehaviour
     {
         if (teamManager == null || sequenceController == null) return;
 
-        List<CharacterData_SO> activeTeam = teamManager.ActiveTeam; // ActiveTeam retourne une COPIE
+        List<CharacterData_SO> activeTeam = teamManager.ActiveTeam;
         if (activeTeam == null)
         {
             Debug.LogWarning("[GameplayManager] L'équipe active est null. Le SequenceController sera initialisé avec une équipe vide.");
@@ -171,25 +166,16 @@ public class GameplayManager : MonoBehaviour
     void SubscribeToSequenceEvents()
     {
         if (sequenceController == null) return;
-        // Se désabonner d'abord au cas où (par exemple, si InitializeLevel est appelé plusieurs fois)
         SequenceController.OnCharacterInvocationSequenceComplete -= HandleCharacterInvocation;
         SequenceController.OnGlobalSpellSequenceComplete -= HandleGlobalSpell;
 
-        // S'abonner
         SequenceController.OnCharacterInvocationSequenceComplete += HandleCharacterInvocation;
         SequenceController.OnGlobalSpellSequenceComplete += HandleGlobalSpell;
         Debug.Log("[GameplayManager] Abonné aux événements OnCharacterInvocationSequenceComplete et OnGlobalSpellSequenceComplete.");
     }
 
-    /// <summary>
-    /// Gère la logique d'invocation d'un personnage lorsque la séquence a déjà été validée.
-    /// </summary>
-    /// <param name="characterData">Le ScriptableObject du personnage à invoquer.</param>
-    /// <param name="perfectCount">Le nombre d'inputs parfaits (pour une future utilisation).</param>
     public void HandleCharacterInvocation(CharacterData_SO characterData, int perfectCount)
     {
-        // On utilise le format de log que vous avez spécifié.
-        // Note: J'utilise .Name car DisplayName n'est pas dans la définition de CharacterData_SO.
         Debug.Log($"[GameplayManager] Tentative d'invocation reçue : {characterData.CharacterID}, Inputs Parfaits: {perfectCount}");
     
         if (characterData == null)
@@ -198,27 +184,23 @@ public class GameplayManager : MonoBehaviour
             return;
         }
         
-        // Vérifier si l'unité est en cooldown
         if (_unitCooldowns.ContainsKey(characterData.CharacterID) && Time.time < _unitCooldowns[characterData.CharacterID])
         {
             Debug.Log($"{characterData.CharacterID} is on cooldown.");
-            return; // Stop l'invocation si l'unité est en cooldown
+            return;
         }
 
         
         if (goldController.GetCurrentGold() >= characterData.GoldCost)
         {
-            goldController.RemoveGold(characterData.GoldCost); // Utiliser RemoveGold pour la déduction
+            goldController.RemoveGold(characterData.GoldCost);
             Debug.Log($"[GameplayManager] Or dépensé : {characterData.GoldCost}. Or restant : {goldController.GetCurrentGold()}");
 
-            // Logique de Spawn (simplifiée pour l'instant)
-            // Trouver un PlayerBuilding actif pour spawner l'unité.
-            // Correction de l'avertissement CS0618 pour FindObjectsOfType
             PlayerBuilding[] playerBuildings = FindObjectsByType<PlayerBuilding>(FindObjectsSortMode.None);
             PlayerBuilding spawnerBuilding = null;
             foreach(var pb in playerBuildings)
             {
-                if(pb.gameObject.activeInHierarchy && pb.Team == TeamType.Player) // S'assurer qu'il appartient bien au joueur
+                if(pb.gameObject.activeInHierarchy && pb.Team == TeamType.Player)
                 {
                     spawnerBuilding = pb;
                     break;
@@ -231,7 +213,7 @@ public class GameplayManager : MonoBehaviour
                 Tile spawnTile = null;
                 foreach (Tile tile in adjacentTiles)
                 {
-                    if (!tile.IsOccupied && !tile.IsReserved && tile.tileType == TileType.Ground) // Doit être praticable
+                    if (!tile.IsOccupied && !tile.IsReserved && tile.tileType == TileType.Ground)
                     {
                         spawnTile = tile;
                         break;
@@ -241,16 +223,18 @@ public class GameplayManager : MonoBehaviour
                 if (spawnTile != null)
                 {
                     GameObject unitGO = Instantiate(characterData.GameplayUnitPrefab, spawnTile.transform.position + Vector3.up * 0.1f, Quaternion.identity);
-                    Unit newUnit = unitGO.GetComponentInChildren<Unit>(true); // true pour inclure les enfants inactifs, par sécurité
+                    Unit newUnit = unitGO.GetComponentInChildren<Unit>(true);
                     if (newUnit != null)
                     {
-                        newUnit.InitializeFromCharacterData(characterData); // Passe le CharacterData_SO complet
+                        newUnit.InitializeFromCharacterData(characterData);
 
-                        // Pour l'instant, on logue juste. L'unité devrait chercher ses stats dans son Start().
                         Debug.Log($"[GameplayManager] Unité {characterData.DisplayName} invoquée sur la tuile ({spawnTile.column},{spawnTile.row}).");
+                        
+                        // --- MODIFICATION : S'assurer que _beatInterval est à jour ---
+                        if (MusicManager.Instance != null) _beatInterval = MusicManager.Instance.GetBeatDuration();
+
                         float cooldownInSeconds = characterData.InvocationCooldown * _beatInterval;
                         _unitCooldowns[characterData.CharacterID] = Time.time + cooldownInSeconds;
-                        //DEBUG log qui affiche le cooldown et tous les cooldowns
                         Debug.Log($"[GameplayManager] Cooldown pour {characterData.DisplayName} défini à {cooldownInSeconds} secondes. Cooldowns actuels: {string.Join(", ", _unitCooldowns.Select(kvp => $"{kvp.Key}: {kvp.Value - Time.time:F2}s"))}");
                         
                     }
@@ -259,7 +243,7 @@ public class GameplayManager : MonoBehaviour
                 else
                 {
                     Debug.LogWarning($"[GameplayManager] Impossible d'invoquer {characterData.DisplayName}: Aucune tuile adjacente libre au bâtiment joueur {spawnerBuilding.name}.");
-                    goldController.AddGold(characterData.GoldCost); // Rembourser si le spawn échoue
+                    goldController.AddGold(characterData.GoldCost);
                 }
             }
             else if (defaultPlayerUnitSpawnPoint != null)
@@ -274,19 +258,18 @@ public class GameplayManager : MonoBehaviour
                 else
                 {
                     Debug.LogError($"[GameplayManager] Impossible d'invoquer {characterData.DisplayName}: La tuile au point de spawn par défaut est occupée, réservée ou invalide.");
-                    goldController.AddGold(characterData.GoldCost); // Rembourser
+                    goldController.AddGold(characterData.GoldCost);
                 }
             }
             else
             {
                 Debug.LogError($"[GameplayManager] Impossible d'invoquer {characterData.DisplayName}: Aucun PlayerBuilding ou point de spawn par défaut trouvé.");
-                goldController.AddGold(characterData.GoldCost); // Rembourser
+                goldController.AddGold(characterData.GoldCost);
             }
         }
         else
         {
             Debug.LogWarning($"[GameplayManager] Pas assez d'or pour invoquer {characterData.DisplayName}. Requis : {characterData.GoldCost}, Actuel : {goldController.GetCurrentGold()}");
-            // Idéalement, jouer un son d'échec ici.
         }
     }
 
@@ -296,7 +279,6 @@ public class GameplayManager : MonoBehaviour
  		 if (_spellCooldowns.ContainsKey(spellData.SpellID) && Time.time < _spellCooldowns[spellData.SpellID])
         {
             Debug.Log($"Sort '{spellData.DisplayName}' est en rechargement.");
-            // Jouer un son d'échec ici serait une bonne idée
             return;
         }
 
@@ -306,7 +288,6 @@ public class GameplayManager : MonoBehaviour
             return;
         }
 
-        // Vérifier si le sort est en cooldown
         if (_spellCooldowns.ContainsKey(spellData.SpellID) && Time.time < _spellCooldowns[spellData.SpellID])
         {
             Debug.Log($"[GameplayManager] Sort {spellData.DisplayName} en cooldown. Temps restant : {_spellCooldowns[spellData.SpellID] - Time.time:F2} secondes.");
@@ -325,9 +306,11 @@ public class GameplayManager : MonoBehaviour
                 {
                     spellData.ActivationSound.Post(gameObject);
                 }
+                
+                // --- MODIFICATION : S'assurer que _beatInterval est à jour ---
+                if (MusicManager.Instance != null) _beatInterval = MusicManager.Instance.GetBeatDuration();
 
-                // Définir le cooldown pour le sort
-                float cooldownInSeconds = spellData.BeatCooldown * _beatInterval; // Exemple basé sur la longueur de la séquence
+                float cooldownInSeconds = spellData.BeatCooldown * _beatInterval;
                 _spellCooldowns[spellData.SpellID] = Time.time + cooldownInSeconds;
                 Debug.Log($"[GameplayManager] Cooldown pour {spellData.DisplayName} défini à {cooldownInSeconds} secondes. Cooldowns actuels: {string.Join(", ", _spellCooldowns.Select(kvp => $"{kvp.Key}: {kvp.Value - Time.time:F2}s"))}");
             }
@@ -345,7 +328,6 @@ public class GameplayManager : MonoBehaviour
     
     private void HandleCombatDetection(Unit attacker, Unit target, int damage)
     {
-        // On vérifie que ce n'est pas un combat "interne" (allié vs allié si c'était possible)
         bool isCrossTeamCombat = (attacker is EnemyUnit && target is AllyUnit) || (attacker is AllyUnit && target is EnemyUnit);
         if (isCrossTeamCombat)
         {
@@ -353,10 +335,8 @@ public class GameplayManager : MonoBehaviour
         }
     }
 
-    // --- NOUVEAU HANDLER (Surcharge pour les bâtiments) ---
     private void HandleCombatDetection(Building target, Unit attacker)
     {
-        // On vérifie que c'est bien un ennemi qui attaque un bâtiment joueur
         bool isCrossTeamCombat = (attacker is EnemyUnit && target is PlayerBuilding);
         if (isCrossTeamCombat)
         {
@@ -366,11 +346,9 @@ public class GameplayManager : MonoBehaviour
 
     private void TriggerCombatState()
     {
-        // On récupère le GameStateManager qui est dans la scène Core
         var gameStateManager = FindObjectOfType<GameStateManager>();
         if (gameStateManager == null) return;
         
-        // On ne change l'état que si on est actuellement en "Exploration" on check avec le get rajouté pour acceder a l'état actuel
         if (gameStateManager.CurrentState == GameStateManager.GameState.Exploration)
         {
             Debug.Log("[GameplayManager] Combat détecté ! Passage à l'état de jeu 'Combat'.");
@@ -380,7 +358,6 @@ public class GameplayManager : MonoBehaviour
     
     private void OnDestroy()
     {
-        // Se désabonner proprement pour éviter les erreurs
         if (sequenceController != null)
         {
             SequenceController.OnCharacterInvocationSequenceComplete -= HandleCharacterInvocation;

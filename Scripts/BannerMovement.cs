@@ -13,7 +13,7 @@ public class BannerMovement : MonoBehaviour
     [Tooltip("Amplitude du balancement en position (unités du monde) si useRotationSway est faux.")]
     [SerializeField] private float swayAmount = 0.1f;
     [Tooltip("Vitesse à laquelle l'animation de balancement progresse entre les battements.")]
-    [SerializeField] private float swayTransitionSpeed = 2.0f; // Vitesse de transition vers la nouvelle cible de balancement
+    [SerializeField] private float swayTransitionSpeed = 2.0f;
 
     [Header("Sway Type")]
     [Tooltip("Utiliser un balancement en rotation plutôt qu'en position.")]
@@ -29,20 +29,19 @@ public class BannerMovement : MonoBehaviour
     [SerializeField] private bool shouldFaceCamera = true;
 
     // État interne
-    private Vector3 baseWorldPosition;        // La position "stable" autour de laquelle la bannière se balance, mise à jour par UpdatePosition.
-    private Quaternion baseWorldRotation;     // La rotation "stable" (généralement face à la caméra) autour de laquelle la bannière se balance.
+    private Vector3 baseWorldPosition;
+    private Quaternion baseWorldRotation;
 
     private Camera mainCamera;
-    private RhythmManager rhythmManager;
 
-    private float currentSwayTargetOffset; // Pour le balancement en position : -swayAmount, 0, ou swayAmount
-    private float currentSwayActualOffset; // L'offset de position actuel, lissé vers currentSwayTargetOffset
+    private float currentSwayTargetOffset;
+    private float currentSwayActualOffset;
 
-    private float currentSwayTargetRotation; // Pour le balancement en rotation : -rotationSwayAmount, 0, ou rotationSwayAmount
-    private float currentSwayActualRotation; // L'angle de rotation actuel, lissé vers currentSwayTargetRotation
+    private float currentSwayTargetRotation;
+    private float currentSwayActualRotation;
 
     private bool isInitialized = false;
-    private int swayDirection = 1; // 1 pour droite/horaire, -1 pour gauche/anti-horaire
+    private int swayDirection = 1;
 
     public float FinalHeightOffset => finalHeightOffset;
 
@@ -59,28 +58,23 @@ public class BannerMovement : MonoBehaviour
 
     void OnEnable()
     {
-        // S'abonner à l'événement de rythme si ce n'est pas déjà fait
-        if (RhythmManager.Instance != null)
+        // --- CORRECTION : Utilisation de l'instance pour s'abonner ---
+        if (MusicManager.Instance != null)
         {
-            RhythmManager.OnBeat += OnBeat;
+            MusicManager.Instance.OnBeat += OnBeat;
         }
         else
         {
-            Debug.LogWarning("[BannerMovement] RhythmManager.Instance non trouvé lors de OnEnable. Le balancement rythmique pourrait ne pas fonctionner.", this);
+            Debug.LogWarning("[BannerMovement] MusicManager.Instance non trouvé lors de OnEnable. Le balancement rythmique pourrait ne pas fonctionner.", this);
         }
 
-        // Initialiser les valeurs de balancement
-        // On commence avec un offset cible pour aller vers la première direction au premier battement.
-        // Si on veut que ça commence déjà balancé, on peut initialiser currentSwayActual... différemment.
         currentSwayTargetOffset = 0;
         currentSwayActualOffset = 0;
         currentSwayTargetRotation = 0;
         currentSwayActualRotation = 0;
-        swayDirection = 1; // Commencer par aller vers la "droite" (ou angle positif)
+        swayDirection = 1;
 
-        // Si la position a déjà été définie par UpdatePosition avant OnEnable (peu probable mais possible)
-        // et que isInitialized n'est pas encore vrai, on initialise.
-        if (!isInitialized && baseWorldPosition != Vector3.zero) // baseWorldPosition est mis à jour dans UpdatePosition
+        if (!isInitialized && baseWorldPosition != Vector3.zero)
         {
             InitializeTransform();
         }
@@ -88,33 +82,22 @@ public class BannerMovement : MonoBehaviour
 
     void OnDisable()
     {
-        if (RhythmManager.Instance != null)
+        // --- CORRECTION : Utilisation de l'instance pour se désabonner ---
+        if (MusicManager.Instance != null)
         {
-            RhythmManager.OnBeat -= OnBeat;
+            MusicManager.Instance.OnBeat -= OnBeat;
         }
     }
 
-    /// <summary>
-    /// Méthode publique appelée par MouseManager pour définir la position de base de la bannière.
-    /// C'est autour de cette position que le balancement s'effectuera.
-    /// </summary>
     public void UpdatePosition(Vector3 newBaseWorldPosition)
     {
         baseWorldPosition = newBaseWorldPosition;
-        // Debug.Log($"[BannerMovement] UpdatePosition appelée avec: {newBaseWorldPosition}", this);
-
-        // Si le script est déjà actif et initialisé, on met à jour directement.
-        // Sinon, l'initialisation se fera dans OnEnable ou Start.
         if (isActiveAndEnabled)
         {
             InitializeTransform();
         }
     }
 
-    /// <summary>
-    /// Initialise ou réinitialise la transformation de la bannière
-    /// à sa position et rotation de base.
-    /// </summary>
     private void InitializeTransform()
     {
         transform.position = baseWorldPosition;
@@ -122,26 +105,22 @@ public class BannerMovement : MonoBehaviour
         {
             FaceCamera();
         }
-        baseWorldRotation = transform.rotation; // Stocker la rotation après avoir fait face à la caméra
+        baseWorldRotation = transform.rotation;
         isInitialized = true;
-        // Debug.Log($"[BannerMovement] Transform initialisé. baseWorldPosition: {baseWorldPosition}, baseWorldRotation: {baseWorldRotation.eulerAngles}", this);
     }
 
-    private void OnBeat()
+    private void OnBeat(float beatDuration)
     {
         if (!enableRhythmicMovement || !isInitialized || !isActiveAndEnabled) return;
 
-        // Inverse la direction du balancement et définit la nouvelle cible d'offset/rotation
         swayDirection *= -1;
         if (useRotationSway)
         {
             currentSwayTargetRotation = rotationSwayAmount * swayDirection;
-            // Debug.Log($"[BannerMovement] OnBeat! Nouvelle cible de rotation: {currentSwayTargetRotation} deg (direction: {swayDirection})", this);
         }
         else
         {
             currentSwayTargetOffset = swayAmount * swayDirection;
-            // Debug.Log($"[BannerMovement] OnBeat! Nouvelle cible d'offset: {currentSwayTargetOffset} (direction: {swayDirection})", this);
         }
     }
 
@@ -149,9 +128,7 @@ public class BannerMovement : MonoBehaviour
     {
         if (!isInitialized || !enableRhythmicMovement || !isActiveAndEnabled)
         {
-            // Si le mouvement rythmique n'est pas activé ou si on n'est pas initialisé,
-            // s'assurer au moins que la bannière est à sa position de base et face à la caméra.
-            if (baseWorldPosition != Vector3.zero) // S'assurer que UpdatePosition a été appelée au moins une fois
+            if (baseWorldPosition != Vector3.zero)
             {
                 transform.position = baseWorldPosition;
                  if (shouldFaceCamera)
@@ -167,42 +144,27 @@ public class BannerMovement : MonoBehaviour
 
     private void ApplySwaying()
     {
-        // Orienter vers la caméra d'abord (seulement l'axe Y pour ne pas écraser le balancement en rotation)
         if (shouldFaceCamera)
         {
-            FaceCamera(); // Met à jour transform.rotation
+            FaceCamera();
             if (useRotationSway) {
-                baseWorldRotation = transform.rotation; // Réassigner baseWorldRotation si on veut que le "forward" du balancement soit toujours relatif à la caméra
+                baseWorldRotation = transform.rotation;
             }
         }
 
-
         if (useRotationSway)
         {
-            // Lisser la rotation actuelle vers la rotation cible
             currentSwayActualRotation = Mathf.Lerp(currentSwayActualRotation, currentSwayTargetRotation, Time.deltaTime * swayTransitionSpeed);
-
-            // Calculer le point de pivot
-            // pivotOffsetRatio: 0 pour la base, 0.5 pour le centre, 1 pour le haut de la bannière.
-            float pivotYOffset = bannerHeight * (pivotOffsetRatio - 0.5f); // Négatif si pivot en bas, positif si en haut
-            Vector3 pivotPoint = baseWorldPosition + transform.up * pivotYOffset; // Utiliser transform.up pour le décalage local du pivot
-
-            // Appliquer la rotation de balancement
-            // On combine la rotation de base (face caméra) avec la rotation de balancement.
-            // Le balancement se fait sur l'axe "right" de la bannière après qu'elle se soit orientée vers la caméra.
+            float pivotYOffset = bannerHeight * (pivotOffsetRatio - 0.5f);
+            Vector3 pivotPoint = baseWorldPosition + transform.up * pivotYOffset;
             Quaternion sway = Quaternion.AngleAxis(currentSwayActualRotation, transform.right);
             transform.rotation = baseWorldRotation * sway;
-
-            // Ajuster la position pour que la bannière pivote correctement autour du pivotPoint désiré
-            transform.position = baseWorldPosition; // D'abord, réinitialiser à la position de base
-            transform.RotateAround(pivotPoint, transform.right, currentSwayActualRotation); // Puis pivoter
+            transform.position = baseWorldPosition;
+            transform.RotateAround(pivotPoint, transform.right, currentSwayActualRotation);
         }
         else
         {
-            // Balancement en position
             currentSwayActualOffset = Mathf.Lerp(currentSwayActualOffset, currentSwayTargetOffset, Time.deltaTime * swayTransitionSpeed);
-
-            // Le balancement se fait sur l'axe "right" de la bannière (perpendiculaire à sa direction et à l'axe Y mondial)
             Vector3 swayOffsetVector = transform.right * currentSwayActualOffset;
             transform.position = baseWorldPosition + swayOffsetVector;
         }
@@ -213,22 +175,17 @@ public class BannerMovement : MonoBehaviour
         if (mainCamera == null) return;
 
         Vector3 lookDirection = mainCamera.transform.position - transform.position;
-        if (!useRotationSway) // Si balancement en position, on ne veut pas que le "regard" soit affecté par l'offset Y du sway.
+        if (!useRotationSway)
         {
-            lookDirection.y = 0; // Aplatir la direction pour que la bannière reste verticale
+            lookDirection.y = 0;
         }
-
 
         if (lookDirection != Vector3.zero)
         {
-            Quaternion targetRotation = Quaternion.LookRotation(lookDirection);
-            // Optionnel: Lisser la rotation vers la caméra pour éviter les changements brusques
-            // transform.rotation = Quaternion.Slerp(transform.rotation, targetRotation, Time.deltaTime * 10f);
-            transform.rotation = targetRotation;
+            transform.rotation = Quaternion.LookRotation(lookDirection);
         }
     }
-
-    // Méthode OnDrawGizmosSelected pour le débogage (optionnelle)
+    
     void OnDrawGizmosSelected()
     {
         if (!Application.isPlaying || !isInitialized) return;
@@ -240,15 +197,14 @@ public class BannerMovement : MonoBehaviour
         if (useRotationSway)
         {
             float pivotYOffset = bannerHeight * (pivotOffsetRatio - 0.5f);
-            Vector3 pivotPointPreview = baseWorldPosition + transform.up * pivotYOffset; // Utiliser transform.up pour la direction locale
+            Vector3 pivotPointPreview = baseWorldPosition + transform.up * pivotYOffset;
             Gizmos.color = Color.red;
             Gizmos.DrawSphere(pivotPointPreview, 0.05f);
             Gizmos.DrawLine(baseWorldPosition, pivotPointPreview);
 
-            // Visualiser l'amplitude de la rotation
             Quaternion leftSwayPreview = Quaternion.AngleAxis(-rotationSwayAmount, transform.right);
             Quaternion rightSwayPreview = Quaternion.AngleAxis(rotationSwayAmount, transform.right);
-            Vector3 topOfBannerRelative = Vector3.up * bannerHeight * (1f - pivotOffsetRatio); // Position du haut par rapport au pivot
+            Vector3 topOfBannerRelative = Vector3.up * bannerHeight * (1f - pivotOffsetRatio);
 
             Gizmos.color = Color.green;
             Gizmos.DrawLine(pivotPointPreview, pivotPointPreview + (baseWorldRotation * leftSwayPreview * topOfBannerRelative));

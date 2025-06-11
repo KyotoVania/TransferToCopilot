@@ -36,15 +36,21 @@ public class BannerController : MonoBehaviour
 
     private void OnEnable()
     {
-        RhythmManager.OnBeat += HandleBeat;
+        if (MusicManager.Instance != null)
+        {
+            MusicManager.Instance.OnBeat += HandleBeat;
+        }
     }
 
     private void OnDisable()
     {
-        RhythmManager.OnBeat -= HandleBeat;
+        if (MusicManager.Instance != null)
+        {
+            MusicManager.Instance.OnBeat -= HandleBeat;
+        }
     }
 
-    private void HandleBeat()
+    private void HandleBeat(float beatDuration)
     {
         if (HasActiveBanner)
         {

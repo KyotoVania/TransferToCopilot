@@ -6,7 +6,6 @@ using Unity.Behavior.GraphFramework;
 
 /// <summary>
 /// A custom Behavior Graph Action node that waits for the next beat signal
-/// from the RhythmManager before returning Success.
 /// Uses the correct OnStart, OnUpdate, OnEnd lifecycle methods.
 /// </summary>
 [Serializable]
@@ -17,34 +16,32 @@ using Unity.Behavior.GraphFramework;
     category: "My Actions",
     id: "YOUR_UNIQUE_ID_WaitForBeat" // Generate a unique GUID string here if needed, or omit for auto
 )]
-public class WaitForBeatNode : Unity.Behavior.Action // Assurez-vous que la classe de base est correcte
+public class WaitForBeatNode : Unity.Behavior.Action
 {
     private bool beatOccurredThisFrame = false;
     private bool hasSubscribedThisRun = false;
 
     /// <summary>
     /// Appelé une fois lorsque le nœud commence à s'exécuter.
-    /// S'abonne à l'événement OnBeat du RhythmManager.
+    /// S'abonne à l'événement OnBeat du MusicManager.
     /// </summary>
     protected override Status OnStart()
     {
         // Réinitialiser le flag à chaque fois que le nœud démarre.
         beatOccurredThisFrame = false;
-        hasSubscribedThisRun = false; // Réinitialiser l'état d'abonnement pour cette exécution.
+        hasSubscribedThisRun = false;
 
-        if (RhythmManager.Instance != null)
+        if (MusicManager.Instance != null)
         {
             // S'abonner à l'événement.
-            RhythmManager.OnBeat += HandleBeat;
+            MusicManager.Instance.OnBeat += HandleBeat;
             hasSubscribedThisRun = true;
-            // Optionnel: Log pour débogage
-            // Debug.Log($"[{Time.frameCount}] WaitForBeatNode: OnStart - Subscribed to RhythmManager.OnBeat.");
             return Status.Running; // Commencer à attendre le battement.
         }
         else
         {
-            Debug.LogError("[WaitForBeatNode] OnStart: RhythmManager.Instance is null. Cannot wait for beat. Returning Failure.");
-            return Status.Failure; // Impossible de fonctionner sans RhythmManager.
+            Debug.LogError("[WaitForBeatNode] OnStart: MusicManager.Instance is null. Cannot wait for beat. Returning Failure.");
+            return Status.Failure; // Impossible de fonctionner sans MusicManager.
         }
     }
 
@@ -54,18 +51,10 @@ public class WaitForBeatNode : Unity.Behavior.Action // Assurez-vous que la clas
     /// </summary>
     protected override Status OnUpdate()
     {
-        // Si le flag beatOccurredThisFrame a été mis à true par HandleBeat,
-        // cela signifie qu'un battement s'est produit depuis le dernier OnUpdate ou OnStart.
         if (beatOccurredThisFrame)
         {
-            // Optionnel: Log pour débogage
-            // Debug.Log($"[{Time.frameCount}] WaitForBeatNode: OnUpdate - Beat occurred. Returning Success.");
-            // Le flag sera réinitialisé au prochain OnStart.
-            // Le désabonnement se fera dans OnEnd.
             return Status.Success; // Le battement a été reçu.
         }
-
-        // Si aucun battement n'a encore eu lieu pendant cette exécution du nœud, continuer à attendre.
         return Status.Running;
     }
 
@@ -75,36 +64,25 @@ public class WaitForBeatNode : Unity.Behavior.Action // Assurez-vous que la clas
     /// </summary>
     protected override void OnEnd()
     {
-        // Se désabonner de l'événement pour éviter les fuites de mémoire ou les appels non désirés.
-        if (hasSubscribedThisRun && RhythmManager.Instance != null)
+        if (hasSubscribedThisRun && MusicManager.Instance != null)
         {
-            RhythmManager.OnBeat -= HandleBeat;
-            // Optionnel: Log pour débogage
-            // Debug.Log($"[{Time.frameCount}] WaitForBeatNode: OnEnd - Unsubscribed from RhythmManager.OnBeat.");
+            MusicManager.Instance.OnBeat -= HandleBeat; // Se désabonner de l'événement.
         }
-        else if (hasSubscribedThisRun && RhythmManager.Instance == null)
+        else if (hasSubscribedThisRun && MusicManager.Instance == null)
         {
-            // Si RhythmManager a disparu pendant que nous étions abonnés.
-            Debug.LogWarning("[WaitForBeatNode] OnEnd: RhythmManager.Instance became null while subscribed. Could not formally unsubscribe.");
+            Debug.LogWarning("[WaitForBeatNode] OnEnd: MusicManager.Instance became null while subscribed. Could not formally unsubscribe.");
         }
 
-        // Réinitialiser le flag d'abonnement pour la prochaine exécution.
         hasSubscribedThisRun = false;
-        beatOccurredThisFrame = false; // Assurer la propreté pour la prochaine fois.
-
-        // Il n'est généralement pas nécessaire d'appeler base.OnEnd() car elle est souvent vide.
+        beatOccurredThisFrame = false;
     }
 
     /// <summary>
-    /// Méthode de handler pour l'événement OnBeat du RhythmManager.
+    /// Méthode de handler pour l'événement OnBeat du MusicManager.
     /// Met à jour le flag pour indiquer qu'un battement a été reçu.
     /// </summary>
-    private void HandleBeat()
+    private void HandleBeat(float beatDuration) // La signature accepte le float, même si on ne l'utilise pas ici.
     {
-        // Ce handler est appelé directement par l'événement OnBeat du RhythmManager.
-        // Il met simplement le flag à true. OnUpdate vérifiera ce flag.
         beatOccurredThisFrame = true;
-        // Optionnel: Log pour débogage
-        // Debug.Log($"[{Time.frameCount}] WaitForBeatNode: HandleBeat - Beat signal received. beatOccurredThisFrame = true.");
     }
 }

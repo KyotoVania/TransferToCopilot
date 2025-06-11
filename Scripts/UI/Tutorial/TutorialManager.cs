@@ -1,4 +1,3 @@
-// Fichier: Scripts/Tutorials/TutorialManager.cs (Version Corrigée pour SequenceController)
 using UnityEngine;
 using System.Collections.Generic;
 using ScriptableObjects;
@@ -71,7 +70,8 @@ public class TutorialManager : SingletonPersistent<TutorialManager>
         switch (currentStep.triggerType)
         {
             case TutorialTriggerType.BeatCount:
-                if (RhythmManager.Instance != null) RhythmManager.OnBeat += HandleBeat;
+                // --- MODIFICATION : On s'abonne à MusicManager.Instance ---
+                if (MusicManager.Instance != null) MusicManager.Instance.OnBeat += HandleBeat;
                 break;
             case TutorialTriggerType.PlayerInputs:
                 SequenceController.OnSequenceKeyPressed += HandlePlayerInput;
@@ -83,10 +83,7 @@ public class TutorialManager : SingletonPersistent<TutorialManager>
                     BannerController.Instance.AddObserver(TutorialBannerObserver.Instance);
                 }
                 break;
-
-            // --- MODIFIÉ ICI ---
             case TutorialTriggerType.UnitSummoned:
-                // On écoute maintenant l'événement directement depuis le SequenceController
                 SequenceController.OnCharacterInvocationSequenceComplete += HandleUnitSummoned;
                 break;
         }
@@ -99,7 +96,8 @@ public class TutorialManager : SingletonPersistent<TutorialManager>
         switch (currentStep.triggerType)
         {
             case TutorialTriggerType.BeatCount:
-                if (RhythmManager.Instance != null) RhythmManager.OnBeat -= HandleBeat;
+                // --- MODIFICATION : On se désabonne de MusicManager.Instance ---
+                if (MusicManager.Instance != null) MusicManager.Instance.OnBeat -= HandleBeat;
                 break;
             case TutorialTriggerType.PlayerInputs:
                 SequenceController.OnSequenceKeyPressed -= HandlePlayerInput;
@@ -110,22 +108,18 @@ public class TutorialManager : SingletonPersistent<TutorialManager>
                     TutorialBannerObserver.Instance.OnBannerPlacedOnBuilding -= HandleBannerPlacement;
                  }
                 break;
-
-            // --- MODIFIÉ ICI ---
             case TutorialTriggerType.UnitSummoned:
-                // On se désabonne du même événement
                 SequenceController.OnCharacterInvocationSequenceComplete -= HandleUnitSummoned;
                 break;
         }
     }
 
     // --- Handlers ---
-    private void HandleBeat() { beatCounter++; if (beatCounter >= currentStep.triggerParameter) AdvanceToNextStep(); }
+    // --- MODIFICATION : Signature de la méthode mise à jour ---
+    private void HandleBeat(float beatDuration) { beatCounter++; if (beatCounter >= currentStep.triggerParameter) AdvanceToNextStep(); }
     private void HandlePlayerInput(string key, Color timingColor) { inputCounter++; if (inputCounter >= currentStep.triggerParameter) AdvanceToNextStep(); }
     private void HandleBannerPlacement() { AdvanceToNextStep(); }
-
-    // --- SIGNATURE DE LA MÉTHODE MODIFIÉE ---
-    // La signature doit correspondre à celle de l'événement: Action<CharacterData_SO, int>
+    
     private void HandleUnitSummoned(CharacterData_SO characterData, int perfectCount)
     {
         Debug.Log($"[TutorialManager] Séquence d'invocation pour '{characterData.DisplayName}' détectée, le tutoriel avance.");
@@ -134,7 +128,7 @@ public class TutorialManager : SingletonPersistent<TutorialManager>
 
     // --- Reste du script (inchangé) ---
     private void OnDestroy() { UnsubscribeFromCurrentTrigger(); }
-    private void TriggerStepStartAction(TutorialStep step) { /* ... */ switch (step.groupToShowOnStart)
+    private void TriggerStepStartAction(TutorialStep step) { switch (step.groupToShowOnStart)
         {
             case HUDGroup.Invocation:
                 ShowInvocationUI();
@@ -143,20 +137,25 @@ public class TutorialManager : SingletonPersistent<TutorialManager>
                 ShowComboUI();
                 break;
             case HUDGroup.Gold:
-                ShowGoldUI(); // On affiche Combo et Gold ensemble
+                ShowGoldUI();
                 break;
             case HUDGroup.UnitsAndSpells:
                 ShowUnitsAndSpellsUI();
                 break;
             default:
-                HideAllTutorialHUD();
+                // Par défaut ou si None, on ne cache plus tout, on ne fait rien.
+                // HideAllTutorialHUD(); // Commenté pour éviter de cacher des UI inutilement
                 break;
         }
     }
-    public void HideAllTutorialHUD() { /* ... */ //invocationUIObjects.ForEach(obj => { if (obj != null) obj.SetActive(false); });comboAndGoldUIObjects.ForEach(obj => { if (obj != null) obj.SetActive(false); });unitsAndSpellsUIObjects.ForEach(obj => { if (obj != null) obj.SetActive(false); });
-                                                 }
-    public void ShowInvocationUI() { /* ... */ HideAllTutorialHUD(); invocationUIObjects.ForEach(obj => { if (obj != null) obj.SetActive(true); });}
-    public void ShowComboUI() { /* ... */ HideAllTutorialHUD(); comboUIObjects.ForEach(obj => { if (obj != null) obj.SetActive(true); }); goldUIObjects.ForEach(obj => { if (obj != null) obj.SetActive(true); });}
-    public void ShowGoldUI() { /* ... */ HideAllTutorialHUD(); goldUIObjects.ForEach(obj => { if (obj != null) obj.SetActive(true); });}
-    public void ShowUnitsAndSpellsUI() { /* ... */ HideAllTutorialHUD(); unitsAndSpellsUIObjects.ForEach(obj => { if (obj != null) obj.SetActive(true); });}
+    public void HideAllTutorialHUD() { 
+        invocationUIObjects.ForEach(obj => { if (obj != null) obj.SetActive(false); });
+        comboUIObjects.ForEach(obj => { if (obj != null) obj.SetActive(false); });
+        goldUIObjects.ForEach(obj => { if (obj != null) obj.SetActive(false); });
+        unitsAndSpellsUIObjects.ForEach(obj => { if (obj != null) obj.SetActive(false); });
+    }
+    public void ShowInvocationUI() { HideAllTutorialHUD(); invocationUIObjects.ForEach(obj => { if (obj != null) obj.SetActive(true); });}
+    public void ShowComboUI() { HideAllTutorialHUD(); comboUIObjects.ForEach(obj => { if (obj != null) obj.SetActive(true); }); }
+    public void ShowGoldUI() { HideAllTutorialHUD(); goldUIObjects.ForEach(obj => { if (obj != null) obj.SetActive(true); });}
+    public void ShowUnitsAndSpellsUI() { HideAllTutorialHUD(); unitsAndSpellsUIObjects.ForEach(obj => { if (obj != null) obj.SetActive(true); });}
 }

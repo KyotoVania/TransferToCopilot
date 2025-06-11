@@ -1,4 +1,3 @@
-// Fichier: Scripts/Nodes/AttackBuildingNode.cs
 using UnityEngine;
 using Unity.Behavior;
 using Unity.Behavior.GraphFramework;
@@ -73,10 +72,6 @@ public class AttackBuildingNode : Unity.Behavior.Action
             return Status.Success;
         }
 
-        // MODIFICATION CI-DESSOUS :
-        // L'ancienne vérification incluait : || currentTargetBuildingForThisNode.Team != TeamType.Enemy ||
-        // Nous la retirons pour se fier uniquement à IsValidBuildingTarget de l'unité.
-
         if (!selfUnitInstance.IsValidBuildingTarget(currentTargetBuildingForThisNode))
         {
             LogNodeMessage($"OnStart: Target Building '{currentTargetBuildingForThisNode.name}' (H:{currentTargetBuildingForThisNode.CurrentHealth}, T:{currentTargetBuildingForThisNode.Team}) N'EST PAS une cible valide selon {selfUnitInstance.name}.IsValidBuildingTarget(). Node FAILURE.", isError: false, forceLog: true);
@@ -135,13 +130,7 @@ public class AttackBuildingNode : Unity.Behavior.Action
             return Status.Success;
         }
 
-        // La logique qui vérifiait `currentTargetBuildingForThisNode.Team != TeamType.Enemy`
-        // et mettait bbIsObjectiveCompleted à true a été SUPPRIMÉE ici.
-        // C'était la cause probable de la boucle.
-
-        // L'unité doit rester engagée avec sa cible actuelle tant qu'elle est valide et à portée.
-        // On revérifie la validité (au cas où l'équipe aurait changé d'une manière qui la rend non valide pour CETTE unité)
-        if (!selfUnitInstance.IsValidBuildingTarget(currentTargetBuildingForThisNode))
+          if (!selfUnitInstance.IsValidBuildingTarget(currentTargetBuildingForThisNode))
         {
             LogNodeMessage($"OnUpdate: Target Building '{currentTargetBuildingForThisNode.name}' (H:{currentTargetBuildingForThisNode.CurrentHealth}, T:{currentTargetBuildingForThisNode.Team}) n'est PLUS une cible valide selon {selfUnitInstance.name}.IsValidBuildingTarget(). Node FAILURE.", isError: false, forceLog: true);
             SetIsAttackingBlackboardVar(false);
@@ -230,63 +219,62 @@ public class AttackBuildingNode : Unity.Behavior.Action
         LogNodeMessage($"PerformUnitAttackCycle: END for {currentTargetBuildingForThisNode?.name ?? "TARGET UNKNOWN"}. nodeManagedAttackCycleCoroutine set to null.", isVerbose:true, forceLog:true); // LOG FORCE
     }
 
-    private void HandleAttackBeatDelay()
+    private void HandleAttackBeatDelay(float beatDuration)
     {
         if (!isWaitingForAttackDelay || selfUnitInstance == null)
         {
-            if (hasSubscribedToBeatForAttackDelay) UnsubscribeFromBeatForAttackDelay(); // Sécurité
+            if (hasSubscribedToBeatForAttackDelay) UnsubscribeFromBeatForAttackDelay();
             return;
         }
 
         currentAttackBeatCounter++;
-        // LogNodeMessage($"HandleAttackBeatDelay: Beat Counter {currentAttackBeatCounter}/{selfUnitInstance.AttackDelay}", isVerbose: true);
 
         if (currentAttackBeatCounter >= selfUnitInstance.AttackDelay)
         {
-            isWaitingForAttackDelay = false; // Le délai est terminé
-            UnsubscribeFromBeatForAttackDelay(); // Important: se désabonner dès que le délai est atteint
-            LogNodeMessage("HandleAttackBeatDelay: AttackDelay reached. Ready for next attack action.", isVerbose: true, forceLog: true); // LOG FORCE
+            isWaitingForAttackDelay = false;
+            UnsubscribeFromBeatForAttackDelay();
+            LogNodeMessage("HandleAttackBeatDelay: AttackDelay reached. Ready for next attack action.", isVerbose: true, forceLog: true);
         }
     }
 
     private void SubscribeToBeatForAttackDelay()
     {
-        if (RhythmManager.Instance != null && !hasSubscribedToBeatForAttackDelay)
+        if (MusicManager.Instance != null && !hasSubscribedToBeatForAttackDelay)
         {
-            RhythmManager.OnBeat += HandleAttackBeatDelay;
+            MusicManager.Instance.OnBeat += HandleAttackBeatDelay;
             hasSubscribedToBeatForAttackDelay = true;
-            LogNodeMessage("Subscribed to OnBeat for AttackDelay.", isVerbose: true, forceLog: true); // LOG FORCE
+            LogNodeMessage("Subscribed to OnBeat for AttackDelay.", isVerbose: true, forceLog: true);
         }
-        else if (RhythmManager.Instance == null)
+        else if (MusicManager.Instance == null)
         {
-            LogNodeMessage("RhythmManager is null, cannot subscribe for AttackDelay. Attack will be continuous if delay was > 0.", true, forceLog: true); // LOG FORCE
-            isWaitingForAttackDelay = false; // Forcer à ne pas attendre
+            LogNodeMessage("MusicManager is null, cannot subscribe for AttackDelay. Attack will be continuous if delay was > 0.", true, forceLog: true);
+            isWaitingForAttackDelay = false;
         }
     }
 
     private void UnsubscribeFromBeatForAttackDelay()
     {
-        if (RhythmManager.Instance != null && hasSubscribedToBeatForAttackDelay)
+        if (MusicManager.Instance != null && hasSubscribedToBeatForAttackDelay)
         {
-            RhythmManager.OnBeat -= HandleAttackBeatDelay;
+            MusicManager.Instance.OnBeat -= HandleAttackBeatDelay;
             hasSubscribedToBeatForAttackDelay = false;
-            LogNodeMessage("Unsubscribed from OnBeat for AttackDelay.", isVerbose: true, forceLog: true); // LOG FORCE
+            LogNodeMessage("Unsubscribed from OnBeat for AttackDelay.", isVerbose: true, forceLog: true);
         }
     }
 
     protected override void OnEnd()
     {
-        LogNodeMessage($"OnEnd called. Status: {CurrentStatus}. Cleaning up.", isVerbose: true, forceLog: true); // LOG FORCE
-        UnsubscribeFromBeatForAttackDelay(); // Double sécurité
+        LogNodeMessage($"OnEnd called. Status: {CurrentStatus}. Cleaning up.", isVerbose: true, forceLog: true);
+        UnsubscribeFromBeatForAttackDelay();
 
         if (nodeManagedAttackCycleCoroutine != null && selfUnitInstance != null && selfUnitInstance.gameObject.activeInHierarchy)
         {
             selfUnitInstance.StopCoroutine(nodeManagedAttackCycleCoroutine);
-            LogNodeMessage("Stopped nodeManagedAttackCycleCoroutine.", isVerbose: true, forceLog: true); // LOG FORCE
+            LogNodeMessage("Stopped nodeManagedAttackCycleCoroutine.", isVerbose: true, forceLog: true);
         }
 
-        SetIsAttackingBlackboardVar(false); // Crucial: Mettre IsAttacking à false sur le BB
-        LogNodeMessage($"OnEnd: Set BB '{IS_ATTACKING_VAR}' to false.", isVerbose: true, forceLog: true); // LOG FORCE
+        SetIsAttackingBlackboardVar(false);
+        LogNodeMessage($"OnEnd: Set BB '{IS_ATTACKING_VAR}' to false.", isVerbose: true, forceLog: true);
 
         ResetNodeInternalState();
     }
@@ -294,9 +282,6 @@ public class AttackBuildingNode : Unity.Behavior.Action
     private void ResetNodeInternalState()
     {
         nodeManagedAttackCycleCoroutine = null;
-        // selfUnitInstance et currentTargetBuildingForThisNode sont initialisés/nettoyés par OnStart/OnEnd
-        // blackboardVariablesCached est géré par CacheBlackboardVariables et remis à false indirectement
-
         currentAttackBeatCounter = 0;
         isWaitingForAttackDelay = false;
         // hasSubscribedToBeatForAttackDelay est géré par Unsubscribe...
