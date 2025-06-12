@@ -2,22 +2,11 @@ using UnityEngine;
 using UnityEngine.UI;
 using Unity.Behavior.GraphFramework;
 
-public class WinLoseController : SingletonPersistent<WinLoseController>
+public class WinLoseController : MonoBehaviour
 {
   
-    /*
-    [Header("Conditions de Victoire/Défaite")]
-    [Tooltip("Référence directe ou sera trouvée par nom via le champ 'Name Target To Destroy For Win'.")]
-    [SerializeField] private Building targetToDestroyForWin;
-    [Tooltip("Référence directe ou sera trouvée par nom via le champ 'Name Target To Protect For Lose'.")]
-    [SerializeField] private Building targetToProtectForLose;
+    public static WinLoseController Instance { get; private set; }
 
-    [Header("Noms des Bâtiments Cibles (pour recherche par nom si les références directes sont nulles/obsolètes)")]
-    [Tooltip("Nom EXACT du GameObject du bâtiment à détruire pour la victoire.")]
-    [SerializeField] private string name_targetToDestroyForWin = "NomDuBatimentPourGagner";
-    [Tooltip("Nom EXACT du GameObject du bâtiment à protéger (sa destruction = défaite).")]
-    [SerializeField] private string name_targetToProtectForLose = "NomDuBatimentAPreteger";
-*/
     [Header("Débogage")]
     [SerializeField] private KeyCode winDebugKey = KeyCode.F10;
     [SerializeField] private KeyCode loseDebugKey = KeyCode.F11;
@@ -52,25 +41,26 @@ public class WinLoseController : SingletonPersistent<WinLoseController>
     private System.Collections.Generic.List<GameObject> _deactivatedAllyUnits = new System.Collections.Generic.List<GameObject>();
     private System.Collections.Generic.List<GameObject> _deactivatedEnemyUnits = new System.Collections.Generic.List<GameObject>();
 
-    protected override void Awake()
+    private void Awake() // Anciennement : protected override void Awake()
     {
-        base.Awake();
-        // La recherche de caméra se fait maintenant dans ResetGameConditionState et ActivateGameOverSequence
-        // car Camera.main pourrait ne pas être la bonne caméra ici si les scènes changent vite.
-        // FindAndValidateCameraControllerReference(true); // Peut être enlevé si fait plus tard de manière fiable
+        // Logique du singleton de scène
+        if (Instance != null && Instance != this)
+        {
+            Debug.LogWarning($"[WinLoseController] Une instance existe déjà. Destruction du duplicata {gameObject.name}.");
+            Destroy(gameObject);
+        }
+        else
+        {
+            Instance = this;
+        }
+        
+        // La recherche de la caméra peut rester ici ou dans Start
+        // FindAndValidateCameraControllerReference(true); 
     }
 
     private void Start()
     {
-        // SetInitialScreenState est appelé par GameManager lorsque l'état InLevel/Hub/MainMenu est défini.
-        // Cela garantit que la scène est chargée et que les GameObjects sont potentiellement trouvables.
-        // Pour le tout premier lancement du jeu, GameManager va définir un état initial (ex: MainMenu)
-        // qui déclenchera ResetGameConditionState -> SetInitialScreenState.
-        /*
-        Building.OnBuildingDestroyed += HandleBuildingDestroyed;
-        Debug.Log($"[{gameObject.name} WinLoseController.Start] Abonnement à Building.OnBuildingDestroyed.", this);
-        */
-    
+        // S'abonner aux événements ici, car l'instance est maintenant liée à la scène
     }
 
     private void FindAndValidateCameraControllerReference(bool isInitialAttempt = false) {
@@ -268,6 +258,11 @@ public class WinLoseController : SingletonPersistent<WinLoseController>
 
     private void OnDestroy()
     {
+        Debug.Log($"[{gameObject.name}] WinLoseController.OnDestroy: Instance nettoyée.", this);
+        if (Instance == this)
+        {
+            Instance = null;
+        }
         IsGameOverScreenActive = false;
         isGameOverInstance = false;
         // Building.OnBuildingDestroyed -= HandleBuildingDestroyed; // Désabonnement si nécessaire

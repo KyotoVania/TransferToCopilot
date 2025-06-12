@@ -16,6 +16,11 @@ public class MusicManager : MonoBehaviour
     public AK.Wwise.Switch combatSwitch;
     public AK.Wwise.Switch bossSwitch;
     public AK.Wwise.Switch silenceSwitch;
+    
+    [Tooltip("Switch Wwise pour la musique du menu principal.")]
+    public AK.Wwise.Switch mainMenuSwitch;
+    [Tooltip("Switch Wwise pour la musique du Hub.")]
+    public AK.Wwise.Switch hubSwitch; 
     [Tooltip("Switch Wwise pour l'état de fin de partie (victoire/défaite).")]
     public AK.Wwise.Switch endGameSwitch;
 
@@ -225,8 +230,8 @@ public class MusicManager : MonoBehaviour
             case "combat": targetSwitch = combatSwitch; break;
             case "boss": targetSwitch = bossSwitch; break;
             case "silence": targetSwitch = silenceSwitch; break;
-            case "mainmenu": targetSwitch = silenceSwitch; break;
-            case "hub": targetSwitch = silenceSwitch; break;
+            case "mainmenu": targetSwitch = mainMenuSwitch; break;
+            case "hub": targetSwitch = hubSwitch; break;
             case "endgame":
                 targetSwitch = endGameSwitch;
                 if (endGameSwitch == null || !endGameSwitch.IsValid()) {

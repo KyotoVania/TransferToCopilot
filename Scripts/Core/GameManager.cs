@@ -271,7 +271,12 @@ public class GameManager : SingletonPersistent<GameManager>
                 WinLoseController.Instance.ResetGameConditionState();
             }
         }
-
+        if (newState == GameState.Hub || newState == GameState.MainMenu)
+        {
+            // Nettoyer les données du niveau actuel
+            CurrentLevelToLoad = null; // Réinitialiser le niveau actuel
+            Debug.Log("[GameManager] Retour au Hub/Menu. Les données du niveau actuel ont été nettoyées.");
+        }
         // Gérer l'état musical
         if (MusicManager.Instance != null)
         {
@@ -285,13 +290,11 @@ public class GameManager : SingletonPersistent<GameManager>
                     musicStateToSet = "Silence";
                     break;
                 case GameState.MainMenu:
-                    // TODO: Définir quel état musical pour MainMenu. Ex: "Exploration" ou "MenuMusic"
-                    musicStateToSet = "Silence"; // Changé de "Exploration" à "Silence"
-                    immediateTransition = true; // Souvent, on veut que la musique du menu démarre vite
+                    musicStateToSet = "MainMenu";
+                    immediateTransition = true;
                     break;
                 case GameState.Hub:
-                    // TODO: Définir quel état musical pour Hub. Ex: "Exploration" ou "HubMusic"
-                    musicStateToSet = "Silence"; // Ou un état "Hub"
+                    musicStateToSet = "Hub";
                     break;
                 case GameState.InLevel:
                     musicStateToSet = "Exploration";
