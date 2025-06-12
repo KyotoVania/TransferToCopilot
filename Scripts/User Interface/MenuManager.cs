@@ -1,6 +1,9 @@
 using UnityEngine;
 using UnityEngine.UI;
+using UnityEngine.Playables;
+using UnityEngine.Timeline;
 using TMPro;
+using System.Collections;
 
 public class MenuManager : MonoBehaviour
 {
@@ -23,6 +26,9 @@ public class MenuManager : MonoBehaviour
     [Header("Cinematic")]
     [SerializeField] private MenuIntroCinematic introCinematic;
 
+    [Header("Timeline Management")]
+    [SerializeField] private TimelineManager timelineManager;
+    
     private void Awake()
     {
         if (Instance == null)
@@ -38,10 +44,16 @@ public class MenuManager : MonoBehaviour
 
     private void Start()
     {
+        Debug.Log("Start Menu Manager");
         InitializeButtons();
         LoadSettings();
+        
+        if (timelineManager == null)
+        {
+            timelineManager = FindObjectOfType<TimelineManager>();
+        }
     }
-
+    
     private void InitializeButtons()
     {
         playButton.onClick.AddListener(OnPlayButtonClicked);
@@ -59,12 +71,18 @@ public class MenuManager : MonoBehaviour
         musicVolumeSlider.value = PlayerPrefs.GetFloat("MusicVolume", 1f);
         sfxVolumeSlider.value = PlayerPrefs.GetFloat("SFXVolume", 1f);
     }
-
+    
     private void OnPlayButtonClicked()
     {
+        Debug.Log("Start OnPlayButtonClicked");
+        if (timelineManager != null)
+        {
+            timelineManager.SwitchToPlayTimelines();
+        }
         // Démarrer la cinématique au lieu de charger directement la scène
         if (introCinematic != null)
         {
+            Debug.Log("Start introCinematic");
             // Cacher l'interface du menu pendant la cinématique
             HideMenuUI();
             
@@ -74,7 +92,7 @@ public class MenuManager : MonoBehaviour
         else
         {
             // Fallback si la cinématique n'est pas configurée
-            Debug.Log("Démarrage du jeu");
+            Debug.Log("Démarrage du jeu !!!!");
             // TODO: Implémenter la logique de démarrage du jeu
         }
     }
@@ -103,6 +121,7 @@ public class MenuManager : MonoBehaviour
 
     private void OnQuitButtonClicked()
     {
+        Debug.Log("start OnQuitButtonClicked");
         #if UNITY_EDITOR
             UnityEditor.EditorApplication.isPlaying = false;
         #else

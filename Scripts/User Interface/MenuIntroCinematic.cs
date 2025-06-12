@@ -1,7 +1,10 @@
 using UnityEngine;
-using Unity.Cinemachine; // Utilisez Cinemachine si ce n'est pas dans le namespace Unity par défaut.
+using Unity.Cinemachine;
 using System.Collections;
 using System.Collections.Generic;
+using UnityEngine.Playables;
+using UnityEngine.Timeline;
+
 
 public class MenuIntroCinematic : MonoBehaviour, IMenuObserver
 {
@@ -101,9 +104,9 @@ public class MenuIntroCinematic : MonoBehaviour, IMenuObserver
             if (impactCamera != null)
             {
                 impactCamera.Priority = 30;
+            }
                 // Pas besoin d'attendre cameraBlendTime ici si le son/spawn est immédiat après le switch
                 // yield return new WaitForSeconds(cameraBlendTime);
-            }
             PlaySoundEffect(meteorSoundEffect);
             GameObject meteor = Instantiate(meteorPrefab, meteorSpawnPoint.position, meteorSpawnPoint.rotation);
             spawnedObjects.Add(meteor);

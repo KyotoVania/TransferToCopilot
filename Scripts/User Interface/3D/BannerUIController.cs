@@ -158,6 +158,7 @@ public class BannerUIController : MonoBehaviour
 
     private void OnQuitButtonClicked()
     {
+        Debug.Log("start OnQuitButtonClicked BannerUIController");
         if (bannerController == null) return;
         bannerController.OnBannerClicked();
         #if UNITY_EDITOR

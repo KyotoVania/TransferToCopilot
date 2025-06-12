@@ -32,12 +32,22 @@ public class SequenceController : MonoBehaviour
     public IReadOnlyList<KeyCode> CurrentSequence => currentSequence.AsReadOnly();
 
     private int perfectCount = 0;
-    public float perfectTolerance = 0.1f;
-    public float goodTolerance = 0.25f;
+    
+    // --- MODIFIÉ : Tolérances en pourcentage de la durée du beat ---
+    [Tooltip("Tolérance en % de la durée du beat pour un input 'Perfect'. Ex: 0.2 = 20% de la durée du beat.")]
+    [Range(0, 1)]
+    public float perfectTolerancePercent = 0.2f;
+    
+    [Tooltip("Tolérance en % de la durée du beat pour un input 'Good'. Ex: 0.4 = 40% de la durée du beat.")]
+    [Range(0, 1)]
+    public float goodTolerancePercent = 0.4f;
 
+    private bool _hasInputForCurrentBeat = false;
     private bool isSequenceActive = false;
     private float lastBeatTime;
-    private float lastInputTime;
+    
+    // --- NOUVEAU : Stockage de la durée actuelle du beat ---
+    private float _currentBeatDuration = 1f; // Initialisé à 1 seconde par défaut
 
     // --- Événements ---
     public static event Action<string, Color> OnSequenceKeyPressed;
@@ -49,7 +59,6 @@ public class SequenceController : MonoBehaviour
 
     private bool isResponding = false;
     
-    // --- MODIFICATION : Référence à MusicManager ---
     private MusicManager musicManager;
 
     public InputSoundVariants inputSounds;
@@ -66,7 +75,6 @@ public class SequenceController : MonoBehaviour
 
     private void OnEnable()
     {
-        // --- MODIFICATION : Utilisation de MusicManager ---
         if (MusicManager.Instance != null)
         {
             MusicManager.Instance.OnBeat += HandleBeat;
@@ -75,7 +83,6 @@ public class SequenceController : MonoBehaviour
 
     private void OnDisable()
     {
-        // --- MODIFICATION : Utilisation de MusicManager ---
         if (MusicManager.Instance != null)
         {
             MusicManager.Instance.OnBeat -= HandleBeat;
@@ -84,7 +91,6 @@ public class SequenceController : MonoBehaviour
 
     private void Start()
     {
-        // --- MODIFICATION : Recherche de MusicManager ---
         musicManager = FindFirstObjectByType<MusicManager>();
         if (musicManager == null)
         {
@@ -106,15 +112,15 @@ public class SequenceController : MonoBehaviour
 
         if (Input.GetKeyDown(KeyCode.X))
         {
-            ProcessInput(KeyCode.X, inputSounds, playSwitchContainerEvent);
+            ProcessInput(KeyCode.X);
         }
         else if (Input.GetKeyDown(KeyCode.C))
         {
-            ProcessInput(KeyCode.C, inputSounds, playSwitchContainerEvent);
+            ProcessInput(KeyCode.C);
         }
         else if (Input.GetKeyDown(KeyCode.V))
         {
-            ProcessInput(KeyCode.V, inputSounds, playSwitchContainerEvent);
+            ProcessInput(KeyCode.V);
         }
     }
 
@@ -127,42 +133,54 @@ public class SequenceController : MonoBehaviour
         return null;
     }
     
-    private void ProcessInput(KeyCode key, InputSoundVariants soundVariants, AK.Wwise.Event playEvent)
+    private void ProcessInput(KeyCode key)
     {
-        // --- MODIFICATION : Utilisation de musicManager ---
         if (musicManager == null) {
-             Debug.LogError("[SequenceController] MusicManager is null in ProcessInput. Cannot evaluate timing.");
-             SetSwitchAndPlay(soundVariants.failedSwitch, "Failed (No MusicManager)", playEvent, GetKeySwitch(key));
+             SetSwitchAndPlay(inputSounds.failedSwitch, "Failed (No MusicManager)", playSwitchContainerEvent, GetKeySwitch(key));
              OnSequenceFail?.Invoke();
              ResetSequence();
              return;
         }
-        
+        if (_hasInputForCurrentBeat)
+        {
+            Debug.Log("[SequenceController] Input registered before next beat window. Combo Reset!");
+            SetSwitchAndPlay(inputSounds.failedSwitch, "Failed (Spam)", playSwitchContainerEvent, GetKeySwitch(key));
+            OnSequenceFail?.Invoke();
+            ResetSequence();
+            return;
+        }
+
         float currentTime = Time.time;
-        float timeDifference = Mathf.Abs(currentTime - lastBeatTime);
+        float timeSinceLastBeat = Mathf.Abs(currentTime - lastBeatTime);
+        float timeUntilNextBeat = musicManager.GetTimeUntilNextBeat();
+        float timeToClosestBeat = Mathf.Min(timeSinceLastBeat, timeUntilNextBeat);
 
         AK.Wwise.Switch keySwitch = GetKeySwitch(key);
 
-        if (timeDifference <= perfectTolerance)
+        // --- MODIFIÉ : Calcul de la tolérance basé sur le % de la durée du beat ---
+        float perfectToleranceInSeconds = _currentBeatDuration * perfectTolerancePercent;
+        float goodToleranceInSeconds = _currentBeatDuration * goodTolerancePercent;
+
+        if (timeToClosestBeat <= perfectToleranceInSeconds)
         {
             isSequenceActive = true;
+            _hasInputForCurrentBeat = true;
             perfectCount++;
-            SetSwitchAndPlay(inputSounds.perfectSwitch, "Perfect", playEvent, keySwitch);
+            SetSwitchAndPlay(inputSounds.perfectSwitch, "Perfect", playSwitchContainerEvent, keySwitch);
             currentSequence.Add(key);
-            lastInputTime = currentTime;
             OnSequenceKeyPressed?.Invoke(key.ToString(), Color.green);
         }
-        else if (timeDifference <= goodTolerance)
+        else if (timeToClosestBeat <= goodToleranceInSeconds)
         {
             isSequenceActive = true;
-            SetSwitchAndPlay(inputSounds.goodSwitch, "Good", playEvent, keySwitch);
+            _hasInputForCurrentBeat = true;
+            SetSwitchAndPlay(inputSounds.goodSwitch, "Good", playSwitchContainerEvent, keySwitch);
             currentSequence.Add(key);
-            lastInputTime = currentTime;
             OnSequenceKeyPressed?.Invoke(key.ToString(), Color.yellow);
         }
         else
         {
-            SetSwitchAndPlay(inputSounds.failedSwitch, "Failed", playEvent, keySwitch);
+            SetSwitchAndPlay(inputSounds.failedSwitch, "Failed (Off-beat)", playSwitchContainerEvent, keySwitch);
             OnSequenceFail?.Invoke();
             ResetSequence();
             return;
@@ -170,6 +188,7 @@ public class SequenceController : MonoBehaviour
 
         ValidateSequence();
     }
+
 
     private void ValidateSequence()
     {
@@ -218,12 +237,7 @@ public class SequenceController : MonoBehaviour
    
     private bool CompareKeySequence(List<KeyCode> inputSequence, List<KeyCode> targetSequence)
     {
-        if (inputSequence.Count != targetSequence.Count) return false;
-        for (int i = 0; i < inputSequence.Count; i++)
-        {
-            if (inputSequence[i] != targetSequence[i]) return false;
-        }
-        return true;
+        return inputSequence.SequenceEqual(targetSequence);
     }
     
     private KeyCode ConvertInputTypeToKeyCode(InputType inputType)
@@ -244,16 +258,9 @@ public class SequenceController : MonoBehaviour
         isResponding = true;
         OnSequenceSuccess?.Invoke();
         specificEventCallback?.Invoke();
-
-        // --- MODIFICATION : Utilisation de musicManager ---
-        if (musicManager != null)
-        {
-            float responseDuration = musicManager.GetBeatDuration() * sequenceLength;
-            if (responseDuration < 0.1f) responseDuration = 0.5f;
-            yield return new WaitForSeconds(responseDuration);
-        } else {
-            yield return new WaitForSeconds(0.5f);
-        }
+        
+        float responseDuration = musicManager != null ? musicManager.GetBeatDuration() * sequenceLength : 0.5f;
+        yield return new WaitForSeconds(Mathf.Max(responseDuration, 0.1f));
 
         isResponding = false;
         ResetSequence();
@@ -262,7 +269,7 @@ public class SequenceController : MonoBehaviour
     private void ResetSequence()
     {
         isSequenceActive = false;
-        perfectCount = 0; // Réinitialiser le compteur de perfects
+        perfectCount = 0;
         currentSequence.Clear();
         OnSequenceDisplayCleared?.Invoke();
     }
@@ -270,6 +277,15 @@ public class SequenceController : MonoBehaviour
     private void HandleBeat(float beatDuration)
     {
         lastBeatTime = Time.time;
+        _hasInputForCurrentBeat = false;
+        _currentBeatDuration = beatDuration;
+
+        if (isSequenceActive && currentSequence.Count > 0 && !_hasInputForCurrentBeat)
+        {
+            // Cette condition est un peu complexe. Il faut décider si "sauter" un beat doit reset.
+            // La logique actuelle avec la vérification anti-spam gère déjà le reset si on joue trop tôt.
+            // Laissons la logique de "saut de beat" pour une itération future si nécessaire.
+        }
     }
 
     private void SetSwitchAndPlay(AK.Wwise.Switch switchState, string switchName, AK.Wwise.Event playEvent, AK.Wwise.Switch keySwitch)
