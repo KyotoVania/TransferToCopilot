@@ -9,7 +9,6 @@ public class GoldController : MonoBehaviour
     public static GoldController Instance { get; private set; }
 
     [SerializeField] private int initialGold = 100; 
-    [SerializeField] private bool isPersistent = true;
 
     private int _currentGold;
     private readonly List<IGoldObserver> _observers = new List<IGoldObserver>();
@@ -17,8 +16,6 @@ public class GoldController : MonoBehaviour
     public event Action<int> OnGoldAdded;
     public event Action<int> OnGoldRemoved;
 
-    // Define the gold sequence pattern (e.g., C, C, X, X)
-    private readonly List<KeyCode> goldSequence = new List<KeyCode> { KeyCode.C, KeyCode.C, KeyCode.X, KeyCode.X };
 
     private void Awake()
     {
@@ -29,15 +26,6 @@ public class GoldController : MonoBehaviour
         }
 
         Instance = this;
-        if (isPersistent)
-        {
-            // Make this a root GameObject before calling DontDestroyOnLoad
-            if (transform.parent != null)
-            {
-                transform.SetParent(null);
-            }
-            DontDestroyOnLoad(gameObject);
-        }
 
         InitializeGold();
     }

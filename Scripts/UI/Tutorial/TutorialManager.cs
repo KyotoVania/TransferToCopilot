@@ -2,7 +2,7 @@ using UnityEngine;
 using System.Collections.Generic;
 using ScriptableObjects;
 
-public class TutorialManager : SingletonPersistent<TutorialManager>
+public class TutorialManager : MonoBehaviour
 {
     [Header("Configuration du Tuto")]
     [SerializeField] private TutorialUIManager uiManager;
@@ -13,6 +13,7 @@ public class TutorialManager : SingletonPersistent<TutorialManager>
     [SerializeField] private List<GameObject> comboUIObjects = new List<GameObject>();
     [SerializeField] private List<GameObject> goldUIObjects = new List<GameObject>();
     [SerializeField] private List<GameObject> unitsAndSpellsUIObjects = new List<GameObject>();
+    public static TutorialManager Instance { get; private set; }
 
     // --- NOUVEAUX AJOUTS ---
     /// <summary>
@@ -25,7 +26,6 @@ public class TutorialManager : SingletonPersistent<TutorialManager>
     /// Événement déclenché lorsque le tutoriel est entièrement terminé.
     /// </summary>
     public static event System.Action OnTutorialCompleted;
-    // --- FIN DES NOUVEAUX AJOUTS ---
 
     private Queue<TutorialStep> tutorialQueue;
     private TutorialStep currentStep;
@@ -33,6 +33,23 @@ public class TutorialManager : SingletonPersistent<TutorialManager>
     private int inputCounter = 0;
     private int beatCounter = 0;
 
+    
+    protected void Awake() 
+    {
+        // Logique du singleton de scène
+        if (Instance != null && Instance != this)
+        {
+            Destroy(gameObject);
+            return;
+        }
+        Instance = this;
+        // FIN DU BLOC AJOUTÉ
+
+        // Note : NE PAS appeler DontDestroyOnLoad(gameObject);
+        
+        // Le reste de votre logique Awake/Start originale peut rester ici.
+    }
+    
     void Start()
     {
         if (uiManager == null || sequenceToPlay == null)
@@ -152,8 +169,14 @@ public class TutorialManager : SingletonPersistent<TutorialManager>
         AdvanceToNextStep();
     }
 
-    // --- Reste du script (inchangé) ---
-    private void OnDestroy() { UnsubscribeFromCurrentTrigger(); }
+    private void OnDestroy()
+    {
+        UnsubscribeFromCurrentTrigger();
+        if (Instance == this)
+        {
+            Instance = null;
+        }
+    }
     private void TriggerStepStartAction(TutorialStep step) { switch (step.groupToShowOnStart)
         {
             case HUDGroup.Invocation:

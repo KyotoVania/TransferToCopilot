@@ -4,8 +4,10 @@ using System;
 using ScriptableObjects;
 
 
-public class EnemyRegistry : SingletonPersistent<EnemyRegistry>
+public class EnemyRegistry : MonoBehaviour
 {
+    public static EnemyRegistry Instance { get; private set; }
+
     // Événement statique pour l'apparition d'un boss
     public static event Action<EnemyUnit> OnBossSpawned;
 
@@ -20,6 +22,17 @@ public class EnemyRegistry : SingletonPersistent<EnemyRegistry>
     public IReadOnlyList<EnemyUnit> ActiveEnemies => _activeEnemies;
     public EnemyUnit ActiveBoss => _activeBoss;
     public bool IsBossActive => _activeBoss != null;
+    
+    
+    protected virtual void Awake()
+    {
+        if (Instance != null && Instance != this)
+        {
+            Destroy(gameObject);
+            return;
+        }
+        Instance = this;
+    }
 
     /// <summary>
     /// Enregistre une unité ennemie lors de son spawn.
@@ -62,6 +75,13 @@ public class EnemyRegistry : SingletonPersistent<EnemyRegistry>
             _activeBoss = null;
             Debug.Log($"[EnemyRegistry] Le Boss '{enemy.name}' a été désenregistré (probablement mort).");
             // On pourrait avoir un événement OnBossDied ici
+        }
+    }
+    private void OnDestroy()
+    {
+        if (Instance == this)
+        {
+            Instance = null;
         }
     }
 }

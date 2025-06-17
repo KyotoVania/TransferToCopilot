@@ -22,11 +22,11 @@ public class EnemyUnitManager : MonoBehaviour
         if (Instance == null)
         {
             Instance = this;
-            DontDestroyOnLoad(gameObject);
         }
         else if (Instance != this)
         {
             Destroy(gameObject);
+            Debug.LogWarning("[EnemyUnitManager] Multiple instances detected. Destroying duplicate.", gameObject);
         }
     }
 

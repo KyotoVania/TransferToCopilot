@@ -176,6 +176,7 @@ namespace Gameplay
             }
             Unit.OnUnitAttacked -= HandleCombatDetection;
             Building.OnBuildingAttackedByUnit -= HandleCombatDetection;
+            Debug.Log($"[GameplayManager] Destruction du GameplayManager pour le niveau : {currentLevelData.DisplayName}", this);
         }
     }
 }
