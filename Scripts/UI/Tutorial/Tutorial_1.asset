@@ -23,7 +23,8 @@ MonoBehaviour:
     triggerType: 1
     triggerParameter: 7
     groupToShowOnStart: 0
-  - tutorialText: You can click on a building to move the banner, Try it !
+  - tutorialText: 'You can click on a building to move the banner, Try it on the
+      Windmill ! '
     triggerType: 3
     triggerParameter: 1
     groupToShowOnStart: 0
@@ -32,7 +33,7 @@ MonoBehaviour:
     triggerType: 1
     triggerParameter: 7
     groupToShowOnStart: 1
-  - tutorialText: 'Try calling one of our knights with the combination X.V.X.V.
+  - tutorialText: 'Try calling one of our knights with the combination X.C.V.X.
 
       It
       will only work if you do it in rhythm'

@@ -151,6 +151,8 @@ public class PlayerDataManager : SingletonPersistent<PlayerDataManager>
                 {
                     Data.UnlockedCharacterIDs.Add(charData.CharacterID);
                     Debug.Log($"[PlayerDataManager] Personnage par défaut débloqué : {charData.CharacterID}");
+                    //Donne 10 XP initial pour chaque personnage débloqué par défaut
+                    AddXPToCharacter(charData.CharacterID, 50); 
                     // Ajouter les premiers persos débloqués à l'équipe par défaut (jusqu'à 4)
                     if (defaultTeam.Count < 4)
                     {
@@ -254,6 +256,7 @@ public class PlayerDataManager : SingletonPersistent<PlayerDataManager>
         {
             Data.UnlockedCharacterIDs.Add(characterID);
             Debug.Log($"[PlayerDataManager] Personnage débloqué : {characterID}");
+            AddXPToCharacter(characterID, 50); 
             OnCharacterUnlocked?.Invoke(characterID); // Notifier les autres systèmes
             SaveData();
         }

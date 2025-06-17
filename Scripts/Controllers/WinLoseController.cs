@@ -1,6 +1,10 @@
 using UnityEngine;
 using UnityEngine.UI;
 using Unity.Behavior.GraphFramework;
+using ScriptableObjects;
+using System.Linq;
+using System.Collections.Generic;
+
 
 public class WinLoseController : MonoBehaviour
 {
@@ -196,9 +200,64 @@ public class WinLoseController : MonoBehaviour
     }*/
 
     public void TriggerWinCondition()
-    {
+    { 
         if (isGameOverInstance) { Debug.LogWarning($"[WinLoseController] TriggerWinCondition appelé mais isGameOverInstance est déjà {isGameOverInstance}.", this); return; }
-        isGameOverInstance = true; IsGameOverScreenActive = true;
+        isGameOverInstance = true; 
+        IsGameOverScreenActive = true;
+        Debug.Log("[WinLoseController] CONDITIONS DE VICTOIRE REMPLIES !", this);
+        if (GameManager.Instance != null && PlayerDataManager.Instance != null && TeamManager.Instance != null)
+        {
+            LevelData_SO completedLevel = GameManager.CurrentLevelToLoad;
+            if (completedLevel != null)
+            {
+                // 1. Marquer le niveau comme complété (ici avec 1 étoile par défaut)
+                PlayerDataManager.Instance.CompleteLevel(completedLevel.LevelID, 1);
+                Debug.Log($"[WinLoseController] Niveau '{completedLevel.LevelID}' marqué comme complété.");
+
+                // 2. Donner l'XP à chaque personnage de l'équipe active
+                if (completedLevel.ExperienceReward > 0)
+                {
+                    var activeTeam = TeamManager.Instance.ActiveTeam;
+                    foreach (var character in activeTeam)
+                    {
+                        if (character != null)
+                        {
+                            PlayerDataManager.Instance.AddXPToCharacter(character.CharacterID, completedLevel.ExperienceReward);
+                        }
+                    }
+                    Debug.Log($"[WinLoseController] {completedLevel.ExperienceReward} XP accordés à chaque membre de l'équipe.");
+                }
+
+                // 3. Donner l'or
+                if (completedLevel.CurrencyReward > 0)
+                {
+                    PlayerDataManager.Instance.AddCurrency(completedLevel.CurrencyReward);
+                }
+
+                // 4. Donner les objets en récompense
+                if (completedLevel.ItemRewards != null && completedLevel.ItemRewards.Count > 0)
+                {
+                    List<string> itemIDsToUnlock = completedLevel.ItemRewards.Select(item => item.EquipmentID).ToList();
+                    PlayerDataManager.Instance.UnlockMultipleEquipment(itemIDsToUnlock);
+                    Debug.Log($"[WinLoseController] {itemIDsToUnlock.Count} item(s) débloqué(s).");
+                }
+                if (completedLevel.CharacterUnlockReward != null)
+                {
+                    PlayerDataManager.Instance.UnlockCharacter(completedLevel.CharacterUnlockReward.CharacterID);
+                    Debug.Log($"[WinLoseController] Personnage débloqué : {completedLevel.CharacterUnlockReward.DisplayName} !");
+                }
+                // 5. Sauvegarder toutes les données du joueur
+                PlayerDataManager.Instance.SaveData();
+            }
+            else
+            {
+                Debug.LogWarning("[WinLoseController] GameManager.CurrentLevelToLoad est null. Impossible d'accorder les récompenses.");
+            }
+        }
+        else
+        {
+            Debug.LogError("[WinLoseController] Un manager requis est manquant (GameManager, PlayerDataManager, ou TeamManager). Impossible d'accorder les récompenses.");
+        }
         Debug.Log("[WinLoseController] CONDITIONS DE VICTOIRE REMPLIES !", this);
         DeactivateAllUnitGameObjects();
         if (currentWinBannerObject != null) currentWinBannerObject.SetActive(true); else Debug.LogWarning($"[TriggerWin] currentWinBannerObject est null (nom recherché: {name_winBannerObject})");
@@ -206,6 +265,7 @@ public class WinLoseController : MonoBehaviour
         if (currentLobbyBoardSleeveObject != null) currentLobbyBoardSleeveObject.SetActive(true);
         if (currentNextLevelBoardObject != null) currentNextLevelBoardObject.SetActive(true);
         if (currentNextLevelBoardSleeveObject != null) currentNextLevelBoardSleeveObject.SetActive(true);
+        
         ActivateGameOverSequence("VICTOIRE !");
     }
 

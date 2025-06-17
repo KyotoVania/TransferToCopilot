@@ -15,8 +15,9 @@ public enum TriggerType
     OnBossDied,
     OnWaveCleared,
     OnTimerElapsed,
-    OnAllTargetsWithTagDestroyed, 
-    OnSpecificTargetDestroyed
+    OnAllTargetsWithTagDestroyed,
+    OnSpecificTargetDestroyed,
+    OnBuildingCaptured
 }
 
 /// <summary>
@@ -45,29 +46,28 @@ public class ScenarioEvent
     [Header("Trigger Settings")]
     [Tooltip("La condition qui déclenchera cet événement.")]
     public TriggerType triggerType;
-    
-    [Tooltip("Paramètre pour le trigger. Ex: l'ID de la TriggerZone, le nom du GameObject pour OnSpecificTargetDestroyed, ou le Tag pour OnAllTargetsWithTagDestroyed.")]
+
+    [Tooltip("Paramètre pour le trigger. Ex: l'ID de la TriggerZone, le nom du GameObject pour OnSpecificTargetDestroyed ou OnBuildingCaptured, ou le Tag pour OnAllTargetsWithTagDestroyed.")]
     public string triggerParameter;
 
     [Header("Action Settings")]
     [Tooltip("L'action à exécuter lorsque l'événement est déclenché.")]
     public ActionType actionType;
-    
+
     [Tooltip("Délai en secondes avant que l'action ne s'exécute après le déclenchement.")]
     public float delay;
 
     [Header("Action Parameters")]
     [Tooltip("La vague d'ennemis à lancer (si ActionType = StartWave).")]
     public Wave_SO actionParameter_Wave;
-    
-    [Tooltip("Le tag du GameObject du bâtiment spawner à activer/désactiver.")]
-    public string actionParameter_BuildingTag;
 
     [Tooltip("Le résultat du niveau (true = Victoire, false = Défaite) si ActionType = EndLevel.")]
     public bool actionParameter_Victory;
 
-    [Tooltip("Le nom EXACT du GameObject à activer via l'action TriggerGameObject.")]
+    // ----- MODIFICATION ICI -----
+    [Tooltip("Le nom EXACT du GameObject cible pour les actions comme TriggerGameObject, StartWave, ActivateSpawnerBuilding, etc.")]
     public string actionParameter_GameObjectName;
+    // ---------------------------
 }
 
 // --- Définition du ScriptableObject ---

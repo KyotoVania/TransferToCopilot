@@ -154,7 +154,6 @@ public class LevelSelectionUI : MonoBehaviour
         _hubManager?.StartLevel(_selectedLevel);
     }
 
-    // MODIFIED: This is now triggered by the dedicated launch button.
     private void OnLaunchLevelButtonClicked()
     {
         if (_selectedLevel != null)

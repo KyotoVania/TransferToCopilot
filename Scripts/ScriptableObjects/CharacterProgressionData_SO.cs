@@ -31,9 +31,9 @@
             // On crée une copie pour ne pas modifier l'asset de base.
             UnitStats_SO calculatedStats = Instantiate(baseStats);
 
-            calculatedStats.Health = Mathf.RoundToInt(HealthCurve.Evaluate(level));
-            calculatedStats.Attack = Mathf.RoundToInt(AttackCurve.Evaluate(level));
-            calculatedStats.Defense = Mathf.RoundToInt(DefenseCurve.Evaluate(level));
+            calculatedStats.Health += Mathf.RoundToInt(HealthCurve.Evaluate(level));
+            calculatedStats.Attack += Mathf.RoundToInt(AttackCurve.Evaluate(level));
+            calculatedStats.Defense += Mathf.RoundToInt(DefenseCurve.Evaluate(level));
 
             return calculatedStats;
         }

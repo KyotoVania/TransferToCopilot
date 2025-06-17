@@ -17,11 +17,21 @@ public abstract class Unit : MonoBehaviour, ITileReservationObserver
 {
     protected abstract Vector2Int? TargetPosition { get; }
 
+    public struct LastDamageEvent
+    {
+        public Unit Attacker;
+        public float Time;
+    }
+
+    public LastDamageEvent? LastAttackerInfo { get; private set; } = null;
+
     [Header("State & Core Mechanics")]
     public bool IsMoving;
     protected Tile occupiedTile;
     [SerializeField] private float yOffset = 0f;
     public bool isAttached = false;
+    public int Level { get; protected set; } = 1; // Valeur par défaut
+
     private Tile _reservedTile;
 
     [Header("Debugging")]
@@ -30,7 +40,7 @@ public abstract class Unit : MonoBehaviour, ITileReservationObserver
 
     [Header("Stats & Systems")]
     [InlineEditor(InlineEditorModes.FullEditor)]
-    [SerializeField] private UnitStats_SO unitStats;
+    [SerializeField] protected  UnitStats_SO unitStats;
     [SerializeField] private MonoBehaviour movementSystemComponent;
     [SerializeField] private MonoBehaviour attackSystemComponent;
 
@@ -220,13 +230,13 @@ public abstract class Unit : MonoBehaviour, ITileReservationObserver
                     {
                         AttachToTile(nearestTile);
                         isAttached = true;
-                        
+
                         // --- MODIFICATION : Utilisation de MusicManager ---
                         if (MusicManager.Instance != null)
                         {
                             MusicManager.Instance.OnBeat += OnRhythmBeatInternal;
                         }
-                        
+
                         if (debugUnitMovement) Debug.Log($"[{name}] Attached to tile ({nearestTile.column}, {nearestTile.row}) and subscribed to OnRhythmBeat.");
                         yield break;
                     }
@@ -522,12 +532,12 @@ public abstract class Unit : MonoBehaviour, ITileReservationObserver
                 )
             );
         }
-        
+
         if (debugUnitCombat) Debug.Log($"[{name}] PerformAttackCoroutine: Action d'attaque (lancement/coup) terminée pour {target.name}. _isAttacking sera mis à false.", this);
         _isAttacking = false;
         SetState(UnitState.Idle);
     }
-    
+
     public IEnumerator PerformAttackBuildingCoroutine(Building target)
     {
         if (AttackSystem == null || target == null || target.CurrentHealth <= 0)
@@ -567,7 +577,7 @@ public abstract class Unit : MonoBehaviour, ITileReservationObserver
                 )
             );
         }
-        
+
         if (debugUnitCombat) Debug.Log($"[{name}] PerformAttackBuildingCoroutine: Action d'attaque (lancement/coup) terminée pour {target.name}. _isAttacking sera mis à false.", this);
         _isAttacking = false;
         SetState(UnitState.Idle);
@@ -623,21 +633,50 @@ public abstract class Unit : MonoBehaviour, ITileReservationObserver
         return closestValidTarget;
     }
 
-
     public virtual void TakeDamage(int damage, Unit attacker = null)
     {
         if (debugUnitCombat) Debug.Log($"[{name}] TakeDamage called with {damage} damage from {attacker?.name ?? "unknown attacker"}.");
         if (damage <= 0) return;
 
-        if (attacker != null && OnUnitAttacked != null)
+        if (attacker != null)
         {
-            OnUnitAttacked(attacker, this, damage);
+            OnUnitAttacked?.Invoke(attacker, this, damage);
+
+            // 1. Calculer un multiplicateur basé sur la différence de niveau
+            float levelDifference = attacker.Level - this.Level;
+            // Ex: +10% de dégâts par niveau d'avantage, -10% par niveau de désavantage
+            float damageMultiplier = 1.0f + (levelDifference * 0.1f);
+            // On s'assure que même une unité de très bas niveau inflige au moins 10% de ses dégâts.
+            damageMultiplier = Mathf.Max(0.1f, damageMultiplier); 
+
+            // 2. Appliquer le multiplicateur aux dégâts bruts de l'attaquant
+            int modifiedDamage = Mathf.RoundToInt(damage * damageMultiplier);
+
+            // 3. Appliquer la défense et s'assurer qu'au moins 1 dégât est infligé
+            int actualDamage = Mathf.Max(1, modifiedDamage - this.Defense);
+        
+            Health -= actualDamage;
+
+            if (debugUnitCombat) 
+            {
+                Debug.Log($"[{name}] Attaquant Lvl {attacker.Level} vs Défenseur Lvl {this.Level}. " +
+                          $"Multiplicateur: {damageMultiplier:F2}. Dégâts modifiés: {modifiedDamage}. " +
+                          $"Dégâts finaux après défense ({this.Defense}): {actualDamage}. " +
+                          $"PV restants: {Health}/{Stats?.Health ?? 0}");
+            }
+        }
+        else 
+        {
+            // Comportement si pas d'attaquant (dégâts environnementaux, etc.)
+            int actualDamage = Mathf.Max(1, damage - this.Defense);
+            Health -= actualDamage;
+            if (debugUnitCombat) Debug.Log($"[{name}] a subi {actualDamage} dégâts environnementaux. PV restants: {Health}/{Stats?.Health ?? 0}");
         }
 
-        int actualDamage = Mathf.Max(0, damage - Defense);
-        Health -= actualDamage;
-        if (debugUnitCombat) Debug.Log($"[{name}] took {actualDamage} damage. Health: {Health}/{Stats?.Health ?? 0}");
-        if (Health <= 0) Die();
+        if (Health <= 0)
+        {
+            Die();
+        }
     }
 
     protected virtual void Die()
@@ -870,7 +909,7 @@ public abstract class Unit : MonoBehaviour, ITileReservationObserver
         {
             bool setAnimIdle = (newState == UnitState.Idle);
             bool setAnimMoving = (newState == UnitState.Moving);
-            
+
             if (newState == UnitState.Attacking || newState == UnitState.Capturing)
             {
                 setAnimIdle = false;
@@ -884,7 +923,7 @@ public abstract class Unit : MonoBehaviour, ITileReservationObserver
             {
                 Debug.Log($"[{name} ({Time.frameCount})] SetState: Animator Booleans Set -> IsIdle: {setAnimIdle}, IsMoving: {setAnimMoving}", this);
             }
-            
+
             if (newState != UnitState.Attacking && previousCSharpState == UnitState.Attacking)
             {
                 animator.ResetTrigger(AttackTriggerId);
@@ -1107,7 +1146,7 @@ public abstract class Unit : MonoBehaviour, ITileReservationObserver
             animator.SetBool(MovingParamId, false);
             animator.SetTrigger(CheerTriggerId);
         }
-        
+
         float cheerAnimationDuration = 2.0f;
         if (useAnimations && animator != null)
         {
@@ -1122,10 +1161,10 @@ public abstract class Unit : MonoBehaviour, ITileReservationObserver
             }
         }
         yield return new WaitForSeconds(cheerAnimationDuration);
-        
+
         Die();
     }
-    
+
     public virtual void InitializeFromCharacterData(CharacterData_SO characterData)
     {
         if (characterData == null)
@@ -1147,14 +1186,14 @@ public abstract class Unit : MonoBehaviour, ITileReservationObserver
             }
             return;
         }
-
         int characterLevel = 1;
         if (PlayerDataManager.Instance != null && PlayerDataManager.Instance.Data.CharacterProgressData.ContainsKey(characterData.CharacterID))
         {
             characterLevel = PlayerDataManager.Instance.Data.CharacterProgressData[characterData.CharacterID].CurrentLevel;
         }
-        
-        this.unitStats = characterData.ProgressionData.GetStatsForLevel(characterData.BaseStats, characterLevel);
+    
+        this.Level = characterLevel;
+        this.unitStats = characterData.ProgressionData.GetStatsForLevel(characterData.BaseStats, this.Level);
         this.Health = this.unitStats.Health;
         
         if (debugUnitCombat || debugUnitMovement)

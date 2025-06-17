@@ -14,7 +14,11 @@ using Unity.Properties;
 )]
 public partial class HasDetectedPlayerUnitCondition_Enemy : Unity.Behavior.Condition
 {
-    private BlackboardVariable<AllyUnit> bbDetectedPlayerUnit; // Cible les AllyUnit
+    // --- CORRECTION PRINCIPALE ICI ---
+    // On change le type de AllyUnit vers Unit pour correspondre au nœud de scan.
+    private BlackboardVariable<Unit> bbDetectedPlayerUnit;
+    // --- FIN DE LA CORRECTION ---
+
     private bool blackboardVariableCached = false;
     private BehaviorGraphAgent agent;
 
@@ -38,6 +42,7 @@ public partial class HasDetectedPlayerUnitCondition_Enemy : Unity.Behavior.Condi
             }
         }
         var blackboard = agent.BlackboardReference;
+        // On cherche maintenant une variable de type Unit, ce qui réussira.
         if (!blackboard.GetVariable(EnemyUnit.BB_DETECTED_PLAYER_UNIT, out bbDetectedPlayerUnit))
         {
             Debug.LogWarning($"[HasDetectedPlayerUnitCondition_Enemy] Blackboard variable '{EnemyUnit.BB_DETECTED_PLAYER_UNIT}' not found.", GameObject);
@@ -52,7 +57,7 @@ public partial class HasDetectedPlayerUnitCondition_Enemy : Unity.Behavior.Condi
             CacheBlackboardVariable();
             if (bbDetectedPlayerUnit == null) return false;
         }
-        // Vérifie si l'unité détectée est non nulle et encore en vie
+        // La logique reste la même : on vérifie juste si la variable n'est pas nulle et si l'unité est en vie.
         return bbDetectedPlayerUnit.Value != null && bbDetectedPlayerUnit.Value.Health > 0;
     }
 

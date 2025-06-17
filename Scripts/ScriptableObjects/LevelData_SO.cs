@@ -48,8 +48,11 @@ namespace ScriptableObjects
     public int ExperienceReward;
     public int CurrencyReward;
     [AssetsOnly] // Pour lier directement au SO du personnage à débloquer
-    public CharacterData_SO CharacterUnlockReward; // Remplacé string par référence directe
+    public CharacterData_SO CharacterUnlockReward;
 
+    [Tooltip("Liste des équipements (items) à débloquer en récompense de victoire.")] [AssetsOnly]
+    public List<EquipmentData_SO> ItemRewards;
+	    
     [Title("Gameplay Settings")]
     [Range(1, 5)] public int Difficulty = 1; // Exemple d'échelle
     public float RhythmBPM = 120f; // Remplacé speed par BPM pour être clair

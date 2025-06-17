@@ -1,11 +1,9 @@
-﻿
-using UnityEngine;
+﻿using UnityEngine;
 using Unity.Behavior.GraphFramework;
 using Unity.Behavior;
 using System;
 using System.Collections;
 using System.Collections.Generic;
-using System.Collections;
 using ScriptableObjects;
 
 
@@ -14,15 +12,12 @@ public class LevelScenarioManager : MonoBehaviour
     private LevelScenario_SO _currentScenario;
     private readonly Dictionary<ScenarioEvent, bool> _processedEvents = new Dictionary<ScenarioEvent, bool>();
     private float _levelStartTime;
-  
-    // Structure de suivi simplifiée pour les objectifs "Détruire tout"
+
     private class ObjectiveTracker
     {
         public int CurrentCount;
     }
     private readonly Dictionary<string, ObjectiveTracker> _destroyAllTrackers = new Dictionary<string, ObjectiveTracker>();
-
-    // Plus besoin de _protectTags, la logique est gérée par ProcessEvents
 
     public void Initialize(LevelScenario_SO scenario)
     {
@@ -47,7 +42,7 @@ public class LevelScenarioManager : MonoBehaviour
     {
         UnsubscribeFromGameEvents();
     }
-    
+
     private void Update()
     {
         if (_currentScenario != null) ProcessTimerEvents();
@@ -57,7 +52,6 @@ public class LevelScenarioManager : MonoBehaviour
     {
         foreach (var evt in _currentScenario.events)
         {
-            // On ne configure que les trackers pour les objectifs "Détruire TOUT"
             if (evt.triggerType == TriggerType.OnAllTargetsWithTagDestroyed)
             {
                 string tag = evt.triggerParameter;
@@ -75,34 +69,38 @@ public class LevelScenarioManager : MonoBehaviour
 
     private void SubscribeToGameEvents()
     {
-        // On s'abonne à tous les événements potentiellement utiles
         Building.OnBuildingDestroyed += HandleTargetDestroyed;
-        // Si vous voulez aussi traquer la mort d'unités:
-        // EnemyRegistry.OnEnemyDied += HandleEnemyDestroyed;
         TriggerZone.OnZoneEntered += HandleZoneEntered;
-        // etc.
+        Building.OnBuildingTeamChangedGlobal += HandleBuildingTeamChanged;
     }
 
     private void UnsubscribeFromGameEvents()
     {
         Building.OnBuildingDestroyed -= HandleTargetDestroyed;
         TriggerZone.OnZoneEntered -= HandleZoneEntered;
+        Building.OnBuildingTeamChangedGlobal -= HandleBuildingTeamChanged;
     }
 
     #region Handlers
-    
+
+    private void HandleBuildingTeamChanged(Building building, TeamType oldTeam, TeamType newTeam)
+    {
+        if (building != null && newTeam == TeamType.Player)
+        {
+            Debug.Log($"[LevelScenarioManager] Bâtiment '{building.name}' capturé par le joueur. Déclenchement des événements OnBuildingCaptured.");
+            ProcessEvents(TriggerType.OnBuildingCaptured, building.name);
+        }
+    }
+
     private void HandleTargetDestroyed(Building destroyedBuilding)
     {
         if (destroyedBuilding == null) return;
 
-        // Récupérer à la fois le nom et le tag du bâtiment détruit
         string destroyedName = destroyedBuilding.name;
         string destroyedTag = destroyedBuilding.tag;
 
-        // 1. Déclencher les événements "OnSpecificTargetDestroyed" en utilisant le NOM de l'objet
         ProcessEvents(TriggerType.OnSpecificTargetDestroyed, destroyedName);
 
-        // 2. Mettre à jour les objectifs "OnAllTargetsWithTagDestroyed" en utilisant le TAG de l'objet (logique inchangée)
         if (_destroyAllTrackers.ContainsKey(destroyedTag))
         {
             var tracker = _destroyAllTrackers[destroyedTag];
@@ -132,14 +130,15 @@ public class LevelScenarioManager : MonoBehaviour
             if (evt.triggerType == trigger && !_processedEvents.ContainsKey(evt))
             {
                 bool match = false;
-                // Pour ces triggers, le paramètre DOIT correspondre.
-                if (trigger == TriggerType.OnZoneEnter || 
-                    trigger == TriggerType.OnSpecificTargetDestroyed || 
-                    trigger == TriggerType.OnAllTargetsWithTagDestroyed)
+
+                if (trigger == TriggerType.OnZoneEnter ||
+                    trigger == TriggerType.OnSpecificTargetDestroyed ||
+                    trigger == TriggerType.OnAllTargetsWithTagDestroyed ||
+                    trigger == TriggerType.OnBuildingCaptured)
                 {
                     match = (evt.triggerParameter == param);
                 }
-                else // Pour les triggers sans paramètre (OnLevelStart, OnTimerElapsed, etc.)
+                else
                 {
                     match = true;
                 }
@@ -152,7 +151,7 @@ public class LevelScenarioManager : MonoBehaviour
             }
         }
     }
-    
+
     private void ProcessTimerEvents()
     {
         if (_currentScenario == null) return;
@@ -178,16 +177,21 @@ public class LevelScenarioManager : MonoBehaviour
 
         switch (scenarioEvent.actionType)
         {
+            // ----- MODIFICATION ICI -----
             case ActionType.ActivateSpawnerBuilding:
             case ActionType.DeactivateSpawnerBuilding:
                 bool isActive = scenarioEvent.actionType == ActionType.ActivateSpawnerBuilding;
-                SetSpawnerBuildingActive(scenarioEvent.actionParameter_BuildingTag, isActive);
-                break;
-            case ActionType.EndLevel:
-                if (GameManager.Instance != null) GameManager.Instance.LoadHub();
+                SetSpawnerBuildingActive(scenarioEvent.actionParameter_GameObjectName, isActive);
                 break;
             case ActionType.StartWave:
-                CommandWaveToSpawners(scenarioEvent.actionParameter_BuildingTag, scenarioEvent.actionParameter_Wave);
+                CommandWaveToSpawner(scenarioEvent.actionParameter_GameObjectName, scenarioEvent.actionParameter_Wave);
+                break;
+            case ActionType.TriggerGameObject:
+                 TriggerGameObjectByName(scenarioEvent.actionParameter_GameObjectName);
+                break;
+            // ---------------------------
+            case ActionType.EndLevel:
+                if (GameManager.Instance != null) GameManager.Instance.LoadHub();
                 break;
             case ActionType.TriggerVictory:
                 if (WinLoseController.Instance != null)
@@ -201,59 +205,55 @@ public class LevelScenarioManager : MonoBehaviour
                 else
                     Debug.LogError("[LevelScenarioManager] WinLoseController.Instance non trouvé pour TriggerDefeat !");
                 break;
-           
-            case ActionType.TriggerGameObject:
-                TriggerGameObjectByName(scenarioEvent.actionParameter_GameObjectName);
-                break;
         }
     }
-    
 
-    private void SetSpawnerBuildingActive(string tag, bool isActive)
+    private void SetSpawnerBuildingActive(string spawnerName, bool isActive)
     {
-        GameObject[] spawners = GameObject.FindGameObjectsWithTag(tag);
-        if (spawners.Length == 0)
+        if (string.IsNullOrEmpty(spawnerName))
         {
-            Debug.LogWarning($"[LevelScenarioManager] Aucun spawner avec le tag '{tag}' trouvé.", this);
+            Debug.LogWarning($"[LevelScenarioManager] Aucun nom de spawner fourni pour SetSpawnerBuildingActive.", this);
             return;
         }
 
-        foreach (var spawnerGO in spawners)
+        GameObject spawnerGO = GameObject.Find(spawnerName);
+        if (spawnerGO == null)
         {
-            var agent = spawnerGO.GetComponent<BehaviorGraphAgent>();
-            if (agent != null && agent.BlackboardReference != null)
+            Debug.LogWarning($"[LevelScenarioManager] Aucun spawner avec le nom '{spawnerName}' trouvé.", this);
+            return;
+        }
+
+        var agent = spawnerGO.GetComponent<BehaviorGraphAgent>();
+        if (agent != null && agent.BlackboardReference != null)
+        {
+            if (agent.BlackboardReference.GetVariable("IsActive", out BlackboardVariable<bool> bbIsActive))
             {
-                if (agent.BlackboardReference.GetVariable("IsActive", out BlackboardVariable<bool> bbIsActive))
-                {
-                    bbIsActive.Value = isActive;
-                    Debug.Log($"[LevelScenarioManager] Bâtiment spawner '{spawnerGO.name}' mis à IsActive = {isActive}.", this);
-                }
+                bbIsActive.Value = isActive;
+                Debug.Log($"[LevelScenarioManager] Bâtiment spawner '{spawnerGO.name}' mis à IsActive = {isActive}.", this);
             }
         }
     }
-    private void CommandWaveToSpawners(string tag, Wave_SO wave)
+
+    private void CommandWaveToSpawner(string spawnerName, Wave_SO wave)
     {
-        if (wave == null || string.IsNullOrEmpty(tag)) return;
-        GameObject[] spawners = GameObject.FindGameObjectsWithTag(tag);
-        if (spawners.Length == 0)
+        if (wave == null || string.IsNullOrEmpty(spawnerName)) return;
+
+        GameObject spawnerGO = GameObject.Find(spawnerName);
+        if (spawnerGO == null)
         {
-            Debug.LogWarning($"[LevelScenarioManager] No spawner with tag '{tag}' found for StartWave action.");
+            Debug.LogWarning($"[LevelScenarioManager] Aucun spawner avec le nom '{spawnerName}' trouvé pour l'action StartWave.");
             return;
         }
 
-        Debug.Log($"[LevelScenarioManager] Commanding wave '{wave.waveName}' to {spawners.Length} spawner(s) with tag '{tag}'.");
+        Debug.Log($"[LevelScenarioManager] Commande de la vague '{wave.waveName}' au spawner '{spawnerName}'.");
 
-        foreach (var spawnerGO in spawners)
+        var agent = spawnerGO.GetComponent<BehaviorGraphAgent>();
+        if (agent != null && agent.BlackboardReference != null)
         {
-            var agent = spawnerGO.GetComponent<BehaviorGraphAgent>();
-            if (agent != null && agent.BlackboardReference != null)
+            if (agent.BlackboardReference.GetVariable("CommandedWave", out BlackboardVariable<Wave_SO> bbCommandedWave))
             {
-                // This assumes your BT has a "CommandedWave" variable of type Wave_SO.
-                if (agent.BlackboardReference.GetVariable("CommandedWave", out BlackboardVariable<Wave_SO> bbCommandedWave))
-                {
-                    bbCommandedWave.Value = wave;
-                    Debug.Log($"[LevelScenarioManager] Sent wave '{wave.waveName}' to spawner '{spawnerGO.name}' blackboard.");
-                }
+                bbCommandedWave.Value = wave;
+                Debug.Log($"[LevelScenarioManager] Vague '{wave.waveName}' envoyée au blackboard du spawner '{spawnerGO.name}'.");
             }
         }
     }
@@ -274,7 +274,6 @@ public class LevelScenarioManager : MonoBehaviour
             return;
         }
 
-        // On cherche un composant qui implémente notre interface
         IScenarioTriggerable triggerable = targetObject.GetComponent<IScenarioTriggerable>();
 
         if (triggerable != null)

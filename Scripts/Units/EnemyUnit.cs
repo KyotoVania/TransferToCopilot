@@ -1,9 +1,9 @@
-// Fichier: Scripts/Units/EnemyUnit.cs
 using UnityEngine;
 using System.Collections;
 using System.Collections.Generic;
 using Unity.Behavior; // Requis pour BehaviorGraphAgent
 using Unity.Behavior.GraphFramework; // Requis pour Blackboard
+using ScriptableObjects; // Pour CharacterProgressionData_SO
 
 public class EnemyUnit : Unit
 {
@@ -52,6 +52,12 @@ public class EnemyUnit : Unit
     private BlackboardVariable<bool> bbIsObjectiveCompleted;
     private BlackboardVariable<bool> bbPathfindingFailed;
     private BlackboardVariable<List<Vector2Int>> bbCurrentPath;
+    
+    [Header("Enemy Stats & Leveling")]
+    [Tooltip("La courbe de progression à utiliser pour calculer les stats de cet ennemi.")]
+    [SerializeField] private CharacterProgressionData_SO progressionData;
+    [Tooltip("Le niveau de cette unité ennemie.")]
+    [SerializeField] public int level = 1;
 
 protected override IEnumerator Start()
 {
@@ -120,12 +126,17 @@ protected override IEnumerator Start()
         if (bbCurrentPath != null) bbCurrentPath.Value = new List<Vector2Int>();
         else Debug.LogWarning($"[{name}] EnemyUnit.Start: bbCurrentPath (Blackboard Variable) est null.", gameObject);
 
-        // À CE STADE :
-        // - EnemyUnitBlackboardInitializer.Awake() a dû définir "SelfUnit".
-        // - base.Start() a terminé, donc this.occupiedTile et this.isAttached sont définis.
-        // - Les variables Blackboard spécifiques à EnemyUnit sont initialisées.
-        // - L'agent (m_Agent) n'a pas été désactivé/réactivé par ce script. S'il est activé par défaut,
-        //   son Behavior Graph commencera à s'exécuter selon le cycle de vie d'Unity.
+        if (progressionData != null && unitStats != null)
+        {
+            this.Level = level; // Assigner le niveau
+            // Remplacer les stats de base par les stats calculées pour le niveau
+            this.unitStats = progressionData.GetStatsForLevel(this.unitStats, this.Level);
+            this.Health = this.unitStats.Health; // Mettre à jour la santé
+        }
+        else
+        {
+            Debug.LogWarning($"[{name}] Pas de ProgressionData assigné. L'ennemi utilisera ses stats de base.", this);
+        }
     }
     else
     {
