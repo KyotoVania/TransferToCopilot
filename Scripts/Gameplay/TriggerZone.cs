@@ -1,37 +1,41 @@
-﻿// Fichier: Scripts/Gameplay/TriggerZone.cs
-using UnityEngine;
-using System;
-
-[RequireComponent(typeof(Collider))]
-public class TriggerZone : MonoBehaviour
+﻿namespace Gameplay
 {
-    [Tooltip("ID unique pour cette zone, utilisé par le LevelScenarioManager.")]
-    public string ZoneID;
+    using UnityEngine;
+    using System;
 
-    public static event Action<string> OnZoneEntered;
-
-    private bool _hasBeenTriggered = false;
-
-    private void Awake()
+    [RequireComponent(typeof(Collider))]
+    public class TriggerZone : MonoBehaviour
     {
-        Collider col = GetComponent<Collider>();
-        if (!col.isTrigger)
+        [Tooltip("ID unique pour cette zone, utilisé par le LevelScenarioManager.")]
+        public string ZoneID;
+
+        public static event Action<string> OnZoneEntered;
+
+        private bool _hasBeenTriggered = false;
+
+        private void Awake()
         {
-            Debug.LogWarning($"[TriggerZone] Le collider sur {gameObject.name} n'est pas réglé sur 'Is Trigger'. Correction automatique.", this);
-            col.isTrigger = true;
+            Collider col = GetComponent<Collider>();
+            if (!col.isTrigger)
+            {
+                Debug.LogWarning(
+                    $"[TriggerZone] Le collider sur {gameObject.name} n'est pas réglé sur 'Is Trigger'. Correction automatique.",
+                    this);
+                col.isTrigger = true;
+            }
         }
-    }
 
-    private void OnTriggerEnter(Collider other)
-    {
-        if (_hasBeenTriggered) return;
-
-        // Vérifier si l'objet entrant est une unité du joueur (ajuster le tag si nécessaire)
-        if (other.CompareTag("PlayerUnit")) // Assurez-vous que vos unités alliées ont ce tag
+        private void OnTriggerEnter(Collider other)
         {
-            _hasBeenTriggered = true;
-            Debug.Log($"[TriggerZone] L'unité joueur '{other.name}' est entrée dans la zone '{ZoneID}'.", this);
-            OnZoneEntered?.Invoke(ZoneID);
+            if (_hasBeenTriggered) return;
+
+            // Vérifier si l'objet entrant est une unité du joueur (ajuster le tag si nécessaire)
+            if (other.CompareTag("PlayerUnit")) // Assurez-vous que vos unités alliées ont ce tag
+            {
+                _hasBeenTriggered = true;
+                Debug.Log($"[TriggerZone] L'unité joueur '{other.name}' est entrée dans la zone '{ZoneID}'.", this);
+                OnZoneEntered?.Invoke(ZoneID);
+            }
         }
     }
 }

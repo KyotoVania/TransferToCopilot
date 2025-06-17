@@ -1,6 +1,8 @@
 using UnityEngine;
 using System.Collections.Generic;
 using ScriptableObjects;
+using Gameplay;
+
 public enum StatToBuff
 {
     Attack,

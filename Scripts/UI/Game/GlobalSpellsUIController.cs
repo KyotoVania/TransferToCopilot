@@ -1,4 +1,5 @@
-﻿using UnityEngine;
+﻿
+using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
 using System.Collections;
@@ -7,7 +8,7 @@ using System.Linq;
 using UnityEngine.EventSystems;
 using System.Text;
 using ScriptableObjects;
-
+using Gameplay;
 
 /// <summary>
 /// Gère le panneau d'interface utilisateur pour les sorts globaux, affichant leur statut,
@@ -49,14 +50,14 @@ public class GlobalSpellsUIController : MonoBehaviour
     [SerializeField] private float infoPanelAnimationSpeed = 0.2f;
 
     // Références aux managers et variables internes
-    private GameplayManager _gameplayManager;
+    private GlobalSpellManager globalSpellManager; // Référence directe, c'est correct.
     private SequenceController _sequenceController;
     
     // Variables pour l'animation du panneau d'info
     private CanvasGroup infoPanelCanvasGroup;
     private Coroutine currentPanelAnimation;
     private RectTransform infoPanelRectTransform;
-    private Transform originalInfoPanelParent; // CRUCIAL pour corriger le bogue de survol
+    private Transform originalInfoPanelParent; 
 
     // Pour optimiser la mise à jour du texte
     private readonly StringBuilder stringBuilder = new StringBuilder();
@@ -66,36 +67,34 @@ public class GlobalSpellsUIController : MonoBehaviour
     void Awake()
     {
         // Récupérer les instances des managers.
-        _gameplayManager = FindObjectOfType<GameplayManager>();
+        globalSpellManager = FindFirstObjectByType<GlobalSpellManager>();
         _sequenceController = FindObjectOfType<SequenceController>();
 
         // Valider que les managers nécessaires ont été trouvés.
-        if (_gameplayManager == null) Debug.LogError("[GlobalSpellsUIController] Could not find GameplayManager in the scene!");
-        if (_sequenceController == null) Debug.LogError("[GlobalSpellsUIController] Could not find SequenceController in the scene!");
+        if (globalSpellManager == null) Debug.LogError("[GlobalSpellsUIController] Could not find GlobalSpellManager in the scene!", this);
+        if (_sequenceController == null) Debug.LogError("[GlobalSpellsUIController] Could not find SequenceController in the scene!", this);
         
         // Préparer le panneau d'information.
         if (infoPanelObject != null)
         {
-            // Sauvegarder le parent d'origine est LA CORRECTION la plus importante.
             originalInfoPanelParent = infoPanelObject.transform.parent;
             infoPanelRectTransform = infoPanelObject.GetComponent<RectTransform>();
-            infoPanelCanvasGroup = infoPanelObject.GetComponent<CanvasGroup>();
-            if (infoPanelCanvasGroup == null) infoPanelCanvasGroup = infoPanelObject.AddComponent<CanvasGroup>();
+            infoPanelCanvasGroup = infoPanelObject.GetComponent<CanvasGroup>() ?? infoPanelObject.AddComponent<CanvasGroup>();
             
             infoPanelObject.SetActive(false);
             infoPanelCanvasGroup.alpha = 0;
         }
         else
         {
-            Debug.LogError("[GlobalSpellsUIController] La référence 'infoPanelObject' n'est pas assignée !");
+            Debug.LogError("[GlobalSpellsUIController] La référence 'infoPanelObject' n'est pas assignée !", this);
         }
     }
 
     void OnEnable()
     {
         // S'abonner aux événements lorsque l'UI devient active.
-        // CORRECTION : S'abonner à l'événement de chargement des sorts du GameplayManager.
-        GameplayManager.OnGlobalSpellsLoaded += HandleSpellsLoaded;
+        // --- CORRECTION : On utilise la bonne méthode handler ---
+        GlobalSpellManager.OnGlobalSpellsLoaded += PopulateSpellCards; 
 
         if (_sequenceController != null)
         {
@@ -106,8 +105,9 @@ public class GlobalSpellsUIController : MonoBehaviour
 
     void OnDisable()
     {
-        // Se désabonner pour éviter les erreurs lorsque l'UI est inactive ou détruite.
-        GameplayManager.OnGlobalSpellsLoaded -= HandleSpellsLoaded;
+        // Se désabonner pour éviter les erreurs.
+        // --- CORRECTION : On utilise la bonne méthode handler ---
+        GlobalSpellManager.OnGlobalSpellsLoaded -= PopulateSpellCards;
 
         if (_sequenceController != null)
         {
@@ -118,32 +118,17 @@ public class GlobalSpellsUIController : MonoBehaviour
 
     void Update()
     {
-        // Ces méthodes sont appelées à chaque frame pour un retour visuel instantané.
         UpdateCooldownVisuals();
     }
     #endregion
 
     #region Gestionnaires d'Événements
-
-    /// <summary>
-    /// Appelé lorsque le GameplayManager a fini de charger les sorts disponibles.
-    /// </summary>
-    private void HandleSpellsLoaded(IReadOnlyList<GlobalSpellData_SO> availableSpells)
-    {
-        PopulateSpellCards(availableSpells);
-    }
-
-    /// <summary>
-    /// Gère le feedback visuel de lueur lors de la saisie d'une séquence.
-    /// </summary>
+    
     private void HandleSequenceKeyPress(string key, Color timingColor)
     {
         UpdateGlowFeedback();
     }
 
-    /// <summary>
-    /// Nettoie le feedback de lueur lorsque la séquence est réinitialisée.
-    /// </summary>
     private void HandleSequenceCleared()
     {
         UpdateGlowFeedback();
@@ -154,6 +139,7 @@ public class GlobalSpellsUIController : MonoBehaviour
 
     /// <summary>
     /// Remplit les 4 cartes de sorts avec les données des sorts disponibles.
+    /// C'est la méthode correcte à appeler lors de l'événement OnGlobalSpellsLoaded.
     /// </summary>
     private void PopulateSpellCards(IReadOnlyList<GlobalSpellData_SO> availableSpells)
     {
@@ -178,9 +164,6 @@ public class GlobalSpellsUIController : MonoBehaviour
         }
     }
 
-    /// <summary>
-    /// Met à jour l'effet de lueur sur les cartes en fonction de la séquence en cours.
-    /// </summary>
     private void UpdateGlowFeedback()
     {
         if (_sequenceController == null) return;
@@ -196,14 +179,11 @@ public class GlobalSpellsUIController : MonoBehaviour
         }
     }
 
-    /// <summary>
-    /// Met à jour l'affichage visuel du cooldown pour chaque carte de sort.
-    /// </summary>
     private void UpdateCooldownVisuals()
     {
-        if (_gameplayManager == null) return;
-        var cooldowns = _gameplayManager.SpellCooldowns;
-
+        if (globalSpellManager == null) return;
+        IReadOnlyDictionary<string, float> cooldowns = globalSpellManager.SpellCooldowns;
+        
         foreach (var card in spellCards)
         {
             if (card.CardRoot.activeSelf && card.SpellData != null)
@@ -303,7 +283,7 @@ public class GlobalSpellsUIController : MonoBehaviour
         if (!show)
         {
             infoPanelObject.SetActive(false);
-            infoPanelRectTransform.SetParent(originalInfoPanelParent); // Ré-attachement au parent d'origine
+            infoPanelRectTransform.SetParent(originalInfoPanelParent); 
         }
         currentPanelAnimation = null;
     }
@@ -321,7 +301,7 @@ public class GlobalSpellsUIController : MonoBehaviour
         }
         return true;
     }
-
+    
     private KeyCode ConvertInputTypeToKeyCode(InputType inputType)
     {
         switch (inputType)

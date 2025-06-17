@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using Game.Observers;
 using Unity.Behavior;
 using Unity.Behavior.GraphFramework;
+using Gameplay;
 
 public class AllyUnit : Unit, IBannerObserver
 {

@@ -1,13 +1,13 @@
-// Fichier: Scripts2/UI/Dialogues/DialogueSequenceManager.cs (Corrigé)
 using UnityEngine;
 using Unity.Cinemachine;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using UnityEngine.UI;
-using ScriptableObjects; // <--- LIGNE AJOUTÉE ICI
+using ScriptableObjects;
+using Gameplay;
 
-// La classe DialogueStep ne change pas
+
 [System.Serializable]
 public class DialogueStep
 {
@@ -16,7 +16,7 @@ public class DialogueStep
     [Tooltip("La caméra virtuelle Cinemachine à activer pour cette étape.")]
     public CinemachineCamera cameraToShow;
     [Tooltip("La séquence de dialogue à afficher.")]
-    public DialogueSequence dialogueToShow; // Maintenant, il sait que c'est ScriptableObjects.DialogueSequence
+    public DialogueSequence dialogueToShow;
     [Tooltip("Nombre de BATTEMENTS à attendre après la fin du dialogue.")]
     public int beatsToWaitAfterDialogue = 1;
 }

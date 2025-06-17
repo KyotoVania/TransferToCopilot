@@ -5,7 +5,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using ScriptableObjects;
-
+using Gameplay;
 
 public class LevelScenarioManager : MonoBehaviour
 {
