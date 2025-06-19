@@ -41,3 +41,7 @@ if __name__ == "__main__":
     if do_unzip:
         extract_folder = os.path.splitext(output_zip)[0]
         unzip_and_replace(output_zip, extract_folder)
+        # Supprimer le zip après extraction
+        if os.path.exists(output_zip):
+            os.remove(output_zip)
+            print(f"Zip supprimé : {output_zip}")
