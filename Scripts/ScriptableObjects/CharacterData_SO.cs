@@ -34,15 +34,10 @@ namespace ScriptableObjects
 
     [BoxGroup("Gameplay")]
     [BoxGroup("Gameplay/Stats", ShowLabel = false)]
-    [InlineEditor(InlineEditorModes.FullEditor)] // Permet d'éditer le SO directement ici
-    public UnitStats_SO BaseStats; // Référence à un SO UnitStats existant
-
-	[BoxGroup("Gameplay/Stats")]
-    [Required("Une courbe de progression est requise.")]
-    public CharacterProgressionData_SO ProgressionData;
-    [BoxGroup("Gameplay/Prefabs")]
-    [Required("Le Prefab de l'unité en combat est requis.")]
-    [AssetsOnly]
+    [InfoBox("ScriptableObject contenant les statistiques de ce personnage.")]
+    [InlineEditor(InlineEditorModes.FullEditor)]
+    public StatSheet_SO Stats; 
+    
     public GameObject GameplayUnitPrefab;
 
     [BoxGroup("Gameplay/Invocation")]

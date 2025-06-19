@@ -39,8 +39,21 @@ public abstract class Unit : MonoBehaviour, ITileReservationObserver
     [SerializeField] private bool debugUnitCombat = false;
 
     [Header("Stats & Systems")]
-    [InlineEditor(InlineEditorModes.FullEditor)]
-    [SerializeField] protected  UnitStats_SO unitStats;
+    public RuntimeStats CurrentStats { get; private set; }
+    public CharacterData_SO CharacterData { get; private set; }
+
+    public int Health { get; protected set; } // La vie actuelle est séparée des stats de base
+    // --- MODIFIÉ : Les accesseurs (propriétés) lisent maintenant depuis CurrentStats ---
+    // Ils sont maintenant 'virtual' pour permettre aux buffs/debuffs de les surcharger plus tard.
+    // On ajoute un check "!= null" pour éviter les erreurs avant l'initialisation.
+    public virtual int Attack => CurrentStats != null ? CurrentStats.Attack : 0;
+    public virtual int Defense => CurrentStats != null ? CurrentStats.Defense : 0;
+    public virtual int AttackRange => CurrentStats != null ? CurrentStats.AttackRange : 0;
+    public virtual int AttackDelay => CurrentStats != null ? CurrentStats.AttackDelay : 1;
+    public virtual int MovementDelay => CurrentStats != null ? CurrentStats.MovementDelay : 1;
+    public virtual int DetectionRange => CurrentStats != null ? CurrentStats.DetectionRange : 0;
+
+
     [SerializeField] private MonoBehaviour movementSystemComponent;
     [SerializeField] private MonoBehaviour attackSystemComponent;
 
@@ -59,38 +72,6 @@ public abstract class Unit : MonoBehaviour, ITileReservationObserver
         IsSpawning = isCurrentlySpawning;
     }
 
-    public int Health { get; protected set; }
-    public int MovementDelay => unitStats?.MovementDelay ?? 1;
-    public virtual int Attack
-    {
-        get
-        {
-            float baseAttack = unitStats?.Attack ?? 0;
-            float multiplier = 1f;
-            foreach (var buff in activeBuffs.Where(b => b.Stat == StatToBuff.Attack))
-            {
-                multiplier *= buff.Multiplier;
-            }
-            return Mathf.Max(0, Mathf.RoundToInt(baseAttack * multiplier));
-        }
-    }
-    public virtual int Defense
-    {
-        get
-        {
-            float baseDefense = unitStats?.Defense ?? 0;
-            float multiplier = 1f;
-            foreach (var buff in activeBuffs.Where(b => b.Stat == StatToBuff.Defense))
-            {
-                multiplier *= buff.Multiplier;
-            }
-            return Mathf.Max(0, Mathf.RoundToInt(baseDefense * multiplier)); 
-        }
-    }
-    public int AttackDelay => unitStats?.AttackDelay ?? 1;
-    public float AttackRange => unitStats?.AttackRange ?? 1f;
-    public int DetectionRange => unitStats?.DetectionRange ?? 3;
-    protected UnitStats_SO Stats => unitStats;
 
     protected int _beatCounter = 0;
     private int _attackBeatCounter = 0;
@@ -133,9 +114,7 @@ public abstract class Unit : MonoBehaviour, ITileReservationObserver
 
     protected virtual IEnumerator Start()
     {
-        if (unitStats != null) { Health = unitStats.Health; }
-        else { Debug.LogError($"[{name}] UnitStats non assigné !"); }
-
+  
         if (animator == null) { animator = GetComponent<Animator>(); }
         if (useAnimations && animator == null)
         {
@@ -180,7 +159,6 @@ public abstract class Unit : MonoBehaviour, ITileReservationObserver
 
     protected virtual void OnDisable()
     {
-       // --- MODIFICATION : Utilisation de MusicManager ---
        if (MusicManager.Instance != null)
        {
             if (isAttached)
@@ -193,7 +171,7 @@ public abstract class Unit : MonoBehaviour, ITileReservationObserver
 
     public UnitType GetUnitType()
     {
-        return unitStats?.Type ?? UnitType.Null; 
+        return CharacterData?.Stats?.Type ?? UnitType.Null;
     }
 
     private IEnumerator AttachToNearestTile()
@@ -659,10 +637,11 @@ public abstract class Unit : MonoBehaviour, ITileReservationObserver
 
             if (debugUnitCombat) 
             {
+                // On remplace "Stats?.Health" par "CurrentStats.MaxHealth" pour l'affichage.
                 Debug.Log($"[{name}] Attaquant Lvl {attacker.Level} vs Défenseur Lvl {this.Level}. " +
                           $"Multiplicateur: {damageMultiplier:F2}. Dégâts modifiés: {modifiedDamage}. " +
                           $"Dégâts finaux après défense ({this.Defense}): {actualDamage}. " +
-                          $"PV restants: {Health}/{Stats?.Health ?? 0}");
+                          $"PV restants: {Health}/{CurrentStats.MaxHealth}");
             }
         }
         else 
@@ -670,7 +649,7 @@ public abstract class Unit : MonoBehaviour, ITileReservationObserver
             // Comportement si pas d'attaquant (dégâts environnementaux, etc.)
             int actualDamage = Mathf.Max(1, damage - this.Defense);
             Health -= actualDamage;
-            if (debugUnitCombat) Debug.Log($"[{name}] a subi {actualDamage} dégâts environnementaux. PV restants: {Health}/{Stats?.Health ?? 0}");
+            if (debugUnitCombat) Debug.Log($"[{name}] a subi {actualDamage} dégâts environnementaux. PV restants: {Health}/{CurrentStats.MaxHealth}");
         }
 
         if (Health <= 0)
@@ -1169,37 +1148,34 @@ public abstract class Unit : MonoBehaviour, ITileReservationObserver
     {
         if (characterData == null)
         {
-            Debug.LogError($"[{name}] Attempted to initialize with null CharacterData_SO.", this);
-            if (this.unitStats == null)
-            {
-                Debug.LogError($"[{name}] CRITICAL: No UnitStats_SO assigned from CharacterData and no fallback stats on prefab. Unit may not function.", this);
-            }
+            Debug.LogError("InitializeFromCharacterData: characterData est null !", this);
             return;
         }
 
-        if (characterData.BaseStats == null)
+        // --- Logique d'initialisation refondue ---
+        this.CharacterData = characterData; 
+        // 1. Récupérer les données de progression (niveau, équipement)
+        int level = 1;
+        // TODO: Remplacer par la vraie logique de récupération d'équipement si nécessaire.
+        List<EquipmentData_SO> equipment = new List<EquipmentData_SO>(); 
+
+        // Pour les unités alliées, on cherche leur progression
+        if (this is AllyUnit && PlayerDataManager.Instance != null)
         {
-            Debug.LogError($"[{name}] CharacterData_SO '{characterData.DisplayName}' does not have BaseStats (UnitStats_SO) assigned.", this);
-            if (this.unitStats == null)
+            if (PlayerDataManager.Instance.Data.CharacterProgressData.TryGetValue(characterData.CharacterID, out var progress))
             {
-                 Debug.LogError($"[{name}] CRITICAL: No UnitStats_SO from CharacterData and no fallback stats on prefab for {characterData.DisplayName}. Unit may not function.", this);
+                level = progress.CurrentLevel;
+                // Ici, vous ajouteriez la logique pour récupérer les équipements assignés à ce personnage
+                // via TeamManager ou PlayerDataManager.
             }
-            return;
         }
-        int characterLevel = 1;
-        if (PlayerDataManager.Instance != null && PlayerDataManager.Instance.Data.CharacterProgressData.ContainsKey(characterData.CharacterID))
-        {
-            characterLevel = PlayerDataManager.Instance.Data.CharacterProgressData[characterData.CharacterID].CurrentLevel;
-        }
-    
-        this.Level = characterLevel;
-        this.unitStats = characterData.ProgressionData.GetStatsForLevel(characterData.BaseStats, this.Level);
-        this.Health = this.unitStats.Health;
-        
-        if (debugUnitCombat || debugUnitMovement)
-        {
-            Debug.Log($"[{name}] Stats initialisées depuis CharacterData '{characterData.DisplayName}' (Stats Asset: '{this.unitStats.name}'). Santé: {this.Health}", this);
-        }
+
+        // 2. Appel au calculateur centralisé. C'est LA ligne la plus importante.
+        this.CurrentStats = StatsCalculator.GetFinalStats(characterData, level, equipment);
+
+        // 3. Initialiser la vie actuelle de l'unité avec la vie max calculée.
+        this.Health = this.CurrentStats.MaxHealth;
     }
+
     #endregion
 }

@@ -352,7 +352,7 @@ public class PlayerDataManager : SingletonPersistent<PlayerDataManager>
      {
          // 1. Trouver le CharacterData pour obtenir sa courbe de progression
          CharacterData_SO charData = Resources.Load<CharacterData_SO>($"Data/Characters/{characterID}");
-         if (charData == null || charData.ProgressionData == null)
+         if (charData == null || charData.Stats == null)
          {
              Debug.LogError($"[PlayerDataManager] Impossible d'ajouter de l'XP : CharacterData ou ProgressionData manquant pour l'ID {characterID}");
              return;
@@ -368,7 +368,7 @@ public class PlayerDataManager : SingletonPersistent<PlayerDataManager>
          progress.CurrentXP += xpAmount;
 
          // 3. Boucle de montée de niveau
-         int xpForNextLevel = charData.ProgressionData.GetXPRequiredForLevel(progress.CurrentLevel + 1);
+         int xpForNextLevel = charData.Stats.GetXPRequiredForLevel(progress.CurrentLevel + 1);
          Debug.Log($"[PlayerDataManager] Ajout de {xpAmount} XP à {characterID}. XP actuel: {progress.CurrentXP}, Niveau actuel: {progress.CurrentLevel}, XP pour le niveau suivant: {xpForNextLevel}");
          while (progress.CurrentXP >= xpForNextLevel && xpForNextLevel > 0)
          {
@@ -379,8 +379,8 @@ public class PlayerDataManager : SingletonPersistent<PlayerDataManager>
             
              Debug.Log($"Personnage {characterID} est monté au niveau {progress.CurrentLevel}!");
              // Mettre à jour le montant requis pour le niveau suivant
-             xpForNextLevel = charData.ProgressionData.GetXPRequiredForLevel(progress.CurrentLevel + 1);
-             if (xpForNextLevel == charData.ProgressionData.GetXPRequiredForLevel(progress.CurrentLevel))
+             xpForNextLevel = charData.Stats.GetXPRequiredForLevel(progress.CurrentLevel + 1);
+             if (xpForNextLevel == charData.Stats.GetXPRequiredForLevel(progress.CurrentLevel))
              {
                  Debug.Log($"[PlayerDataManager] Niveau maximum atteint pour {characterID} : {progress.CurrentLevel}");
                  // On a atteint le niveau max défini dans la courbe, on sort.

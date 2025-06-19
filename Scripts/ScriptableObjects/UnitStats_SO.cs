@@ -4,13 +4,7 @@ namespace ScriptableObjects
     using Sirenix.OdinInspector;
 
     //enum for type of unit 
-    public enum UnitType
-    {
-        Regular,
-        Elite,
-        Boss,
-        Null
-    }
+    
 
     [CreateAssetMenu(fileName = "UnitStats_New", menuName = "GameData/Unit Stats")]
     public class UnitStats_SO : ScriptableObject
