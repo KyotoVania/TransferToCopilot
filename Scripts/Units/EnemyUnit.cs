@@ -126,17 +126,6 @@ protected override IEnumerator Start()
         if (bbCurrentPath != null) bbCurrentPath.Value = new List<Vector2Int>();
         else Debug.LogWarning($"[{name}] EnemyUnit.Start: bbCurrentPath (Blackboard Variable) est null.", gameObject);
 
-        if (progressionData != null && unitStats != null)
-        {
-            this.Level = level; // Assigner le niveau
-            // Remplacer les stats de base par les stats calculées pour le niveau
-            this.unitStats = progressionData.GetStatsForLevel(this.unitStats, this.Level);
-            this.Health = this.unitStats.Health; // Mettre à jour la santé
-        }
-        else
-        {
-            Debug.LogWarning($"[{name}] Pas de ProgressionData assigné. L'ennemi utilisera ses stats de base.", this);
-        }
     }
     else
     {

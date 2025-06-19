@@ -141,19 +141,40 @@ public class CharacterSelectionUI : MonoBehaviour
 
             if (detailCharacterDescriptionText != null)
                 detailCharacterDescriptionText.text = _selectedCharacter.Description;
+            
+            // --- DÉBUT DE LA CORRECTION ---
 
-            if (_selectedCharacter.BaseStats != null)
+            // 1. Vérifier que le personnage a bien son nouveau StatSheet_SO
+            if (_selectedCharacter.Stats != null)
             {
-                var stats = _selectedCharacter.BaseStats;
+                // 2. Récupérer le niveau actuel du personnage (logique similaire à PopulateAvailableCharactersList)
+                int characterLevel = 1;
+                if (PlayerDataManager.Instance.Data.CharacterProgressData.TryGetValue(_selectedCharacter.CharacterID, out var progress))
+                {
+                    characterLevel = progress.CurrentLevel;
+                }
 
-                // On remplit chaque champ de texte individuellement
-                statHealthText.text = $"HP: {stats.Health}";
-                statAttackText.text = $"ACK: {stats.Attack}";
-                statDefenseText.text = $"Def: {stats.Defense}";
-                statCostText.text = $"Cost: {stats.AttackDelay} or";
+                // 3. Appeler le StatsCalculator pour obtenir les stats finales au niveau actuel
+                RuntimeStats finalStats = StatsCalculator.GetFinalStats(_selectedCharacter, characterLevel, null);
 
-                // Le Grid Layout Group s'occupe de les placer !
+                // 4. Mettre à jour les textes de l'UI avec les valeurs correctes
+                statHealthText.text = $"HP: {finalStats.MaxHealth}";
+                statAttackText.text = $"ACK: {finalStats.Attack}";
+                statDefenseText.text = $"Def: {finalStats.Defense}";
+                
+                // Le coût (AttackDelay) est une stat de base qui ne change pas avec le niveau,
+                // on le lit donc directement depuis le StatSheet_SO.
+                statCostText.text = $"Cost: {_selectedCharacter.Stats.AttackDelay} or";
             }
+            else
+            {
+                // Fallback si le StatSheet_SO n'est pas assigné
+                statHealthText.text = "HP: N/A";
+                statAttackText.text = "ACK: N/A";
+                statDefenseText.text = "Def: N/A";
+                statCostText.text = "Cost: N/A";
+            }
+            // --- FIN DE LA CORRECTION ---
         }
         else
         {

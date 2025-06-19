@@ -15,7 +15,7 @@ public class TeamSlotUI : MonoBehaviour
     [SerializeField] private TextMeshProUGUI characterNameText;
     [SerializeField] private TextMeshProUGUI characterDescText;
     [SerializeField] private Button removeButton;
-    
+        
     [Header("Interaction")]
     [SerializeField] private Button mainCardButton; // Add a reference to the main button component of the card
 
@@ -57,9 +57,9 @@ public class TeamSlotUI : MonoBehaviour
             if (characterDescText != null)
             {
                 // Exemple, vous pouvez adapter ceci avec les vraies données de CharacterData_SO si vous les ajoutez
-                if (_characterData.BaseStats != null)
+                if (_characterData.Stats != null)
                 {
-                    characterDescText.text = $"Lvl {level} / {_characterData.BaseStats.Type}";
+                    characterDescText.text = $"Lvl {level} / {_characterData.Stats.Type}";
                 }
                 else
                 {

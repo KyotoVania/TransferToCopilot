@@ -6,6 +6,7 @@
     using System.Collections.Generic;
     using System.Linq;
     using ScriptableObjects;
+    
 
     public class EquipmentPanelUI : MonoBehaviour
     {
@@ -74,17 +75,19 @@
 
         private void UpdateLevelAndXPDisplay()
         {
+            // Récupère la progression du joueur pour ce personnage
             PlayerDataManager.Instance.Data.CharacterProgressData.TryGetValue(_currentCharacter.CharacterID, out CharacterProgress progress);
             if (progress == null) progress = new CharacterProgress();
 
             characterLevelText.text = $" {progress.CurrentLevel}";
 
-            if (_currentCharacter.ProgressionData != null)
+            // On utilise maintenant _currentCharacter.Stats qui est le nouveau StatSheet_SO
+            if (_currentCharacter.Stats != null)
             {
-                int xpForNextLevel = _currentCharacter.ProgressionData.GetXPRequiredForLevel(progress.CurrentLevel + 1);
-                int xpForCurrentLevel = _currentCharacter.ProgressionData.GetXPRequiredForLevel(progress.CurrentLevel);
+                // L'appel à GetXPRequiredForLevel se fait via le StatSheet_SO
+                int xpForNextLevel = _currentCharacter.Stats.GetXPRequiredForLevel(progress.CurrentLevel + 1);
+                int xpForCurrentLevel = _currentCharacter.Stats.GetXPRequiredForLevel(progress.CurrentLevel);
 
-                // Forcer les bornes du slider pour un affichage normalisé (0 à 1)
                 xpSlider.minValue = 0f;
                 xpSlider.maxValue = 1f;
 
@@ -99,19 +102,16 @@
                     int xpSinceLastLevel = progress.CurrentXP - xpForCurrentLevel;
                     int xpNeededForThisLevel = xpForNextLevel - xpForCurrentLevel;
 
-                    // Assigner la valeur normalisée au slider
                     xpSlider.value = (float)xpSinceLastLevel / Mathf.Max(1, xpNeededForThisLevel);
-        
                     if(xpSliderText != null) xpSliderText.text = $"{xpSinceLastLevel} / {xpNeededForThisLevel} XP";
                 }
             }
-            else // Fallback si pas de données de progression
+            else // Fallback
             {
                 xpSlider.value = 0;
                 if(xpSliderText != null) xpSliderText.text = "N/A";
             }
         }
-
         private void PopulateEquippedSlots()
         {
             // Nettoyer les anciens items
@@ -162,7 +162,7 @@
         private void UpdateStatsDisplay()
         {
             // --- Vérification initiale ---
-            if (_currentCharacter?.ProgressionData == null)
+            if (_currentCharacter?.Stats == null)
             {
                 statHealthText.text = "HP: --";
                 healthSlider.value = 0;
@@ -170,26 +170,19 @@
                 attackSlider.value = 0;
                 statDefenseText.text = "Défense: --";
                 defenseSlider.value = 0;
-                Debug.LogWarning($"[EquipmentPanelUI] Le personnage '{_currentCharacter?.DisplayName}' n'a pas de ProgressionData assigné.");
+                Debug.LogWarning($"[EquipmentPanelUI] Le personnage '{_currentCharacter?.DisplayName}' n'a pas de StatSheet_SO assigné.");
                 return;
             }
 
-            // --- Calcul des Stats Finales (avec équipement) ---
+            // --- 1. Récupération des données nécessaires pour le calcul ---
             int characterLevel = 1;
             if (PlayerDataManager.Instance.Data.CharacterProgressData.TryGetValue(_currentCharacter.CharacterID, out CharacterProgress progress))
             {
                 characterLevel = progress.CurrentLevel;
             }
 
-            UnitStats_SO statsForLevel = _currentCharacter.ProgressionData.GetStatsForLevel(_currentCharacter.BaseStats, characterLevel);
-
-            Dictionary<StatType, int> finalStats = new Dictionary<StatType, int>
-            {
-                { StatType.Health, statsForLevel.Health },
-                { StatType.Attack, statsForLevel.Attack },
-                { StatType.Defense, statsForLevel.Defense }
-            };
-
+            // Charger les ScriptableObjects des items équipés
+            List<EquipmentData_SO> equippedItems = new List<EquipmentData_SO>();
             if (PlayerDataManager.Instance.Data.EquippedItems.TryGetValue(_currentCharacter.CharacterID, out List<string> equippedIDs))
             {
                 foreach (string id in equippedIDs)
@@ -197,41 +190,36 @@
                     EquipmentData_SO itemData = Resources.Load<EquipmentData_SO>($"Data/Equipment/{id}");
                     if (itemData != null)
                     {
-                        foreach (StatModifier mod in itemData.Modifiers)
-                        {
-                            if (finalStats.ContainsKey(mod.StatToModify))
-                            {
-                                finalStats[mod.StatToModify] += mod.Value;
-                            }
-                        }
+                        equippedItems.Add(itemData);
                     }
                 }
             }
 
-            // --- Mise à Jour de l'UI avec Valeurs Max Dynamiques ---
-            var progressionData = _currentCharacter.ProgressionData;
+            // --- 2. Appel au calculateur central ---
+            // C'est ici que la nouvelle architecture prend tout son sens.
+            // On demande au StatsCalculator de nous fournir les stats finales.
+            RuntimeStats finalStats = StatsCalculator.GetFinalStats(_currentCharacter, characterLevel, equippedItems);
+            // --- 3. Mise à Jour de l'UI avec les stats calculées ---
+            var statSheet = _currentCharacter.Stats;
 
             // Santé
-            int health = finalStats[StatType.Health];
-            statHealthText.text = $"HP: {health}";
+            statHealthText.text = $"HP: {finalStats.MaxHealth}";
             healthSlider.minValue = 0;
-            // La stat max est la valeur de la dernière clé de la courbe d'animation
-            healthSlider.maxValue = progressionData.HealthCurve.keys[progressionData.HealthCurve.length - 1].value;
-            healthSlider.value = health;
+            // La valeur max pour le slider est la valeur maximale de la courbe de progression
+            healthSlider.maxValue = statSheet.HealthCurve.keys[statSheet.HealthCurve.length - 1].value;
+            healthSlider.value = finalStats.MaxHealth;
 
             // Attaque
-            int attack = finalStats[StatType.Attack];
-            statAttackText.text = $"Attaque: {attack}";
+            statAttackText.text = $"Attaque: {finalStats.Attack}";
             attackSlider.minValue = 0;
-            attackSlider.maxValue = progressionData.AttackCurve.keys[progressionData.AttackCurve.length - 1].value;
-            attackSlider.value = attack;
+            attackSlider.maxValue = statSheet.AttackCurve.keys[statSheet.AttackCurve.length - 1].value;
+            attackSlider.value = finalStats.Attack;
 
             // Défense
-            int defense = finalStats[StatType.Defense];
-            statDefenseText.text = $"Défense: {defense}";
+            statDefenseText.text = $"Défense: {finalStats.Defense}";
             defenseSlider.minValue = 0;
-            defenseSlider.maxValue = progressionData.DefenseCurve.keys[progressionData.DefenseCurve.length - 1].value;
-            defenseSlider.value = defense;
+            defenseSlider.maxValue = statSheet.DefenseCurve.keys[statSheet.DefenseCurve.length - 1].value;
+            defenseSlider.value = finalStats.Defense;
         }
 
         private void OnEquipItem(EquipmentData_SO itemToEquip)

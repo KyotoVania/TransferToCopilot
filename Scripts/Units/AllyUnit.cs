@@ -42,7 +42,6 @@ public class AllyUnit : Unit, IBannerObserver
 
     [Header("Ally Settings")]
     [SerializeField] public bool enableVerboseLogging = true; // Public pour que les nœuds puissent vérifier
-    // ... (autres variables comme prioritizeEnemyBuildings, healAmount etc.)
 
     private Building initialObjectiveBuildingInstance;
     private bool hasInitialObjectiveBeenSetThisLife = false;
@@ -68,7 +67,7 @@ public class AllyUnit : Unit, IBannerObserver
         if (spawnFeedbackPlayer != null)
         {
             LogAlly($"SpawnFeedbackPlayer trouvé. Désactivation de l'agent '{m_Agent.name}' pour la séquence de spawn.");
-            m_Agent.enabled = false; // Désactiver l'agent AVANT de lancer le feedback
+            m_Agent.enabled = false; 
 
             bool localSpawnCompletedSignal = false; // Flag local pour la coroutine Start
             spawnFeedbackPlayer.OnSpawnCompleted += () => {
@@ -86,7 +85,7 @@ public class AllyUnit : Unit, IBannerObserver
         else
         {
             LogAlly("UnitSpawnFeedback non trouvé. Passage direct à l'initialisation de l'IA.", true); // isWarning = true
-            SetSpawningState(false); // Pas de feedback, donc pas en spawn
+            SetSpawningState(false); 
         }
         
         LogAlly($"Réactivation de l'agent '{m_Agent.name}'.");
@@ -158,7 +157,6 @@ public class AllyUnit : Unit, IBannerObserver
         LogAlly("Flags du Blackboard initialisés.");
     }
 
-    // Méthode utilitaire pour les logs
     private void LogAlly(string message, bool isWarning = false)
     {
         if (enableVerboseLogging || isWarning)
