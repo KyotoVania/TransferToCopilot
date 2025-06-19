@@ -43,7 +43,7 @@ public class HubManager : MonoBehaviour
 
     void Start()
     {
-        _hubCameraManager = HubCameraManager.Instance; // S'assurer que HubCameraManager utilise un Singleton local
+        _hubCameraManager = HubCameraManager.Instance; 
         if (_hubCameraManager == null)
         {
             Debug.LogError("[HubManager] HubCameraManager.Instance non trouvé ! La navigation caméra ne fonctionnera pas.");
@@ -56,7 +56,7 @@ public class HubManager : MonoBehaviour
             return;
         }
         Debug.Log("[HubManager] Initialisé.");
-        GameManager.Instance.SetState(GameState.Hub);
+        //GameManager.Instance.SetState(GameState.Hub);
 
         if (buttonBackToMainMenu != null) buttonBackToMainMenu.onClick.AddListener(GoBackToMainMenu);
 
