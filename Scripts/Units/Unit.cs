@@ -4,7 +4,8 @@ using System.Collections.Generic;
 using Sirenix.OdinInspector;
 using System.Linq;
 using ScriptableObjects;
-
+using System;
+using Random = UnityEngine.Random;
 public enum UnitState
 {
     Idle,
@@ -42,9 +43,7 @@ public abstract class Unit : MonoBehaviour, ITileReservationObserver
     public RuntimeStats CurrentStats { get; private set; }
 	public StatSheet_SO CharacterStatSheets;
     public int Health { get; protected set; } // La vie actuelle est séparée des stats de base
-    // --- MODIFIÉ : Les accesseurs (propriétés) lisent maintenant depuis CurrentStats ---
-    // Ils sont maintenant 'virtual' pour permettre aux buffs/debuffs de les surcharger plus tard.
-    // On ajoute un check "!= null" pour éviter les erreurs avant l'initialisation.
+    
     public virtual int Attack => CurrentStats != null ? CurrentStats.Attack : 0;
     public virtual int Defense => CurrentStats != null ? CurrentStats.Defense : 0;
     public virtual int AttackRange => CurrentStats != null ? CurrentStats.AttackRange : 0;
@@ -82,7 +81,14 @@ public abstract class Unit : MonoBehaviour, ITileReservationObserver
     public delegate void UnitAttackedBuildingHandler(Unit attacker, Building target, int damage);
     public static event UnitAttackedBuildingHandler OnUnitAttackedBuilding;
 
-    [Header("Animation")]
+
+	/// <summary>
+    /// Déclenché lorsqu'une unité est tuée par une autre.
+    /// Param 1: Attaquant, Param 2: Victime.
+    /// </summary>
+    public static event Action<Unit, Unit> OnUnitKilled;
+    
+[Header("Animation")]
     [SerializeField] protected Animator animator;
     [SerializeField] protected bool useAnimations = true;
 
@@ -675,7 +681,12 @@ public abstract class Unit : MonoBehaviour, ITileReservationObserver
 
         if (Health <= 0)
         {
-            Die();
+			if (attacker != null)
+            {
+                OnUnitKilled?.Invoke(attacker, this);
+            }            
+			Die();
+			
         }
     }
 
@@ -1220,6 +1231,11 @@ public abstract class Unit : MonoBehaviour, ITileReservationObserver
 
         // 2. Appel au calculateur centralisé
         this.CurrentStats = StatsCalculator.GetFinalStats(characterData, level, equipment);
+
+		if (this is AllyUnit allyUnit)
+		{
+    		allyUnit.MomentumGainOnObjectiveComplete = characterData.MomentumGainOnObjectiveComplete;
+		}
 
         // 3. Initialiser la vie actuelle de l'unité avec la vie max calculée
         this.Health = this.CurrentStats.MaxHealth;

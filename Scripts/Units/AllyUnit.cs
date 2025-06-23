@@ -12,6 +12,7 @@ public class AllyUnit : Unit, IBannerObserver
     [Header("Behavior Graph")]
     [Tooltip("Assign the Behavior Graph Agent component from this GameObject here.")]
     [SerializeField] private BehaviorGraphAgent m_Agent;
+    public BlackboardReference Blackboard => m_Agent?.BlackboardReference;
 
     // --- Blackboard Variable Cache ---
     // Clés pour le Blackboard
@@ -48,6 +49,8 @@ public class AllyUnit : Unit, IBannerObserver
     private UnitSpawnFeedback spawnFeedbackPlayer;
     public PlayerBuilding currentReserveBuilding;
     public Tile currentReserveTile;
+
+	public float MomentumGainOnObjectiveComplete; 
 
     protected override IEnumerator Start()
     {

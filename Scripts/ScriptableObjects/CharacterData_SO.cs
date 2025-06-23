@@ -59,6 +59,19 @@ namespace ScriptableObjects
     }
     #endif
     // ------------------------------------
+	[Header("Momentum System")]
+    [Tooltip("Cost in momentum charges to invoke this unit. 0 for basic units.")]
+    public int MomentumCost = 0;
+
+    [Tooltip("Momentum gained (as a fraction of a charge) when this unit is successfully invoked.")]
+    [Range(0f, 1f)]
+    public float MomentumGainOnInvoke = 0.2f;
+
+    [Tooltip("Momentum gained (as a fraction of a charge) when this unit completes its primary objective (capture or defensive kill).")]
+    [Range(0f, 1f)]
+    public float MomentumGainOnObjectiveComplete = 0.5f;
+	
+	
 
     [Title("Hub & UI")]
     [AssetsOnly]

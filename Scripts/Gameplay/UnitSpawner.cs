@@ -42,6 +42,8 @@
         /// <param name="perfectCount">Le nombre d'inputs parfaits pour d'éventuels bonus.</param>
         public void TrySpawnUnit(CharacterData_SO characterData, int perfectCount)
         {
+            
+            // Vérification des données du personnage
             if (characterData == null)
             {
                 Debug.LogWarning("[UnitSpawner] Tentative d'invocation avec un CharacterData_SO nul.");
@@ -54,6 +56,12 @@
                 Debug.Log($"[UnitSpawner] L'unité '{characterData.CharacterID}' est en cooldown.");
                 // On pourrait ajouter un feedback sonore "négatif" ici.
                 return;
+            }
+
+            if (!MomentumManager.Instance.TrySpendMomentum(characterData.MomentumCost))
+            {
+                Debug.Log($"Invocation de '{characterData.DisplayName}' échouée : Momentum insuffisant.");
+                return; // Échec de l'invocation
             }
 
             // 2. Vérification de l'or
@@ -84,6 +92,14 @@
             if (newUnit != null)
             {
                 newUnit.InitializeFromCharacterData(characterData);
+                if (characterData.MomentumGainOnInvoke > 0)
+                {
+                    MomentumManager.Instance.AddMomentum(characterData.MomentumGainOnInvoke);
+                }
+                else {
+                    Debug.Log($"[UnitSpawner] Pas de gain de Momentum à l'invocation pour {characterData.DisplayName}.");
+                }
+
                 Debug.Log($"[UnitSpawner] Unité {characterData.DisplayName} invoquée sur la tuile ({spawnTile.column},{spawnTile.row}).");
             }
 

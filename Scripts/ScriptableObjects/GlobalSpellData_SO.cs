@@ -30,6 +30,8 @@ namespace ScriptableObjects
     [MinValue(0)]
     public float BeatCooldown = 15f; 
     
+    [Tooltip("Cost in momentum charges to cast this spell.")]
+    public int MomentumCost = 1;
     
     private bool ValidateSpellSequence(List<InputType> sequence)
     {
