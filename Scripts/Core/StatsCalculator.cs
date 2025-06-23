@@ -1,6 +1,7 @@
 ﻿using System.Collections.Generic;
 using ScriptableObjects; 
 using UnityEngine; 
+using UnityEditor; // Added for Inspector button
 
 /// <summary>
 /// Classe statique utilitaire responsable de tous les calculs de statistiques des unités.
@@ -70,5 +71,50 @@ public static class StatsCalculator
 
         // --- 4. Retourner le résultat ---
         return finalStats;
+    }
+    
+    //lets make the same but for the ennemy units. they dont use the CharacterData_SO but the StatSheet_SO directly.
+    public static RuntimeStats GetFinalStats(StatSheet_SO statSheet, int level)
+    {
+        // --- 1. Validation des entrées ---
+        if (statSheet == null)
+        {
+            Debug.LogError("StatsCalculator: StatSheet_SO est null. Retour de stats par défaut.");
+            return new RuntimeStats(); // Retourne des stats vides pour éviter les erreurs
+        }
+
+        var finalStats = new RuntimeStats();
+
+        // --- 2. Calcul à partir du StatSheet (Base + Niveau) ---
+        finalStats.MaxHealth = statSheet.BaseHealth + Mathf.RoundToInt(statSheet.HealthCurve.Evaluate(level));
+        finalStats.Attack = statSheet.BaseAttack + Mathf.RoundToInt(statSheet.AttackCurve.Evaluate(level));
+        finalStats.Defense = statSheet.BaseDefense + Mathf.RoundToInt(statSheet.DefenseCurve.Evaluate(level));
+
+        // Les stats qui sont fixes sont directement copiées depuis le StatSheet.
+        finalStats.AttackRange = statSheet.AttackRange;
+        finalStats.AttackDelay = statSheet.AttackDelay;
+        finalStats.MovementDelay = statSheet.MovementDelay;
+        finalStats.DetectionRange = statSheet.DetectionRange;
+
+        // --- 3. Retourner le résultat ---
+        return finalStats;
+    }
+
+    /// <summary>
+    /// Logs the stats of a unit for debugging purposes.
+    /// </summary>
+    /// <param name="stats">The RuntimeStats object to log.</param>
+    [ContextMenu("Log Stats")]
+    public static void LogStats(RuntimeStats stats)
+    {
+        if (stats == null)
+        {
+            Debug.LogError("StatsCalculator: RuntimeStats is null. Cannot log stats.");
+            return;
+        }
+
+        Debug.Log($"MaxHealth: {stats.MaxHealth}, Attack: {stats.Attack}, Defense: {stats.Defense}, " +
+                  $"AttackRange: {stats.AttackRange}, AttackDelay: {stats.AttackDelay}, " +
+                  $"MovementDelay: {stats.MovementDelay}, DetectionRange: {stats.DetectionRange}");
     }
 }

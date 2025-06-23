@@ -30,7 +30,7 @@ public abstract class Unit : MonoBehaviour, ITileReservationObserver
     protected Tile occupiedTile;
     [SerializeField] private float yOffset = 0f;
     public bool isAttached = false;
-    public int Level { get; protected set; } = 1; // Valeur par défaut
+    public int Level;
 
     private Tile _reservedTile;
 
@@ -40,8 +40,7 @@ public abstract class Unit : MonoBehaviour, ITileReservationObserver
 
     [Header("Stats & Systems")]
     public RuntimeStats CurrentStats { get; private set; }
-    public CharacterData_SO CharacterData { get; private set; }
-
+	public StatSheet_SO CharacterStatSheets;
     public int Health { get; protected set; } // La vie actuelle est séparée des stats de base
     // --- MODIFIÉ : Les accesseurs (propriétés) lisent maintenant depuis CurrentStats ---
     // Ils sont maintenant 'virtual' pour permettre aux buffs/debuffs de les surcharger plus tard.
@@ -171,8 +170,30 @@ public abstract class Unit : MonoBehaviour, ITileReservationObserver
 
     public UnitType GetUnitType()
     {
-        return CharacterData?.Stats?.Type ?? UnitType.Null;
+        return CharacterStatSheets?.Type ?? UnitType.Null;
     }
+#if UNITY_EDITOR
+    /// <summary>
+    /// Affiche un bouton dans l'inspecteur pour logger les statistiques actuelles de l'unité.
+    /// Ce bouton n'est visible que lorsque le jeu est en mode Play ou en Pause.
+    /// </summary>
+    [Button("Log Current Stats", ButtonSizes.Medium), GUIColor(0.4f, 0.8f, 1f)]
+    [PropertyOrder(-10)] // Place le bouton en haut de l'inspecteur
+    [ShowIf("Application.isPlaying")] // N'affiche le bouton qu'en mode Play/Pause
+    private void LogCurrentStatsForInspector()
+    {
+        if (this.CurrentStats == null)
+        {
+            Debug.Log($"<color=orange>[{name}] CurrentStats est null. Les stats n'ont pas encore été calculées ou assignées.</color>");
+            return;
+        }
+
+        // On utilise la méthode LogStats qui existe déjà sur l'objet RuntimeStats
+        Debug.Log($"--- Stats Log for <color=cyan>{name}</color> (Level {this.Level}) HP: {this.Health} at frame {Time.frameCount} ---");
+        this.CurrentStats.LogStats();
+    }
+#endif
+
 
     private IEnumerator AttachToNearestTile()
     {
@@ -1144,7 +1165,26 @@ public abstract class Unit : MonoBehaviour, ITileReservationObserver
         Die();
     }
 
-    public virtual void InitializeFromCharacterData(CharacterData_SO characterData)
+    public virtual void InitializeFromCharacterStatsSheets(StatSheet_SO characterStatsReceived)
+    {
+        if (characterStatsReceived == null)
+        {
+            Debug.LogError("InitializeFromCharacterStatsSheets: characterStatsReceived is null. Cannot initialize unit.");
+            return;
+        }
+
+        // --- Logique d'initialisation refondue ---
+        this.CharacterStatSheets = characterStatsReceived;
+        // 1. Récupérer les données de progression (niveau, équipement)
+        // TODO: Remplacer par la vraie logique de récupération d'équipement si nécessaire.
+
+        // 2. Appel au calculateur centralisé. C'est LA ligne la plus importante.
+        this.CurrentStats = StatsCalculator.GetFinalStats(this.CharacterStatSheets, this.Level);
+
+        // 3. Initialiser la vie actuelle de l'unité avec la vie max calculée.
+        this.Health = this.CurrentStats.MaxHealth;
+    }
+	public virtual void InitializeFromCharacterData(CharacterData_SO characterData)
     {
         if (characterData == null)
         {
@@ -1153,29 +1193,37 @@ public abstract class Unit : MonoBehaviour, ITileReservationObserver
         }
 
         // --- Logique d'initialisation refondue ---
-        this.CharacterData = characterData; 
+        this.CharacterStatSheets = characterData.Stats;
+
         // 1. Récupérer les données de progression (niveau, équipement)
         int level = 1;
-        // TODO: Remplacer par la vraie logique de récupération d'équipement si nécessaire.
-        List<EquipmentData_SO> equipment = new List<EquipmentData_SO>(); 
+        List<EquipmentData_SO> equipment = new List<EquipmentData_SO>();
 
-        // Pour les unités alliées, on cherche leur progression
         if (this is AllyUnit && PlayerDataManager.Instance != null)
         {
             if (PlayerDataManager.Instance.Data.CharacterProgressData.TryGetValue(characterData.CharacterID, out var progress))
             {
                 level = progress.CurrentLevel;
-                // Ici, vous ajouteriez la logique pour récupérer les équipements assignés à ce personnage
-                // via TeamManager ou PlayerDataManager.
+                if (PlayerDataManager.Instance.Data.EquippedItems.TryGetValue(characterData.CharacterID, out var equippedItemIDs))
+                {
+                    foreach (var itemID in equippedItemIDs)
+                    {
+                        EquipmentData_SO equipmentData = Resources.Load<EquipmentData_SO>($"Data/Equipment/{itemID}");
+                        if (equipmentData != null)
+                        {
+                            equipment.Add(equipmentData);
+                        }
+                    }
+                }
             }
         }
 
-        // 2. Appel au calculateur centralisé. C'est LA ligne la plus importante.
+        // 2. Appel au calculateur centralisé
         this.CurrentStats = StatsCalculator.GetFinalStats(characterData, level, equipment);
 
-        // 3. Initialiser la vie actuelle de l'unité avec la vie max calculée.
+        // 3. Initialiser la vie actuelle de l'unité avec la vie max calculée
         this.Health = this.CurrentStats.MaxHealth;
     }
-
     #endregion
 }
+

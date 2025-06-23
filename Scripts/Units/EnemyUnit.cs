@@ -10,7 +10,7 @@ public class EnemyUnit : Unit
     [Header("Behavior Graph")]
     [Tooltip("Assigner le Behavior Graph Agent de cet GameObject ici.")]
     [SerializeField] private BehaviorGraphAgent m_Agent;
-
+	
     [Header("Enemy Settings")]
     [SerializeField] public bool enableVerboseLogging = true; // Public pour les logs des nœuds
     [Tooltip("Si true, l'unité attaquera les bâtiments joueurs en priorité.")]
@@ -53,11 +53,7 @@ public class EnemyUnit : Unit
     private BlackboardVariable<bool> bbPathfindingFailed;
     private BlackboardVariable<List<Vector2Int>> bbCurrentPath;
     
-    [Header("Enemy Stats & Leveling")]
-    [Tooltip("La courbe de progression à utiliser pour calculer les stats de cet ennemi.")]
-    [SerializeField] private CharacterProgressionData_SO progressionData;
-    [Tooltip("Le niveau de cette unité ennemie.")]
-    [SerializeField] public int level = 1;
+    
 
 protected override IEnumerator Start()
 {
@@ -85,7 +81,19 @@ protected override IEnumerator Start()
     // C'est une coroutine, donc on attend sa complétion.
     if (enableVerboseLogging) Debug.Log($"[{name}] EnemyUnit.Start: Appel de base.Start() (Unit.Start) pour l'attachement à la tuile.");
     yield return StartCoroutine(base.Start()); // Attend que Unit.Start() et donc AttachToNearestTile() soient finis.
-
+	if (CharacterStatSheets != null)
+    {
+        if (enableVerboseLogging) Debug.Log($"[{name}] EnemyUnit.Start: Initialisation des stats avec CharacterStatSheets.");
+        // On appelle la méthode de la classe de base qui utilise le StatsCalculator.
+        // C'est cette ligne qui fait tout le travail pour les stats.
+        InitializeFromCharacterStatsSheets(CharacterStatSheets);
+    }
+    else
+    {
+        Debug.LogError($"[{name}] EnemyUnit.Start: Aucun CharacterData_SO n'est assigné dans l'inspecteur! Les stats ne seront pas initialisées.", gameObject);
+        // On pourrait vouloir arrêter la coroutine ici si c'est une erreur bloquante.
+        yield break; 
+    }
     // 3. Vérifier si l'attachement a réussi (this.occupiedTile et this.isAttached sont dans Unit.cs)
     if (this.occupiedTile != null && this.isAttached)
     {
@@ -317,4 +325,6 @@ private void CacheBlackboardVariables()
         base.OnDestroy();
 
     }
+
+  
 }
