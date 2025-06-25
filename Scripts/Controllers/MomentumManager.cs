@@ -2,7 +2,6 @@
 using Gameplay;
 using UnityEngine;
 
-
 /// <summary>
 /// Gère la ressource de Momentum du joueur.
 /// Le Momentum est gagné par des actions réussies et se dégrade avec le temps.
@@ -12,7 +11,7 @@ public class MomentumManager : SingletonPersistent<MomentumManager>
 {
     // --- CONSTANTES ---
     private const float MAX_MOMENTUM = 3.0f;
-    private const int DECAY_THRESHOLD_BEATS = 8; // Nombre de beats d'inactivité avant que la dégradation ne commence.
+    private const int DECAY_THRESHOLD_BEATS = 24; // Nombre de beats d'inactivité avant que la dégradation ne commence.
     private const float DECAY_AMOUNT_PER_BEAT = 0.05f; // Vitesse de la dégradation.
 
     // --- ÉVÉNEMENTS ---
@@ -27,7 +26,9 @@ public class MomentumManager : SingletonPersistent<MomentumManager>
     private int _lastBeatCountWithoutGain;
     private MusicManager _musicManager;
     private AllyUnitRegistry _allyUnitRegistry;
-    
+
+    private bool _momentumGainFlag = false;
+
     protected override void Awake()
     {
         base.Awake();
@@ -35,6 +36,7 @@ public class MomentumManager : SingletonPersistent<MomentumManager>
         _currentMomentum = 0f;
         CurrentCharges = 0;
         _lastBeatCountWithoutGain = 0;
+        _momentumGainFlag = false;
     }
 
     private void Start()
@@ -82,7 +84,7 @@ public class MomentumManager : SingletonPersistent<MomentumManager>
     /// <param name="amount">La quantité de momentum à ajouter (fraction de charge).</param>
     public void AddMomentum(float amount)
     {
-        _lastBeatCountWithoutGain = 0; // Réinitialise le compteur d'inactivité.
+        _momentumGainFlag = true;
         
         float previousMomentum = _currentMomentum;
         _currentMomentum = Mathf.Clamp(_currentMomentum + amount, 0f, MAX_MOMENTUM);
@@ -113,36 +115,30 @@ public class MomentumManager : SingletonPersistent<MomentumManager>
     /// </summary>
     private void HandleBeat(float beatDuration)
     {
-        _lastBeatCountWithoutGain++;
+        if (_momentumGainFlag)
+        {
+            _lastBeatCountWithoutGain = 0;
+            _momentumGainFlag = false;
+            Debug.Log("[MomentumManager] Gain de Momentum détecté. Compteur d'inactivité réinitialisé.");
+        }
 
-        // On laisse cette condition décommentée pour tester la logique à l'intérieur
+        _lastBeatCountWithoutGain++;
+        Debug.Log($"[MomentumManager] Compteur d'inactivité: {_lastBeatCountWithoutGain} beats.");
         if (_lastBeatCountWithoutGain > DECAY_THRESHOLD_BEATS)
         {
-            // --- BLOC DE DÉBOGAGE DÉTAILLÉ ---
             float momentumAvantCalcul = _currentMomentum;
-
-            // Log de l'état initial avant de toucher à quoi que ce soit
-            Debug.LogWarning($"[HandleBeat] Début de la DÉCROISSANCE. Compteur: {_lastBeatCountWithoutGain}, Momentum actuel: {momentumAvantCalcul}");
 
             if (momentumAvantCalcul <= 0)
             {
-                // Pas besoin de continuer si on est déjà à zéro.
                 return;
             }
+            
+            Debug.LogWarning($"[HandleBeat] Début de la DÉCROISSANCE. Compteur: {_lastBeatCountWithoutGain}, Momentum actuel: {momentumAvantCalcul}");
 
-            // 1. Calcul du palier
             float palier = Mathf.Floor(momentumAvantCalcul);
-            Debug.Log($"[HandleBeat]   > Palier calculé (Floor) : {palier}");
-
-            // 2. Calcul de la nouvelle valeur après soustraction
             float momentumApresSoustraction = momentumAvantCalcul - DECAY_AMOUNT_PER_BEAT;
-            Debug.Log($"[HandleBeat]   > Momentum après soustraction : {momentumApresSoustraction}");
-
-            // 3. Calcul de la valeur finale en utilisant Max pour ne pas passer sous le palier
             float momentumFinal = Mathf.Max(momentumApresSoustraction, palier);
-            Debug.Log($"[HandleBeat]   > Momentum final (Max) : {momentumFinal}");
 
-            // 4. Assignation et notification
             _currentMomentum = momentumFinal;
         
             if (_currentMomentum != momentumAvantCalcul)
@@ -151,6 +147,7 @@ public class MomentumManager : SingletonPersistent<MomentumManager>
                 UpdateChargesAndNotify();
             }
         }
+        
     }
 
     /// <summary>

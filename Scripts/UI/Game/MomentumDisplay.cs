@@ -1,47 +1,58 @@
 ﻿using UnityEngine;
-using UnityEngine.UI;
+using UnityEngine.UI; // Important pour avoir accès au type Slider
 using System.Collections.Generic;
 
 public class MomentumDisplay : MonoBehaviour
 {
     [Header("Références UI")]
-    [Tooltip("L'Image qui sert de jauge de remplissage. Doit avoir son 'Image Type' sur 'Filled'.")]
-    [SerializeField] private Image momentumFillImage;
+    [Tooltip("Le Slider qui représente la jauge de Momentum. Le script le trouvera automatiquement sur cet objet si non assigné.")]
+    [SerializeField] private Slider momentumSlider;
 
     [Tooltip("Liste des GameObjects des 3 icônes de charge. Elles seront activées/désactivées.")]
     [SerializeField] private List<GameObject> chargeIcons;
 
     private MomentumManager _momentumManager;
 
-    // La méthode Start est appelée APRES toutes les méthodes Awake.
+    // Awake est appelé avant Start. C'est le meilleur endroit pour récupérer les composants.
+    void Awake()
+    {
+        // Si le Slider n'a pas été glissé dans l'inspecteur, on essaie de le trouver
+        // sur le même GameObject que ce script.
+        if (momentumSlider == null)
+        {
+            momentumSlider = GetComponent<Slider>();
+        }
+    }
+    
     void Start()
     {
-        // La validation des références reste ici.
-        if (momentumFillImage == null || chargeIcons == null || chargeIcons.Count != 3)
+        // Validation des références. On vérifie maintenant momentumSlider au lieu de momentumFillImage.
+        if (momentumSlider == null || chargeIcons == null || chargeIcons.Count != 3)
         {
-            Debug.LogError("[MomentumDisplay] Une ou plusieurs références UI ne sont pas assignées correctement !", this);
+            Debug.LogError("[MomentumDisplay] Référence au Slider ou aux icônes de charge manquante/incorrecte !", this);
             this.enabled = false;
             return;
         }
 
-        // Maintenant, quand on cherche l'instance, MomentumManager.Awake() aura déjà été exécuté.
+        // Configuration initiale du Slider
+        momentumSlider.minValue = 0f;
+        momentumSlider.maxValue = 3.0f; // Le Momentum a 3 charges max.
+        momentumSlider.value = 0f;      // Assurer que la valeur de départ est 0.
+
+        // Le reste de la logique d'abonnement est identique.
         _momentumManager = MomentumManager.Instance;
         if (_momentumManager != null)
         {
-            // On s'abonne à l'événement.
             _momentumManager.OnMomentumChanged += UpdateMomentumDisplay;
-            // Et on met à jour l'affichage une première fois avec les valeurs actuelles.
             UpdateMomentumDisplay(_momentumManager.CurrentCharges, _momentumManager.CurrentMomentumValue);
         }
         else
         {
-            // Cette erreur ne devrait plus se produire si le manager est bien dans la scène Core.
             Debug.LogError("[MomentumDisplay] MomentumManager.Instance non trouvé ! Assurez-vous que la scène 'Core' est bien chargée.", this);
             this.enabled = false;
         }
     }
-
-    // OnDestroy est la contrepartie de Start. On l'utilise pour se désabonner.
+    
     private void OnDestroy()
     {
         // Toujours se désabonner pour éviter les fuites de mémoire.
@@ -51,14 +62,19 @@ public class MomentumDisplay : MonoBehaviour
         }
     }
 
-    // La méthode de mise à jour reste identique.
+    /// <summary>
+    /// Met à jour l'affichage du Momentum en pilotant le Slider et les icônes.
+    /// </summary>
     private void UpdateMomentumDisplay(int charges, float momentumValue)
     {
-        if (momentumFillImage != null)
+        // Mettre à jour la valeur du Slider. C'est la ligne clé de la correction.
+        if (momentumSlider != null)
         {
-            momentumFillImage.fillAmount = momentumValue / 3.0f;
+            // Le Slider se chargera lui-même de mettre à jour son image de remplissage.
+            momentumSlider.value = momentumValue;
         }
 
+        // La logique des icônes de charge reste la même.
         if (chargeIcons != null)
         {
             for (int i = 0; i < chargeIcons.Count; i++)
