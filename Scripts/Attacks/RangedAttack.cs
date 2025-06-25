@@ -82,7 +82,7 @@ public class RangedAttack : MonoBehaviour, IAttack
         }
 
         // Initialiser le projectile
-        projectileScript.Initialize(target, damage, projectileSpeed, impactVFXPrefab, attacker);
+        projectileScript.Initialize(target, damage, projectileSpeed, impactVFXPrefab, attacker.GetComponent<Unit>());
 
         // Le reste de la 'duration' de l'animation de l'attaquant peut continuer après le lancement du projectile.
         float remainingDuration = duration - fireAnimationDelay;

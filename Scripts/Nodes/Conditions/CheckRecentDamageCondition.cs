@@ -14,7 +14,6 @@ using Unity.Properties;
 )]
 public class CheckRecentDamageCondition : Unity.Behavior.Condition
 {
-    // --- NOUVELLE VARIABLE PUBLIQUE ---
     [Tooltip("Le temps en secondes pendant lequel l'unité se souvient d'une attaque.")]
     public float ForgetTimeInSeconds = 4f;
 
@@ -39,6 +38,7 @@ public class CheckRecentDamageCondition : Unity.Behavior.Condition
         }
         // On met en cache les variables une seule fois pour la performance.
         CacheBlackboardVariables();
+        Debug.Log($"[{GameObject?.name}] CheckRecentDamageCondition: Initialisation terminée. Variables mises en cache : {blackboardVariablesCached}");
     }
 
     /// <summary>
@@ -48,6 +48,7 @@ public class CheckRecentDamageCondition : Unity.Behavior.Condition
     {
         if (!blackboardVariablesCached || bbSelfUnit == null || bbInteractionTargetUnit == null)
         {
+            Debug.LogError($"[{GameObject?.name}] CheckRecentDamageCondition: Variables Blackboard non mises en cache ou manquantes.");
             // Si le cache a échoué dans OnStart, on ne fait rien.
             return false;
         }
@@ -55,6 +56,7 @@ public class CheckRecentDamageCondition : Unity.Behavior.Condition
         var enemyUnit = bbSelfUnit.Value as EnemyUnit;
         if (enemyUnit == null || !enemyUnit.LastAttackerInfo.HasValue)
         {
+            Debug.LogWarning($"[{GameObject?.name}] CheckRecentDamageCondition: Aucune unité ennemie valide ou pas d'attaquant enregistré.");
             return false; // Pas d'attaquant enregistré
         }
 
@@ -68,7 +70,8 @@ public class CheckRecentDamageCondition : Unity.Behavior.Condition
         {
             // Menace récente et valide !
             bbInteractionTargetUnit.Value = lastDamage.Attacker;
-            // Debug.Log($"[{enemyUnit.name}] Réagit aux dégâts récents de {lastDamage.Attacker.name}.");
+            
+            Debug.Log($"[{enemyUnit.name}] Réagit aux dégâts récents de {lastDamage.Attacker.name}.");
             return true; // Succès, on a une cible
         }
 
@@ -99,7 +102,9 @@ public class CheckRecentDamageCondition : Unity.Behavior.Condition
 
         if (!blackboard.GetVariable(BB_SELF_UNIT, out bbSelfUnit)) success = false;
         if (!blackboard.GetVariable(BB_INTERACTION_TARGET_UNIT, out bbInteractionTargetUnit)) success = false;
-
+        Debug.Log($"[{GameObject?.name}] CheckRecentDamageCondition: Variables Blackboard mises en cache : " +
+                  $"{(bbSelfUnit != null ? BB_SELF_UNIT : "non trouvé")}, " +
+                  $"{(bbInteractionTargetUnit != null ? BB_INTERACTION_TARGET_UNIT : "non trouvé")}");
         blackboardVariablesCached = success;
         return success;
     }

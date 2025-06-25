@@ -8,6 +8,7 @@ public class Projectile : MonoBehaviour
     private float speed;
     private GameObject impactVFXPrefab;
     private Transform attackerTransform; // Pour éviter de se toucher soi-même si l'attaquant a un collider
+    private Unit attacker; // Référence à l'attaquant
 
     private bool initialized = false;
     private Vector3 lastKnownTargetPosition;
@@ -19,13 +20,13 @@ public class Projectile : MonoBehaviour
     [Tooltip("Le projectile doit-il suivre la cible (homing) ou aller en ligne droite vers la position initiale de la cible ?")]
     [SerializeField] private bool isHoming = true;
 
-    public void Initialize(Transform target, int projectileDamage, float projectileSpeed, GameObject vfxPrefab, Transform attacker)
+    public void Initialize(Transform target, int projectileDamage, float projectileSpeed, GameObject vfxPrefab, Unit attacker)
     {
         targetTransform = target;
         damage = projectileDamage;
         speed = projectileSpeed;
         impactVFXPrefab = vfxPrefab;
-        attackerTransform = attacker;
+        this.attacker = attacker; // Update to store the Unit attacker
 
         if (targetTransform != null)
         {
@@ -33,9 +34,8 @@ public class Projectile : MonoBehaviour
         }
         else
         {
-            // Si la cible est déjà nulle à l'initialisation, prévoir une autodestruction.
-            Debug.LogWarning($"[Projectile] Cible nulle à l'initialisation. Le projectile s'autodétruira.");
-            Destroy(gameObject, 0.1f); // Destruction rapide
+            Debug.LogWarning("[Projectile] Cible nulle à l'initialisation. Le projectile s'autodétruira.");
+            Destroy(gameObject, 0.1f);
             return;
         }
 
@@ -133,12 +133,12 @@ public class Projectile : MonoBehaviour
             if (unitTarget != null)
             {
                 if (showAttackLogs) Debug.Log($"[Projectile] Application de {damage} dégâts à l'unité {unitTarget.name}.");
-                unitTarget.TakeDamage(damage);
+                unitTarget.TakeDamage(damage, attacker); // Passer l'attaquant
             }
             else if (buildingTarget != null)
             {
                 if (showAttackLogs) Debug.Log($"[Projectile] Application de {damage} dégâts au bâtiment {buildingTarget.name}.");
-                buildingTarget.TakeDamage(damage);
+                buildingTarget.TakeDamage(damage, attacker); // Passer l'attaquant
             }
         }
 

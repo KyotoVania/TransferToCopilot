@@ -498,50 +498,50 @@ public abstract class Unit : MonoBehaviour, ITileReservationObserver
         }
     }
 
-    public IEnumerator PerformAttackCoroutine(Unit target)
-    {
-        if (AttackSystem == null || target == null || target.Health <= 0)
+        public IEnumerator PerformAttackCoroutine(Unit target)
         {
-            if (debugUnitCombat) Debug.LogWarning($"[{name}] PerformAttackCoroutine: Conditions non remplies (AttackSystem null, cible nulle ou cible morte). Cible: {(target?.name ?? "NULL")}, Cible PV: {target?.Health ?? -1}");
+            if (AttackSystem == null || target == null || target.Health <= 0)
+            {
+                if (debugUnitCombat) Debug.LogWarning($"[{name}] PerformAttackCoroutine: Conditions non remplies (AttackSystem null, cible nulle ou cible morte). Cible: {(target?.name ?? "NULL")}, Cible PV: {target?.Health ?? -1}");
+                _isAttacking = false;
+                SetState(UnitState.Idle);
+                yield break;
+            }
+
+            _isAttacking = true;
+            SetState(UnitState.Attacking);
+            FaceUnitTarget(target);
+
+            if (useAnimations && animator != null)
+            {
+                if (debugUnitCombat) Debug.Log($"[{name} ({Time.frameCount})] PerformAttackCoroutine: Déclenchement de l'animation d'attaque (ID: {AttackTriggerId}) pour la cible {target.name}.", this);
+                animator.SetTrigger(AttackTriggerId);
+            }
+            else
+            {
+                if (useAnimations && animator == null && debugUnitCombat) Debug.LogWarning($"[{name}] PerformAttackCoroutine: Animator non assigné mais useAnimations est true.", this);
+            }
+
+            int calculatedDamage = Mathf.Max(1, Attack - target.Defense);
+            float attackerAnimationDuration = 0.5f;
+
+            if (AttackSystem != null)
+            {
+                 if (debugUnitCombat) Debug.Log($"[{name}] PerformAttackCoroutine: Appel de AttackSystem.PerformAttack sur {target.name} avec {calculatedDamage} dégâts potentiels et une durée d'animation de {attackerAnimationDuration}s.", this);
+                yield return StartCoroutine(
+                    AttackSystem.PerformAttack(
+                        transform,
+                        target.transform,
+                        calculatedDamage,
+                        attackerAnimationDuration
+                    )
+                );
+            }
+
+            if (debugUnitCombat) Debug.Log($"[{name}] PerformAttackCoroutine: Action d'attaque (lancement/coup) terminée pour {target.name}. _isAttacking sera mis à false.", this);
             _isAttacking = false;
             SetState(UnitState.Idle);
-            yield break;
         }
-
-        _isAttacking = true;
-        SetState(UnitState.Attacking);
-        FaceUnitTarget(target);
-
-        if (useAnimations && animator != null)
-        {
-            if (debugUnitCombat) Debug.Log($"[{name} ({Time.frameCount})] PerformAttackCoroutine: Déclenchement de l'animation d'attaque (ID: {AttackTriggerId}) pour la cible {target.name}.", this);
-            animator.SetTrigger(AttackTriggerId);
-        }
-        else
-        {
-            if (useAnimations && animator == null && debugUnitCombat) Debug.LogWarning($"[{name}] PerformAttackCoroutine: Animator non assigné mais useAnimations est true.", this);
-        }
-
-        int calculatedDamage = Mathf.Max(1, Attack - target.Defense);
-        float attackerAnimationDuration = 0.5f;
-
-        if (AttackSystem != null)
-        {
-             if (debugUnitCombat) Debug.Log($"[{name}] PerformAttackCoroutine: Appel de AttackSystem.PerformAttack sur {target.name} avec {calculatedDamage} dégâts potentiels et une durée d'animation de {attackerAnimationDuration}s.", this);
-            yield return StartCoroutine(
-                AttackSystem.PerformAttack(
-                    transform,
-                    target.transform,
-                    calculatedDamage,
-                    attackerAnimationDuration
-                )
-            );
-        }
-
-        if (debugUnitCombat) Debug.Log($"[{name}] PerformAttackCoroutine: Action d'attaque (lancement/coup) terminée pour {target.name}. _isAttacking sera mis à false.", this);
-        _isAttacking = false;
-        SetState(UnitState.Idle);
-    }
 
     public IEnumerator PerformAttackBuildingCoroutine(Building target)
     {
@@ -661,6 +661,8 @@ public abstract class Unit : MonoBehaviour, ITileReservationObserver
             int actualDamage = Mathf.Max(1, modifiedDamage - this.Defense);
         
             Health -= actualDamage;
+			LastAttackerInfo = new LastDamageEvent { Attacker = attacker, Time = Time.time };
+
 
             if (debugUnitCombat) 
             {
