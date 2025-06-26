@@ -71,7 +71,12 @@ public class FeverManager : MonoBehaviour
 
         _isFeverActive = activate;
         Debug.Log($"[FeverManager] Mode Fever {(activate ? "ACTIVÉ" : "DÉSACTIVÉ")} !");
-        
+    
+        // --- LIGNE À AJOUTER ---
+        // On notifie le MusicManager pour qu'il mette à jour le RTPC dans Wwise.
+        MusicManager.Instance?.SetFeverIntensity(activate);
+        // ----------------------
+
         // Notifier tous les observateurs (unités, UI, etc.)
         OnFeverStateChanged?.Invoke(_isFeverActive);
     }

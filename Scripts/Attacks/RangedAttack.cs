@@ -13,13 +13,20 @@ public class RangedAttack : MonoBehaviour, IAttack
     [Tooltip("Point de lancement du projectile. Si non assigné, utilise la position de l'attaquant avec un offset.")]
     [SerializeField] private Transform projectileSpawnPoint;
     [Tooltip("Offset par rapport à la position de l'attaquant si projectileSpawnPoint n'est pas défini.")]
-    [SerializeField] private Vector3 spawnOffset = new Vector3(0, 1f, 0.5f); // Ex: un peu au-dessus et devant
+    [SerializeField] private Vector3 spawnOffset = new Vector3(0, 1f, 0.5f);
     [Tooltip("Délai dans l'animation de l'attaquant avant que le projectile ne soit réellement lancé (en secondes).")]
     [SerializeField] private float fireAnimationDelay = 0.5f;
 
     [Header("Debug")]
     [SerializeField] private bool showAttackLogs = true;
 
+    [Header("Fever Mode")]
+    [Tooltip("Angle de dispersion pour les projectiles supplémentaires en Mode Fever.")]
+    [SerializeField] private float feverSpreadAngle = 10f;
+
+    [Header("Fever Mode")]
+    [Tooltip("Délai entre chaque projectile supplémentaire en secondes.")]
+    [SerializeField] private float feverProjectileDelay = 0.1f;
     public IEnumerator PerformAttack(Transform attacker, Transform target, int damage, float duration)
     {
         if (projectilePrefab == null)
@@ -34,83 +41,86 @@ public class RangedAttack : MonoBehaviour, IAttack
             yield break;
         }
 
-        if (showAttackLogs)
-        {
-            Debug.Log($"[{attacker.name}] RangedAttack: Début de PerformAttack sur {target.name} pour {damage} dégâts. Durée anim: {duration}s, Délai de tir: {fireAnimationDelay}s.");
-        }
-
-        // Orienter l'attaquant vers la cible
         Vector3 directionToTarget = target.position - attacker.position;
-        directionToTarget.y = 0; // Garder l'orientation sur le plan horizontal
+        directionToTarget.y = 0;
         if (directionToTarget != Vector3.zero)
         {
             attacker.rotation = Quaternion.LookRotation(directionToTarget);
         }
 
-        // Attendre la fin de l'animation de préparation au tir (si spécifié)
-        // La 'duration' passée peut être la durée totale de l'animation de l'attaquant.
-        // Le 'fireAnimationDelay' est le moment spécifique DANS cette animation où le projectile part.
         if (fireAnimationDelay > 0)
         {
-            if (showAttackLogs) Debug.Log($"[{attacker.name}] RangedAttack: Attente du délai d'animation de tir ({fireAnimationDelay}s).");
             yield return new WaitForSeconds(fireAnimationDelay);
         }
 
-        // Vérifier à nouveau si la cible est toujours valide après le délai d'animation
         if (target == null || !target.gameObject.activeInHierarchy)
         {
             if (showAttackLogs) Debug.LogWarning($"[{attacker.name}] RangedAttack: Cible devenue invalide pendant l'animation de tir.");
             yield break;
         }
-
-        // Déterminer le point de spawn
+        
         Vector3 spawnPosition = projectileSpawnPoint != null ? projectileSpawnPoint.position : attacker.position + attacker.TransformDirection(spawnOffset);
-        Quaternion spawnRotation = projectileSpawnPoint != null ? projectileSpawnPoint.rotation : attacker.rotation;
+        Unit attackerUnit = attacker.GetComponent<Unit>();
+
+        // --- LOGIQUE PRINCIPALE MISE À JOUR ---
+        // 1. Tirer le projectile principal
+        FireProjectile(attacker, target, damage, spawnPosition, attacker.rotation);
+        
+        // 2. Vérifier si on est en Mode Fever et tirer les projectiles supplémentaires
+         if (attackerUnit != null && attackerUnit.IsFeverActive)
+        {
+            int extraProjectiles = attackerUnit.ActiveFeverBuffs.ExtraProjectiles;
+            if (extraProjectiles > 0)
+            {
+                if (showAttackLogs) Debug.Log($"[{attacker.name}] Mode Fever: Tir de {extraProjectiles} projectiles en plus.");
+                
+                for (int i = 0; i < extraProjectiles; i++)
+                {
+                    // On attend AVANT de tirer le prochain projectile
+                    if (feverProjectileDelay > 0)
+                    {
+                        yield return new WaitForSeconds(feverProjectileDelay);
+                    }
+
+                    // On ne tire que si la cible existe toujours
+                    if (target != null && target.gameObject.activeInHierarchy)
+                    {
+                         // On tire simplement droit devant, sans calcul d'angle
+                         FireProjectile(attacker, target, damage, spawnPosition, attacker.rotation);
+                    }
+                    else
+                    {
+                        // Si la cible disparaît au milieu de la rafale, on arrête
+                        break; 
+                    }
+                }
+            }
+        }
 
 
+        float remainingDuration = duration - fireAnimationDelay;
+        if (remainingDuration > 0)
+        {
+            yield return new WaitForSeconds(remainingDuration);
+        }
+    }
+        private void FireProjectile(Transform attacker, Transform target, int damage, Vector3 spawnPosition, Quaternion spawnRotation)
+    {
         if (showAttackLogs) Debug.Log($"[{attacker.name}] RangedAttack: Instanciation du projectile à {spawnPosition} vers {target.name}.");
-
-        // Instancier le projectile
         GameObject projectileGO = Instantiate(projectilePrefab, spawnPosition, spawnRotation);
         Projectile projectileScript = projectileGO.GetComponent<Projectile>();
 
         if (projectileScript == null)
         {
-            Debug.LogError($"[{attacker.name}] RangedAttack: Le prefab du projectile '{projectilePrefab.name}' ne contient pas de script Projectile ! Destruction du projectile instancié.");
+            Debug.LogError($"[{attacker.name}] RangedAttack: Le prefab du projectile '{projectilePrefab.name}' ne contient pas de script Projectile !");
             Destroy(projectileGO);
-            yield break;
+            return;
         }
-
-        // Initialiser le projectile
+        
         projectileScript.Initialize(target, damage, projectileSpeed, impactVFXPrefab, attacker.GetComponent<Unit>());
-
-        // Le reste de la 'duration' de l'animation de l'attaquant peut continuer après le lancement du projectile.
-        float remainingDuration = duration - fireAnimationDelay;
-        if (remainingDuration > 0)
-        {
-            if (showAttackLogs) Debug.Log($"[{attacker.name}] RangedAttack: Attente de la fin de l'animation de l'attaquant ({remainingDuration}s).");
-            yield return new WaitForSeconds(remainingDuration);
-        }
-
-        if (showAttackLogs)
-        {
-            Debug.Log($"[{attacker.name}] RangedAttack: Animation d'attaque terminée pour {target.name}.");
-        }
     }
-
     public bool CanAttack(Transform attacker, Transform target, float attackRange)
     {
-        // Comme pour MeleeAttack, nous nous fions à la détection de portée de la classe Unit.
-        // On pourrait ajouter une vérification de ligne de mire ici si nécessaire.
-        // float distanceToTarget = Vector3.Distance(attacker.position, target.position);
-        // bool inRange = distanceToTarget <= attackRange;
-        // if (showAttackLogs)
-        // {
-        //     Debug.Log($"[{attacker.name}] RangedAttack: CanAttack {target.name}? Distance: {distanceToTarget:F2}, Range: {attackRange}. Result: {inRange}");
-        // }
-        // return inRange; // Si vous voulez une vérification de distance brute.
-
-        // Pour l'instant, on se fie à la logique de Unit.cs qui appelle cette méthode APRES avoir vérifié la portée via les tuiles.
         if (showAttackLogs)
         {
              Debug.Log($"[{attacker.name}] RangedAttack: CanAttack {target.name} - On se fie à la détection de portée par tuile de l'unité.");

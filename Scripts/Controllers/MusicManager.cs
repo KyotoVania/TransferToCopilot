@@ -24,6 +24,11 @@ public class MusicManager : MonoBehaviour
     [Tooltip("Switch Wwise pour l'état de fin de partie (victoire/défaite).")]
     public AK.Wwise.Switch endGameSwitch;
 
+    [Header("Wwise RTPCs")]
+    [Tooltip("RTPC pour l'intensité du mode Fever.")]
+    [SerializeField] private AK.Wwise.RTPC feverIntensityRTPC;
+    
+    
     [Header("Settings")]
     [SerializeField] private float minTimeBetweenBeats = 0.1f;
     [SerializeField] private string initialMusicState = "Exploration";
@@ -301,5 +306,25 @@ public class MusicManager : MonoBehaviour
             AkUnitySoundEngine.StopPlayingID(playingID_MusicEvent);
             playingID_MusicEvent = AkUnitySoundEngine.AK_INVALID_PLAYING_ID;
         }
+    }
+    
+    /// <summary>
+    /// Met à jour la valeur du RTPC Wwise pour le mode Fever.
+    /// </summary>
+    /// <param name="isFeverActive">True si le mode Fever est actif, false sinon.</param>
+    public void SetFeverIntensity(bool isFeverActive)
+    {
+        if (feverIntensityRTPC == null || !feverIntensityRTPC.IsValid())
+        {
+            // Essayer de le faire par string si la référence n'est pas valide, c'est une bonne sécurité.
+            // Assure-toi que le nom "Fever" correspond EXACTEMENT à celui dans Wwise.
+            AkSoundEngine.SetRTPCValue("Fever", isFeverActive ? 100f : 0f);
+            return;
+        }
+    
+        // Si la référence est valide, on l'utilise directement.
+        float targetValue = isFeverActive ? 100f : 0f;
+        feverIntensityRTPC.SetGlobalValue(targetValue);
+        Debug.Log($"[MusicManager] RTPC 'Fever' mis à {targetValue}");
     }
 }

@@ -43,7 +43,10 @@ public abstract class Unit : MonoBehaviour, ITileReservationObserver
     public RuntimeStats CurrentStats { get; private set; }
     private RuntimeStats baseStats;
     private FeverBuffs _feverBuffs;
+    public FeverBuffs ActiveFeverBuffs => _feverBuffs;
     private bool _canReceiveFeverBuffs = false;
+    public bool IsFeverActive { get; private set; } = false;
+
 
 
 	public StatSheet_SO CharacterStatSheets;
@@ -215,6 +218,8 @@ public abstract class Unit : MonoBehaviour, ITileReservationObserver
             Debug.LogWarning($"[{name}] Unit is not eligible for Fever buffs. Skipping Fever state change handling.");
             return;
         }
+        IsFeverActive = isFeverActive;
+
         if (baseStats == null)
         {
             Debug.LogWarning($"[{name}] BaseStats is null. Cannot apply fever buffs.");
