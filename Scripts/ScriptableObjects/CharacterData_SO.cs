@@ -71,7 +71,9 @@ namespace ScriptableObjects
     [Range(0f, 1f)]
     public float MomentumGainOnObjectiveComplete = 0.5f;
 	
-	
+    [Title("Fever Mode Buffs")]
+    [InfoBox("Modificateurs appliqués lorsque le Mode Fever est actif.")]
+    public FeverBuffs feverBuffs;
 
     [Title("Hub & UI")]
     [AssetsOnly]
@@ -93,4 +95,21 @@ namespace ScriptableObjects
     [Tooltip("Temps en beats avant de pouvoir invoquer à nouveau ce personnage.")]
     public float InvocationCooldown = 5;
 	}
+	
+	[System.Serializable]
+	public struct FeverBuffs
+	{
+		[Tooltip("Multiplicateur de la vitesse d'attaque. Ex: 1.3 pour +30%. Mettre à 1 pour aucun changement.")]
+		[Range(1f, 3f)]
+		public float AttackSpeedMultiplier;
+
+		[Tooltip("Nombre de projectiles supplémentaires tirés par les unités à distance.")]
+		[Range(0, 5)]
+		public int ExtraProjectiles;
+
+		[Tooltip("Multiplicateur de défense. Ex: 2.0 pour doubler la défense.")]
+		[Range(1f, 5f)]
+		public float DefenseMultiplier;
+	}
 }
+

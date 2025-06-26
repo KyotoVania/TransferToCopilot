@@ -41,6 +41,11 @@ public abstract class Unit : MonoBehaviour, ITileReservationObserver
 
     [Header("Stats & Systems")]
     public RuntimeStats CurrentStats { get; private set; }
+    private RuntimeStats baseStats;
+    private FeverBuffs _feverBuffs;
+    private bool _canReceiveFeverBuffs = false;
+
+
 	public StatSheet_SO CharacterStatSheets;
     public int Health { get; protected set; } // La vie actuelle est séparée des stats de base
     
@@ -139,7 +144,10 @@ public abstract class Unit : MonoBehaviour, ITileReservationObserver
         else if (debugUnitCombat) Debug.Log($"[{name}] No attack system assigned. This unit cannot attack.");
 
         SetState(UnitState.Idle);
-
+        if (FeverManager.Instance != null)
+        {
+            FeverManager.Instance.OnFeverStateChanged += HandleFeverStateChanged;
+        }
         yield return StartCoroutine(AttachToNearestTile());
 
         if (TileReservationController.Instance != null)
@@ -154,7 +162,6 @@ public abstract class Unit : MonoBehaviour, ITileReservationObserver
 
     protected virtual void OnEnable()
     {
-       // --- MODIFICATION : Utilisation de MusicManager ---
        if (isAttached && MusicManager.Instance != null)
        {
             MusicManager.Instance.OnBeat -= OnRhythmBeatInternal;
@@ -200,7 +207,34 @@ public abstract class Unit : MonoBehaviour, ITileReservationObserver
     }
 #endif
 
+      private void HandleFeverStateChanged(bool isFeverActive)
+     {
+        // On vérifie si l'unité est éligible et a des stats de base
+        if (!_canReceiveFeverBuffs )
+        {
+            Debug.LogWarning($"[{name}] Unit is not eligible for Fever buffs. Skipping Fever state change handling.");
+            return;
+        }
+        if (baseStats == null)
+        {
+            Debug.LogWarning($"[{name}] BaseStats is null. Cannot apply fever buffs.");
+            return;
+        }
 
+        if (isFeverActive)
+        {
+            Debug.Log($"[{name}] Mode Fever activé ! Application des bonus.");
+            // On utilise directement la struct locale _feverBuffs
+            CurrentStats.AttackDelay = Mathf.Max(1, (int)(baseStats.AttackDelay / _feverBuffs.AttackSpeedMultiplier));
+            CurrentStats.Defense = (int)(baseStats.Defense * _feverBuffs.DefenseMultiplier);
+        }
+        else
+        {
+            Debug.Log($"[{name}] Mode Fever désactivé. Retour aux stats normales.");
+            CurrentStats.AttackDelay = baseStats.AttackDelay;
+            CurrentStats.Defense = baseStats.Defense;
+        }
+    }
     private IEnumerator AttachToNearestTile()
     {
         while (!isAttached)
@@ -236,7 +270,6 @@ public abstract class Unit : MonoBehaviour, ITileReservationObserver
                         AttachToTile(nearestTile);
                         isAttached = true;
 
-                        // --- MODIFICATION : Utilisation de MusicManager ---
                         if (MusicManager.Instance != null)
                         {
                             MusicManager.Instance.OnBeat += OnRhythmBeatInternal;
@@ -276,13 +309,11 @@ public abstract class Unit : MonoBehaviour, ITileReservationObserver
         }
     }
 
-    // --- MODIFICATION : Signature de la méthode mise à jour ---
     private void OnRhythmBeatInternal(float beatDuration)
     {
         OnRhythmBeat(beatDuration);
     }
 
-    // --- MODIFICATION : Signature de la méthode mise à jour ---
     protected virtual void OnRhythmBeat(float beatDuration)
     {
         HandleMovementOnBeat();
@@ -537,7 +568,15 @@ public abstract class Unit : MonoBehaviour, ITileReservationObserver
                     )
                 );
             }
-
+            if (target == null)
+            {
+                // Si la cible a été détruite pendant l'animation, on arrête la coroutine ici
+                // pour éviter la MissingReferenceException.
+                if (debugUnitCombat) Debug.Log($"[{name}] PerformAttackCoroutine: La cible a été détruite pendant l'animation. L'attaque est annulée.", this);
+                _isAttacking = false;
+                SetState(UnitState.Idle);
+                yield break; // On quitte la coroutine proprement.
+            }
             if (debugUnitCombat) Debug.Log($"[{name}] PerformAttackCoroutine: Action d'attaque (lancement/coup) terminée pour {target.name}. _isAttacking sera mis à false.", this);
             _isAttacking = false;
             SetState(UnitState.Idle);
@@ -1113,7 +1152,6 @@ public abstract class Unit : MonoBehaviour, ITileReservationObserver
     
     public virtual void OnDestroy()
     {
-        // --- MODIFICATION : Utilisation de MusicManager ---
         if (MusicManager.Instance != null)
         {
             MusicManager.Instance.OnBeat -= OnRhythmBeatInternal;
@@ -1147,6 +1185,10 @@ public abstract class Unit : MonoBehaviour, ITileReservationObserver
             {
                 StopCoroutine(buff.ExpiryCoroutine);
             }
+        }
+        if (FeverManager.Instance != null)
+        {
+            FeverManager.Instance.OnFeverStateChanged -= HandleFeverStateChanged;
         }
         activeBuffs.Clear();
     }
@@ -1207,7 +1249,9 @@ public abstract class Unit : MonoBehaviour, ITileReservationObserver
 
         // --- Logique d'initialisation refondue ---
         this.CharacterStatSheets = characterData.Stats;
-
+        _feverBuffs = characterData.feverBuffs;
+        _canReceiveFeverBuffs = true;
+        Debug.Log($"[{name}] InitializeFromCharacterData: init with character data, the buffs are: {string.Join(", ", _feverBuffs)}");
         // 1. Récupérer les données de progression (niveau, équipement)
         int level = 1;
         List<EquipmentData_SO> equipment = new List<EquipmentData_SO>();
@@ -1232,7 +1276,19 @@ public abstract class Unit : MonoBehaviour, ITileReservationObserver
         }
 
         // 2. Appel au calculateur centralisé
-        this.CurrentStats = StatsCalculator.GetFinalStats(characterData, level, equipment);
+        this.baseStats = StatsCalculator.GetFinalStats(characterData, level, equipment);
+        Debug.Log($"[{name}] InitializeFromCharacterData: Base stats initialized: {baseStats}");
+        this.CurrentStats = new RuntimeStats
+        {
+            MaxHealth = baseStats.MaxHealth,
+            Attack = baseStats.Attack,
+            Defense = baseStats.Defense,
+            AttackRange = baseStats.AttackRange,
+            AttackDelay = baseStats.AttackDelay,
+            MovementDelay = baseStats.MovementDelay,
+            DetectionRange = baseStats.DetectionRange
+        };
+        
 
 		if (this is AllyUnit allyUnit)
 		{
@@ -1244,4 +1300,6 @@ public abstract class Unit : MonoBehaviour, ITileReservationObserver
     }
     #endregion
 }
+
+
 
