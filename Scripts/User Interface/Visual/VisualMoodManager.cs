@@ -36,11 +36,6 @@ public class VisualMoodManager : MonoBehaviour, IMoodManager
 
     private void Awake()
     {
-        if (Application.isPlaying)
-        {
-            _moodLinkedObjectsCache = FindObjectsByType<MoodLinkedObject>(FindObjectsInactive.Include, FindObjectsSortMode.None);
-            SetMood(currentMood);
-        }
     }
 
     private void OnDestroy()

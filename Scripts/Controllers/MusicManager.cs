@@ -309,22 +309,24 @@ public class MusicManager : MonoBehaviour
     }
     
     /// <summary>
-    /// Met à jour la valeur du RTPC Wwise pour le mode Fever.
+    /// Met à jour l'intensité du Mode Fever dans Wwise via un RTPC.
     /// </summary>
-    /// <param name="isFeverActive">True si le mode Fever est actif, false sinon.</param>
-    public void SetFeverIntensity(bool isFeverActive)
+    /// <param name="intensity">Valeur d'intensité entre 0 et 100</param>
+    public void SetFeverIntensity(float intensity)
     {
+        // Clamp la valeur entre 0 et 100 pour sécurité
+        intensity = Mathf.Clamp(intensity, 0f, 100f);
+    
+        // Vérifier que le paramètre RTPC est configuré
         if (feverIntensityRTPC == null || !feverIntensityRTPC.IsValid())
         {
-            // Essayer de le faire par string si la référence n'est pas valide, c'est une bonne sécurité.
-            // Assure-toi que le nom "Fever" correspond EXACTEMENT à celui dans Wwise.
-            AkSoundEngine.SetRTPCValue("Fever", isFeverActive ? 100f : 0f);
+            Debug.LogWarning("[MusicManager] Le paramètre RTPC pour le Mode Fever n'est pas configuré.");
             return;
         }
+
+        // Appliquer la valeur RTPC à Wwise
+        feverIntensityRTPC.SetGlobalValue(intensity);
     
-        // Si la référence est valide, on l'utilise directement.
-        float targetValue = isFeverActive ? 100f : 0f;
-        feverIntensityRTPC.SetGlobalValue(targetValue);
-        Debug.Log($"[MusicManager] RTPC 'Fever' mis à {targetValue}");
+        Debug.Log($"[MusicManager] Intensité Fever mise à jour : {intensity:F1}%");
     }
 }

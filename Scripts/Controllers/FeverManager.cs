@@ -7,16 +7,31 @@ public class FeverManager : MonoBehaviour
     public static FeverManager Instance { get; private set; }
 
     [Header("Configuration")]
-    [Tooltip("Nombre de combos réussis nécessaires pour activer le Mode Fever.")]
+    [Tooltip("Nombre de combos par palier de Fever (ex: 10 = paliers à 10, 20, 30, etc.)")]
     [SerializeField]
-    private int feverThreshold = 10;
+    private int combosPerFeverLevel = 10;
+    
+    [Tooltip("Nombre maximum de paliers de Fever (0-based, donc 4 = 5 niveaux: 0,1,2,3,4)")]
+    [SerializeField]
+    private int maxFeverLevel = 4;
 
     [Header("État (lecture seule)")]
+    [SerializeField]
+    private int _currentFeverLevel = 0;
+    public int CurrentFeverLevel => _currentFeverLevel;
+    
     [SerializeField]
     private bool _isFeverActive = false;
     public bool IsFeverActive => _isFeverActive;
 
+    [Header("Audio")]
+    [Tooltip("Son à jouer quand le combo est brisé (optionnel)")]
+    [SerializeField]
+    private AK.Wwise.Event comboBrokenSound;
+
+    // Événements
     public event Action<bool> OnFeverStateChanged;
+    public event Action<int> OnFeverLevelChanged; // Nouveau : notifie le changement de niveau
 
     private void Awake()
     {
@@ -30,11 +45,9 @@ public class FeverManager : MonoBehaviour
 
     private void OnEnable()
     {
-        // On s'abonne aux événements du ComboController
+        // S'abonner aux événements du ComboController
         if (ComboController.Instance != null)
         {
-            // Un combo réussi est simplement un appui correct sur une touche
-            // On s'abonne à OnComboUpdated qui est appelé à chaque incrémentation
             ComboController.Instance.AddObserver(new FeverComboObserver(this));
         }
         else
@@ -43,45 +56,108 @@ public class FeverManager : MonoBehaviour
         }
     }
 
-    private void OnDisable()
-    {
-        // Se désabonner proprement
-        // La gestion est faite via l'observer pour la propreté.
-    }
-
     private void HandleComboUpdated(int newComboCount)
     {
-        if (!_isFeverActive && newComboCount >= feverThreshold)
+        // Calculer le niveau de Fever basé sur le combo actuel
+        int newFeverLevel = CalculateFeverLevel(newComboCount);
+        
+        // Si le niveau a changé, mettre à jour
+        if (newFeverLevel != _currentFeverLevel)
         {
-            ActivateFeverMode(true);
+            UpdateFeverLevel(newFeverLevel);
+        }
+        
+        // Gérer l'activation/désactivation du mode Fever
+        bool shouldBeActive = newFeverLevel > 0;
+        if (shouldBeActive != _isFeverActive)
+        {
+            ActivateFeverMode(shouldBeActive);
         }
     }
 
     private void HandleComboBroken()
     {
+        Debug.Log("[FeverManager] Combo brisé ! Réinitialisation du Mode Fever.");
+        
+        // Jouer le son de combo brisé si configuré
+        if (comboBrokenSound != null && comboBrokenSound.IsValid())
+        {
+            comboBrokenSound.Post(gameObject);
+        }
+        
+        // Réinitialiser le niveau et désactiver le mode Fever
+        if (_currentFeverLevel > 0)
+        {
+            UpdateFeverLevel(0);
+        }
+        
         if (_isFeverActive)
         {
             ActivateFeverMode(false);
         }
     }
 
+    private int CalculateFeverLevel(int comboCount)
+    {
+        if (combosPerFeverLevel <= 0) return 0;
+        
+        // Calculer le niveau basé sur le combo
+        int level = comboCount / combosPerFeverLevel;
+        
+        // Limiter au niveau maximum
+        return Mathf.Clamp(level, 0, maxFeverLevel);
+    }
+
+    private void UpdateFeverLevel(int newLevel)
+    {
+        if (_currentFeverLevel == newLevel) return;
+        
+        int previousLevel = _currentFeverLevel;
+        _currentFeverLevel = newLevel;
+        
+        Debug.Log($"[FeverManager] Niveau de Fever : {previousLevel} → {_currentFeverLevel}");
+        
+        // Calculer l'intensité RTPC (0-100)
+        float rtpcValue = CalculateRTPCValue(_currentFeverLevel);
+        
+        // Mettre à jour le RTPC dans Wwise
+        if (MusicManager.Instance != null)
+        {
+            MusicManager.Instance.SetFeverIntensity(rtpcValue);
+        }
+        
+        // Notifier les observateurs du changement de niveau
+        OnFeverLevelChanged?.Invoke(_currentFeverLevel);
+    }
+
+    private float CalculateRTPCValue(int feverLevel)
+    {
+        // Convertir le niveau (0-maxLevel) en valeur RTPC (0-100)
+        if (maxFeverLevel <= 0) return 0f;
+        
+        float normalizedLevel = (float)feverLevel / maxFeverLevel;
+        return normalizedLevel * 100f;
+    }
+
     private void ActivateFeverMode(bool activate)
     {
-        if (_isFeverActive == activate) return; // Pas de changement d'état
+        if (_isFeverActive == activate) return;
 
         _isFeverActive = activate;
         Debug.Log($"[FeverManager] Mode Fever {(activate ? "ACTIVÉ" : "DÉSACTIVÉ")} !");
-    
-        // --- LIGNE À AJOUTER ---
-        // On notifie le MusicManager pour qu'il mette à jour le RTPC dans Wwise.
-        MusicManager.Instance?.SetFeverIntensity(activate);
-        // ----------------------
 
         // Notifier tous les observateurs (unités, UI, etc.)
         OnFeverStateChanged?.Invoke(_isFeverActive);
     }
 
-    // Classe interne pour implémenter l'interface IComboObserver proprement
+    // Méthode publique pour obtenir l'intensité actuelle (0-1)
+    public float GetCurrentIntensity()
+    {
+        if (maxFeverLevel <= 0) return 0f;
+        return (float)_currentFeverLevel / maxFeverLevel;
+    }
+
+    // Classe interne pour implémenter l'interface IComboObserver
     private class FeverComboObserver : IComboObserver
     {
         private readonly FeverManager _manager;
@@ -99,6 +175,7 @@ public class FeverManager : MonoBehaviour
         public void OnComboReset()
         {
             _manager.HandleComboBroken();
+            
         }
     }
 }
