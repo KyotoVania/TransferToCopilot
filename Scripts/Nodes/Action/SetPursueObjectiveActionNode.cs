@@ -76,33 +76,55 @@ public partial class SetPursueObjectiveActionNode : Unity.Behavior.Action
         // 5. Logique de décision pour déterminer l'action
         AIActionType decidedAction;
 
-        if (selfUnit.IsBuildingInRange(initialObjective))
+        // Vérifier d'abord si c'est un bâtiment capturable
+        bool isCapturable = initialObjective is NeutralBuilding neutralBuilding && 
+                            neutralBuilding.IsRecapturable && 
+                            initialObjective.Team != TeamType.Player;
+
+        if (isCapturable)
         {
-            // Si à portée, on décide si on attaque ou on capture
-            if (initialObjective is NeutralBuilding neutralBuilding && neutralBuilding.IsRecapturable && selfUnit.IsBuildingInCaptureRange(neutralBuilding))
+            // Pour les bâtiments capturables, on doit être à portée de capture (1)
+            if (selfUnit.IsBuildingInCaptureRange(initialObjective))
             {
-                // C'est un bâtiment capturable (Neutre ou Ennemi) et on est à portée de capture
                 decidedAction = AIActionType.CaptureBuilding;
-                Debug.Log($"[{selfUnit.name}] Décision: CAPTURER l'objectif '{initialObjective.name}'.", selfUnit);
-            }
-            else if (initialObjective.Team == TeamType.Enemy)
-            {
-                // C'est un bâtiment ennemi non-capturable (ou hors de portée de capture), on l'attaque
-                decidedAction = AIActionType.AttackBuilding;
-                Debug.Log($"[{selfUnit.name}] Décision: ATTAQUER l'objectif '{initialObjective.name}'.", selfUnit);
+                Debug.Log($"[{selfUnit.name}] Décision: CAPTURER l'objectif neutre '{initialObjective.name}' (à portée de capture).", selfUnit);
             }
             else
             {
-                // Cas étrange : à portée d'un bâtiment allié ou neutre non capturable. On ne fait rien.
-                decidedAction = AIActionType.None;
-                Debug.Log($"[{selfUnit.name}] Décision: IGNORER l'objectif '{initialObjective.name}' (déjà allié ou non-capturable).", selfUnit);
+                // Pas encore à portée de capture, continuer à se déplacer
+                decidedAction = AIActionType.MoveToBuilding;
+                Debug.Log($"[{selfUnit.name}] Décision: SE DÉPLACER vers l'objectif capturable '{initialObjective.name}' (pas encore à portée de capture).", selfUnit);
+            }
+        }
+        else if (initialObjective.Team == TeamType.Enemy)
+        {
+            // Bâtiment ennemi non-capturable, utiliser la portée d'attaque normale
+            if (selfUnit.IsBuildingInRange(initialObjective))
+            {
+                decidedAction = AIActionType.AttackBuilding;
+                Debug.Log($"[{selfUnit.name}] Décision: ATTAQUER l'objectif ennemi '{initialObjective.name}'.", selfUnit);
+            }
+            else
+            {
+                decidedAction = AIActionType.MoveToBuilding;
+                Debug.Log($"[{selfUnit.name}] Décision: SE DÉPLACER vers l'objectif ennemi '{initialObjective.name}'.", selfUnit);
             }
         }
         else
         {
-            // Si hors de portée, on se déplace vers lui
-            decidedAction = AIActionType.MoveToBuilding;
-            Debug.Log($"[{selfUnit.name}] Décision: SE DÉPLACER vers l'objectif '{initialObjective.name}'.", selfUnit);
+            //fort probablement un bâtiment neutre qui fut capturé par l'équipe le temps que l'unité se déplace
+            //si cetait un batiment neutre dont lequipe est maintenant player on peut cheers and despawn
+            if (initialObjective.Team == TeamType.Player)
+            {
+                decidedAction = AIActionType.CheerAndDespawn;
+                Debug.Log($"[{selfUnit.name}] Décision: FÊTER et DÉSACTIVER l'objectif '{initialObjective.name}' (équipe: {initialObjective.Team}).", selfUnit);
+            }
+            else
+            {
+                decidedAction = AIActionType.None;
+                Debug.Log($"[{selfUnit.name}] Décision: IGNORER l'objectif '{initialObjective.name}' (équipe: {initialObjective.Team}).", selfUnit);
+
+            }
         }
 
         // 6. Écriture de l'action décidée sur le Blackboard

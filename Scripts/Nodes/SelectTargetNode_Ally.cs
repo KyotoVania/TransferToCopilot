@@ -442,26 +442,42 @@ protected override Status OnUpdate()
 }
 
 // Helper pour déterminer l'action offensive sur un bâtiment
-private AIActionType DetermineOffensiveAction(Building targetBuilding)
-{
-    if (targetBuilding is NeutralBuilding nb && nb.IsRecapturable && nb.Team != TeamType.Player) // Peut être Neutre ou Ennemi et recapturable
+    private AIActionType DetermineOffensiveAction(Building targetBuilding)
     {
-        // Les alliés capturent les bâtiments Neutres ou Ennemis (s'ils sont de type NeutralBuilding et recapturable)
-        if (nb.Team == TeamType.Neutral || (nb.Team == TeamType.Enemy && nb.IsRecapturable)) {
-             LogMessage($"Offensive Action for {targetBuilding.name} (Team: {targetBuilding.Team}): CaptureBuilding", false);
-            return AIActionType.CaptureBuilding;
+        if (targetBuilding is NeutralBuilding nb && nb.IsRecapturable)
+        {
+            // Pour les bâtiments capturables, on doit vérifier si on est à portée de capture
+            if (selfUnit.IsBuildingInCaptureRange(nb))
+            {
+                // Les alliés capturent les bâtiments Neutres ou Ennemis (s'ils sont de type NeutralBuilding et recapturable)
+                if (nb.Team == TeamType.Neutral || (nb.Team == TeamType.Enemy && nb.IsRecapturable)) {
+                    LogMessage($"Offensive Action for {targetBuilding.name} (Team: {targetBuilding.Team}): CaptureBuilding (à portée de capture)", false);
+                    return AIActionType.CaptureBuilding;
+                }
+            }
+            else
+            {
+                // Pas encore à portée de capture, continuer à se déplacer
+                LogMessage($"Offensive Action for {targetBuilding.name} (Team: {targetBuilding.Team}): MoveToBuilding (pas encore à portée de capture)", false);
+                return AIActionType.MoveToBuilding;
+            }
         }
-    }
-    // Si ce n'est pas un NeutralBuilding recapturable, ou si c'est un PlayerBuilding (ne devrait pas être une cible offensive)
-    // alors on attaque (si c'est un ennemi).
-    if (targetBuilding.Team == TeamType.Enemy) {
-        LogMessage($"Offensive Action for {targetBuilding.name} (Team: {targetBuilding.Team}): AttackBuilding", false);
-        return AIActionType.AttackBuilding;
-    }
+    
+        // Si ce n'est pas un NeutralBuilding recapturable, alors on attaque (si c'est un ennemi et qu'on est à portée).
+        if (targetBuilding.Team == TeamType.Enemy) {
+            if (selfUnit.IsBuildingInRange(targetBuilding)) {
+                LogMessage($"Offensive Action for {targetBuilding.name} (Team: {targetBuilding.Team}): AttackBuilding", false);
+                return AIActionType.AttackBuilding;
+            }
+            else {
+                LogMessage($"Offensive Action for {targetBuilding.name} (Team: {targetBuilding.Team}): MoveToBuilding (pas à portée d'attaque)", false);
+                return AIActionType.MoveToBuilding;
+            }
+        }
 
-    LogMessage($"Offensive Action for {targetBuilding.name} (Team: {targetBuilding.Team}): Action indéterminée, fallback vers None.", true);
-    return AIActionType.None; // Fallback
-}
+        LogMessage($"Offensive Action for {targetBuilding.name} (Team: {targetBuilding.Team}): Action indéterminée, fallback vers None.", true);
+        return AIActionType.None; // Fallback
+    }
 
 
 

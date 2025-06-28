@@ -19,6 +19,8 @@ public class Projectile : MonoBehaviour
     [SerializeField] private float maxLifetime = 5f;
     [Tooltip("Le projectile doit-il suivre la cible (homing) ou aller en ligne droite vers la position initiale de la cible ?")]
     [SerializeField] private bool isHoming = true;
+    [Tooltip("Que faire quand la cible disparaît : 0 = disparaître, 1 = continuer vers la dernière position connue")]
+    [SerializeField] private int targetDestroyedBehavior = 1;
 
     public void Initialize(Transform target, int projectileDamage, float projectileSpeed, GameObject vfxPrefab, Unit attacker)
     {
@@ -47,28 +49,41 @@ public class Projectile : MonoBehaviour
     {
         if (!initialized) return;
 
+        bool targetDestroyed = false;
+        
+        // Vérifier si la cible existe toujours
         if (targetTransform != null && targetTransform.gameObject.activeInHierarchy)
         {
             lastKnownTargetPosition = targetTransform.position; // Mettre à jour la dernière position connue
         }
-        else if (!isHoming)
+        else
         {
-            // Si la cible n'existe plus ET que le projectile n'est pas téléguidé,
-            // il continue vers la dernière position connue.
-            // Si la cible a été détruite et que le projectile EST téléguidé, il pourrait être préférable de le détruire (géré par maxLifetime).
-        }
-        else // Cible détruite et projectile téléguidé
-        {
-             Debug.Log($"[Projectile] Cible {targetTransform?.name ?? "inconnue"} détruite ou inactive, et projectile téléguidé. Arrêt du projectile.");
-             HandleImpact(null); // Traiter comme un impact (sans dégâts) pour le VFX et la destruction
-             return;
+            targetDestroyed = true;
+            
+            // Si la cible est détruite, agir en fonction du comportement configuré
+            if (targetDestroyedBehavior == 0) // Disparaître
+            {
+                HandleImpact(null);
+                return;
+            }
+            // Sinon (comportement == 1), continuer vers la dernière position connue
         }
 
-
-        Vector3 targetPositionToChase = isHoming ? lastKnownTargetPosition : transform.position + transform.forward * speed * Time.deltaTime;
-        if(!isHoming && targetTransform == null) { // Si non-téléguidé et la cible originale est partie, continue en ligne droite
-             targetPositionToChase = transform.position + transform.forward * speed * Time.deltaTime;
-        } else if (!isHoming && targetTransform != null) { // Non-téléguidé mais cible encore là (pour la première frame)
+        Vector3 targetPositionToChase;
+        
+        if (targetDestroyed)
+        {
+            // Si la cible est détruite, continuer vers la dernière position connue quelle que soit l'option homing
+            targetPositionToChase = lastKnownTargetPosition;
+        }
+        else if (isHoming)
+        {
+            // Projectile téléguidé qui suit la cible
+            targetPositionToChase = lastKnownTargetPosition;
+        }
+        else
+        {
+            // Projectile non téléguidé qui va en ligne droite vers la position initiale
             targetPositionToChase = lastKnownTargetPosition;
         }
 

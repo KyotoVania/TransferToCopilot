@@ -276,7 +276,6 @@ public partial class FindSmartStepNode : Unity.Behavior.Action
     }
 
 
-    // AMÉLIORATION : Logique plus claire pour trouver les tuiles d'où attaquer.
     private List<Tile> GetValidEngagementTiles(Tile actualTargetEntityTile, float unitAttackRange, AIActionType currentAction)
     {
         List<Tile> validStandpoints = new List<Tile>();
@@ -284,7 +283,34 @@ public partial class FindSmartStepNode : Unity.Behavior.Action
             LogNodeMessage("GetValidEngagementTiles: Préconditions non remplies (cible, grille ou unité null).", true, true);
             return validStandpoints;
         }
-		 if (currentAction == AIActionType.MoveToBuilding) // Vous pourriez ajouter un AIActionType.MoveToReserveTile pour plus de clarté
+
+        // Déterminer si on doit forcer la portée de capture
+        bool forceCaptureMeleeRange = false;
+        if (actualTargetEntityTile.currentBuilding != null && currentAction == AIActionType.CaptureBuilding)
+        {
+            // Si l'action est CaptureBuilding, on force la portée à 1
+            forceCaptureMeleeRange = true;
+            LogNodeMessage($"GetValidEngagementTiles: Action CaptureBuilding détectée, forçage de la portée à 1 pour la capture.", isVerboseOverride: debugEngagementTileSearchLog);
+        }
+        else if (actualTargetEntityTile.currentBuilding != null && currentAction == AIActionType.MoveToBuilding)
+        {
+            // Si on se déplace vers un bâtiment, vérifier s'il est capturable
+            NeutralBuilding neutralBuilding = actualTargetEntityTile.currentBuilding as NeutralBuilding;
+            if (neutralBuilding != null && neutralBuilding.IsRecapturable && 
+                (neutralBuilding.Team == TeamType.Neutral || 
+                 (selfUnitInstance is AllyUnit && neutralBuilding.Team == TeamType.Enemy) ||
+                 (selfUnitInstance is EnemyUnit && neutralBuilding.Team == TeamType.Player)))
+            {
+                // C'est un bâtiment capturable, forcer la portée à 1
+                forceCaptureMeleeRange = true;
+                LogNodeMessage($"GetValidEngagementTiles: Déplacement vers bâtiment capturable '{neutralBuilding.name}', forçage de la portée à 1.", isVerboseOverride: debugEngagementTileSearchLog);
+            }
+        }
+
+        // Ajuster la portée si nécessaire
+        int effectiveRange = forceCaptureMeleeRange ? 1 : Mathf.Max(0, Mathf.FloorToInt(unitAttackRange));
+        
+        if (currentAction == AIActionType.MoveToBuilding) // Vous pourriez ajouter un AIActionType.MoveToReserveTile pour plus de clarté
         {
              bool isAllyUnit = selfUnitInstance is AllyUnit;
        		 bool isAllyBuilding = actualTargetEntityTile.currentBuilding is PlayerBuilding;
@@ -297,11 +323,16 @@ public partial class FindSmartStepNode : Unity.Behavior.Action
              (!isAllyUnit && (isEnemyBuilding || isNeutralBuilding))) &&
             (actualTargetEntityTile.currentUnit == null || actualTargetEntityTile.currentUnit == selfUnitInstance);
 
-            if (isDirectStandableDestination)
+            if (isDirectStandableDestination && !forceCaptureMeleeRange)
             {
                 LogNodeMessage($"GetValidEngagementTiles (Action: {currentAction}): La destination ({actualTargetEntityTile.column},{actualTargetEntityTile.row}) est une cible de mouvement direct. C'est la seule tuile d'engagement.", isVerboseOverride: debugEngagementTileSearchLog || true);
                 validStandpoints.Add(actualTargetEntityTile);
                 return validStandpoints;
+            }
+            else if (forceCaptureMeleeRange)
+            {
+                 LogNodeMessage($"GetValidEngagementTiles (Action: {currentAction}): Bâtiment capturable, utilisation de la logique de portée 1.", isVerboseOverride: debugEngagementTileSearchLog || true);
+                 // Tomber dans la logique standard avec effectiveRange = 1
             }
             else
             {
@@ -310,12 +341,10 @@ public partial class FindSmartStepNode : Unity.Behavior.Action
             }
         }
 
-        int attackRangeInTiles = Mathf.Max(0, Mathf.FloorToInt(unitAttackRange)); // Assurer une portée positive ou nulle.
-
         // Note: HexGridManager.GetTilesWithinRange inclut la tuile centrale.
-        List<Tile> tilesPotentiallyInRange = gridManager.GetTilesWithinRange(actualTargetEntityTile.column, actualTargetEntityTile.row, attackRangeInTiles);
+        List<Tile> tilesPotentiallyInRange = gridManager.GetTilesWithinRange(actualTargetEntityTile.column, actualTargetEntityTile.row, effectiveRange);
 
-        if (debugEngagementTileSearchLog) LogNodeMessage($"GetValidEngagementTiles: Cible {actualTargetEntityTile.name} ({actualTargetEntityTile.column},{actualTargetEntityTile.row}). Portée brute en tuiles: {attackRangeInTiles}. {tilesPotentiallyInRange.Count} tuiles à vérifier.", false, true);
+        if (debugEngagementTileSearchLog) LogNodeMessage($"GetValidEngagementTiles: Cible {actualTargetEntityTile.name} ({actualTargetEntityTile.column},{actualTargetEntityTile.row}). Portée effective: {effectiveRange} (forcée mêlée: {forceCaptureMeleeRange}). {tilesPotentiallyInRange.Count} tuiles à vérifier.", false, true);
 
         foreach (Tile potentialStandpoint in tilesPotentiallyInRange)
         {
@@ -323,13 +352,13 @@ public partial class FindSmartStepNode : Unity.Behavior.Action
 
             // Règle 1: On ne peut pas se tenir SUR la tuile de l'entité cible pour l'attaquer à distance.
             // Pour la mêlée (portée 1), on cherche une tuile adjacente. Si portée 0, on doit être sur la même tuile (cas spécial).
-            if (attackRangeInTiles > 0 && potentialStandpoint == actualTargetEntityTile)
+            if (effectiveRange > 0 && potentialStandpoint == actualTargetEntityTile)
             {
                  if (debugEngagementTileSearchLog) LogNodeMessage($"  - Skipped: {potentialStandpoint.name} (is target tile, range > 0)", false, true);
                 continue;
             }
             // Si portée 0, la seule tuile d'engagement est la tuile cible elle-même.
-            if (attackRangeInTiles == 0 && potentialStandpoint != actualTargetEntityTile) {
+            if (effectiveRange == 0 && potentialStandpoint != actualTargetEntityTile) {
                 if (debugEngagementTileSearchLog) LogNodeMessage($"  - Skipped: {potentialStandpoint.name} (not target tile, range == 0)", false, true);
                 continue;
             }
@@ -355,7 +384,7 @@ public partial class FindSmartStepNode : Unity.Behavior.Action
         }
 
         if (validStandpoints.Count == 0) {
-            LogNodeMessage($"Aucune tuile d'engagement PRATICABLE trouvée pour {actualTargetEntityTile.name} à portée {unitAttackRange}.", false, true);
+            LogNodeMessage($"Aucune tuile d'engagement PRATICABLE trouvée pour {actualTargetEntityTile.name} à portée {effectiveRange}.", false, true);
         }
         return validStandpoints;
     }
