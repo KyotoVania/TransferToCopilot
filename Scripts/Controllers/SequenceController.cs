@@ -6,6 +6,7 @@ using System.Collections.Generic;
 using System;
 using System.Linq;
 using ScriptableObjects;
+using UnityEngine.InputSystem;
 
 [System.Serializable]
 public class InputSoundVariants
@@ -33,7 +34,6 @@ public class SequenceController : MonoBehaviour
 
     private int perfectCount = 0;
     
-    // --- MODIFIÉ : Tolérances en pourcentage de la durée du beat ---
     [Tooltip("Tolérance en % de la durée du beat pour un input 'Perfect'. Ex: 0.2 = 20% de la durée du beat.")]
     [Range(0, 1)]
     public float perfectTolerancePercent = 0.2f;
@@ -46,7 +46,6 @@ public class SequenceController : MonoBehaviour
     private bool isSequenceActive = false;
     private float lastBeatTime;
     
-    // --- NOUVEAU : Stockage de la durée actuelle du beat ---
     private float _currentBeatDuration = 1f; // Initialisé à 1 seconde par défaut
 
     // --- Événements ---
@@ -75,6 +74,14 @@ public class SequenceController : MonoBehaviour
 
     private void OnEnable()
     {
+        if (InputManager.Instance != null)
+        {
+            // On s'abonne directement aux actions exposées par le manager.
+            // La syntaxe est un peu plus longue mais beaucoup plus claire.
+            InputManager.Instance.GameplayActions.RhythmInput_Left.performed += OnRhythmInput_Left;
+            InputManager.Instance.GameplayActions.RhythmInput_Down.performed += OnRhythmInput_Down;
+            InputManager.Instance.GameplayActions.RhythmInput_Right.performed += OnRhythmInput_Right;
+        }
         if (MusicManager.Instance != null)
         {
             MusicManager.Instance.OnBeat += HandleBeat;
@@ -87,11 +94,17 @@ public class SequenceController : MonoBehaviour
         {
             MusicManager.Instance.OnBeat -= HandleBeat;
         }
+        if (InputManager.Instance != null)
+        {
+            InputManager.Instance.GameplayActions.RhythmInput_Left.performed -= OnRhythmInput_Left;
+            InputManager.Instance.GameplayActions.RhythmInput_Down.performed -= OnRhythmInput_Down;
+            InputManager.Instance.GameplayActions.RhythmInput_Right.performed -= OnRhythmInput_Right;
+        }
     }
 
     private void Start()
     {
-        musicManager = FindFirstObjectByType<MusicManager>();
+        musicManager = MusicManager.Instance; // Utilisation du Singleton pour plus de robustesse
         if (musicManager == null)
         {
             Debug.LogError("No MusicManager found in the scene!");
@@ -106,24 +119,21 @@ public class SequenceController : MonoBehaviour
         Debug.Log($"[SequenceController] Initialized with {availablePlayerCharactersInTeam.Count} character(s) in team and {availableGlobalSpells.Count} global spell(s).");
     }
 
-    private void Update()
-    {
-        if (isResponding) return;
 
-        if (Input.GetKeyDown(KeyCode.X))
-        {
-            ProcessInput(KeyCode.X);
-        }
-        else if (Input.GetKeyDown(KeyCode.C))
-        {
-            ProcessInput(KeyCode.C);
-        }
-        else if (Input.GetKeyDown(KeyCode.V))
-        {
-            ProcessInput(KeyCode.V);
-        }
+    private void OnRhythmInput_Left(InputAction.CallbackContext context)
+    {
+        ProcessInput(KeyCode.X);
+    }
+    
+    private void OnRhythmInput_Down(InputAction.CallbackContext context)
+    {
+        ProcessInput(KeyCode.C);
     }
 
+    private void OnRhythmInput_Right(InputAction.CallbackContext context)
+    {
+        ProcessInput(KeyCode.V);
+    }
     private AK.Wwise.Switch GetKeySwitch(KeyCode key)
     {
         if (key == KeyCode.X) return inputSoundsKey.XSwitch;
@@ -135,6 +145,8 @@ public class SequenceController : MonoBehaviour
     
     private void ProcessInput(KeyCode key)
     {
+         if (isResponding) return;
+
         if (musicManager == null) {
              SetSwitchAndPlay(inputSounds.failedSwitch, "Failed (No MusicManager)", playSwitchContainerEvent, GetKeySwitch(key));
              OnSequenceFail?.Invoke();
@@ -157,7 +169,6 @@ public class SequenceController : MonoBehaviour
 
         AK.Wwise.Switch keySwitch = GetKeySwitch(key);
 
-        // --- MODIFIÉ : Calcul de la tolérance basé sur le % de la durée du beat ---
         float perfectToleranceInSeconds = _currentBeatDuration * perfectTolerancePercent;
         float goodToleranceInSeconds = _currentBeatDuration * goodTolerancePercent;
 
