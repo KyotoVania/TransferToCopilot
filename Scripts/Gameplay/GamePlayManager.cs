@@ -18,9 +18,7 @@ namespace Gameplay
         [Header("Configuration")]
         [SerializeField] private string globalSpellsResourcePath = "Data/GlobalSpells";
         
-        private List<GlobalSpellData_SO> availableGlobalSpells = new List<GlobalSpellData_SO>();
-        private Dictionary<string, float> _spellCooldowns = new Dictionary<string, float>();
-        
+
         // Les cooldowns des unités sont maintenant gérés par UnitSpawner
         public IReadOnlyDictionary<string, float> UnitCooldowns => unitSpawner?.UnitCooldowns;
         public IReadOnlyDictionary<string, float> SpellCooldowns => globalSpellManager?.SpellCooldowns;
@@ -104,7 +102,11 @@ namespace Gameplay
         
         void InitializeSequenceController()
         {
-            if (teamManager == null || sequenceController == null) return;
+            if (teamManager == null || sequenceController == null || globalSpellManager == null)
+            {
+                Debug.LogError("[GameplayManager] TeamManager, SequenceController ou GlobalSpellManager est null! Impossible d'initialiser le SequenceController.", this);
+                return;
+            }
 
             List<CharacterData_SO> activeTeam = teamManager.ActiveTeam;
             if (activeTeam == null)
@@ -112,7 +114,18 @@ namespace Gameplay
                 Debug.LogWarning("[GameplayManager] L'équipe active est null. Le SequenceController sera initialisé avec une équipe vide.");
                 activeTeam = new List<CharacterData_SO>();
             }
-            sequenceController.InitializeWithPlayerTeamAndSpells(activeTeam, availableGlobalSpells);
+		             // Chargement des sorts globaux disponibles(AvailableSpells) 
+			if (globalSpellManager.AvailableSpells == null || globalSpellManager.AvailableSpells.Count == 0)
+            {
+                Debug.LogWarning("[GameplayManager] Aucun sort global disponible. Le SequenceController sera initialisé sans sorts globaux.");
+            }
+            else
+            {
+                Debug.Log($"[GameplayManager] Chargement de {globalSpellManager.AvailableSpells.Count} sorts globaux pour le SequenceController.");
+				sequenceController.InitializeWithPlayerTeamAndSpells(activeTeam, globalSpellManager.AvailableSpells.ToList());
+           }
+            // Initialisation du SequenceController avec l'équipe active et les sorts globaux disponibles
+			            
         }
 
         void SubscribeToSequenceEvents()

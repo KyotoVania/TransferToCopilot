@@ -14,6 +14,10 @@ public class MeleeAttack : MonoBehaviour, IAttack
     [Header("Debug")]
     [SerializeField] private bool showAttackLogs = true;
 
+    [Header("Fever Mode")]
+    [Tooltip("L'effet visuel d'impact à utiliser quand le mode Fever est actif.")]
+    [SerializeField] private GameObject feverImpactVFXPrefab;
+
     private MusicManager musicManager;
 
     private void Awake()
@@ -45,11 +49,19 @@ public class MeleeAttack : MonoBehaviour, IAttack
             attacker.rotation = Quaternion.LookRotation(directionToTarget);
         }
 
+        Unit attackerUnit = attacker.GetComponent<Unit>();
+        GameObject vfxToUse = attackVFXPrefab;
+
+        if (attackerUnit != null && attackerUnit.IsFeverActive && feverImpactVFXPrefab != null)
+        {
+            vfxToUse = feverImpactVFXPrefab;
+        }
+
         GameObject vfxInstance = null;
-        if (attackVFXPrefab != null)
+        if (vfxToUse != null)
         {
             Vector3 vfxPosition = target.position + Vector3.up * 0.5f;
-            vfxInstance = Instantiate(attackVFXPrefab, vfxPosition, Quaternion.identity);
+            vfxInstance = Instantiate(vfxToUse, vfxPosition, Quaternion.identity);
         }
 
         float animationTime = duration;

@@ -25,6 +25,10 @@ public class RangedAttack : MonoBehaviour, IAttack
     [SerializeField] private float feverSpreadAngle = 10f;
 
     [Header("Fever Mode")]
+    [Tooltip("L'effet visuel d'impact à utiliser quand le mode Fever est actif.")]
+    [SerializeField] private GameObject feverImpactVFXPrefab;
+
+    [Header("Fever Mode")]
     [Tooltip("Délai entre chaque projectile supplémentaire en secondes.")]
     [SerializeField] private float feverProjectileDelay = 0.1f;
     public IEnumerator PerformAttack(Transform attacker, Transform target, int damage, float duration)
@@ -64,7 +68,12 @@ public class RangedAttack : MonoBehaviour, IAttack
 
         // --- LOGIQUE PRINCIPALE MISE À JOUR ---
         // 1. Tirer le projectile principal
-        FireProjectile(attacker, target, damage, spawnPosition, attacker.rotation);
+        GameObject vfxToUse = impactVFXPrefab;
+        if (attackerUnit != null && attackerUnit.IsFeverActive && feverImpactVFXPrefab != null)
+        {
+            vfxToUse = feverImpactVFXPrefab;
+        }
+        FireProjectile(attacker, target, damage, spawnPosition, attacker.rotation, vfxToUse);
         
         // 2. Vérifier si on est en Mode Fever et tirer les projectiles supplémentaires
          if (attackerUnit != null && attackerUnit.IsFeverActive)
@@ -86,7 +95,7 @@ public class RangedAttack : MonoBehaviour, IAttack
                     if (target != null && target.gameObject.activeInHierarchy)
                     {
                          // On tire simplement droit devant, sans calcul d'angle
-                         FireProjectile(attacker, target, damage, spawnPosition, attacker.rotation);
+                         FireProjectile(attacker, target, damage, spawnPosition, attacker.rotation, vfxToUse);
                     }
                     else
                     {
@@ -104,7 +113,7 @@ public class RangedAttack : MonoBehaviour, IAttack
             yield return new WaitForSeconds(remainingDuration);
         }
     }
-        private void FireProjectile(Transform attacker, Transform target, int damage, Vector3 spawnPosition, Quaternion spawnRotation)
+        private void FireProjectile(Transform attacker, Transform target, int damage, Vector3 spawnPosition, Quaternion spawnRotation, GameObject impactVfx)
     {
         if (showAttackLogs) Debug.Log($"[{attacker.name}] RangedAttack: Instanciation du projectile à {spawnPosition} vers {target.name}.");
         GameObject projectileGO = Instantiate(projectilePrefab, spawnPosition, spawnRotation);
@@ -117,7 +126,7 @@ public class RangedAttack : MonoBehaviour, IAttack
             return;
         }
         
-        projectileScript.Initialize(target, damage, projectileSpeed, impactVFXPrefab, attacker.GetComponent<Unit>());
+        projectileScript.Initialize(target, damage, projectileSpeed, impactVfx, attacker.GetComponent<Unit>());
     }
     public bool CanAttack(Transform attacker, Transform target, float attackRange)
     {

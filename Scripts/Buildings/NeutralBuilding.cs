@@ -18,6 +18,8 @@ public class NeutralBuilding : Building
 
     [Header("Effects (Optional)")]
     [SerializeField] private GameObject captureInProgressVFXPrefab;
+    [SerializeField] private GameObject captureCompletedVFXPrefab; // Prefab for visual effect when capture is completed
+    [SerializeField] private float captureCompletedVFXDuration = 3f; // Duration in seconds before the VFX is destroyed
     [SerializeField] private AudioClip captureProgressSound;
     [SerializeField] private AudioClip captureCompleteSound;
 
@@ -227,6 +229,13 @@ public class NeutralBuilding : Building
 
         currentCaptureProgressPoints = 0f;
         teamActuellementEnCapture = TeamType.Neutral;
+
+        // --- AJOUT : Gestion de l'effet visuel de capture complétée ---
+        if (captureCompletedVFXPrefab != null)
+        {
+            GameObject completedVFXInstance = Instantiate(captureCompletedVFXPrefab, transform.position, Quaternion.identity);
+            Destroy(completedVFXInstance, captureCompletedVFXDuration);
+        }
     }
 
     protected override void OnTeamChanged(TeamType newTeam)

@@ -14,6 +14,10 @@ public abstract class Building : MonoBehaviour
     [SerializeField] protected bool debugBuildingCombat = true;
     public virtual bool IsTargetable => true; // Most buildings should be targetable by default
 
+    [Header("Effects")]
+    [SerializeField] protected GameObject destructionVFXPrefab; // Prefab for destruction visual effect
+    [SerializeField] protected float destructionVFXDuration = 3f; // Duration in seconds before the VFX is destroyed
+
     // Reference to the BuildingStats asset.
     [InlineEditor(InlineEditorModes.FullEditor)]
     [SerializeField] private BuildingStats buildingStats;
@@ -142,6 +146,13 @@ public abstract class Building : MonoBehaviour
 
         // Trigger the destroyed event
         OnBuildingDestroyed?.Invoke(this);
+
+        // Play destruction VFX if assigned
+        if (destructionVFXPrefab != null)
+        {
+            GameObject vfx = Instantiate(destructionVFXPrefab, transform.position, Quaternion.identity);
+            Destroy(vfx, destructionVFXDuration); // Destroy the VFX object after the specified duration
+        }
 
         // Destroy the gameObject
         Destroy(gameObject);

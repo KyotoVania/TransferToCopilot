@@ -7,8 +7,10 @@ using UnityEngine;
 /// Le Momentum est gagné par des actions réussies et se dégrade avec le temps.
 /// Il est divisé en charges qui peuvent être dépensées pour des actions puissantes.
 /// </summary>
-public class MomentumManager : SingletonPersistent<MomentumManager>
+public class MomentumManager : MonoBehaviour
 {
+    public static MomentumManager Instance { get; private set; }
+
     // --- CONSTANTES ---
     private const float MAX_MOMENTUM = 3.0f;
     private const int DECAY_THRESHOLD_BEATS = 24; // Nombre de beats d'inactivité avant que la dégradation ne commence.
@@ -29,9 +31,18 @@ public class MomentumManager : SingletonPersistent<MomentumManager>
 
     private bool _momentumGainFlag = false;
 
-    protected override void Awake()
+    protected void Awake()
     {
-        base.Awake();
+        if (Instance == null)
+        {
+            Instance = this;
+        }
+        else
+        {
+            Debug.LogWarning("[MomentumManager] Multiple instances detected. Destroying duplicate.", gameObject);
+            Destroy(gameObject);
+            return;
+        }
         // Initialisation de l'état
         _currentMomentum = 0f;
         CurrentCharges = 0;

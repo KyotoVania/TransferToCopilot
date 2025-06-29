@@ -21,7 +21,6 @@ public class EnemyBuilding : Building
     // Effects for damage and destruction
     [Header("Effects")]
     [SerializeField] private GameObject damageVFXPrefab;
-    [SerializeField] private GameObject destructionVFXPrefab;
     [SerializeField] private AudioClip damageSound;
     [SerializeField] private AudioClip destructionSound;
 
@@ -163,20 +162,6 @@ public class EnemyBuilding : Building
         {
             AudioSource.PlayClipAtPoint(destructionSound, transform.position);
         }
-
-        // Spawn destruction VFX
-        if (destructionVFXPrefab != null)
-        {
-            GameObject vfx = Instantiate(
-                destructionVFXPrefab,
-                transform.position,
-                Quaternion.identity
-            );
-
-            // Auto-destroy the VFX after 5 seconds
-            Destroy(vfx, 5.0f);
-        }
-
         // Call base implementation to handle destruction logic
         base.Die();
     }

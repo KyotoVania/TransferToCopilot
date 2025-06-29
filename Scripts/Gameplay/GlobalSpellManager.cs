@@ -75,10 +75,14 @@ public class GlobalSpellManager : MonoBehaviour
             // Feedback sonore négatif possible ici
             return;
         }
+        
+        // Check and spend momentum
         if (!MomentumManager.Instance.TrySpendMomentum(spellData.MomentumCost))
         {
-            Debug.Log($"Lancement de '{spellData.DisplayName}' échoué : Momentum insuffisant.");
+            Debug.Log($"[GlobalSpellManager] Lancement de '{spellData.DisplayName}' échoué : Momentum insuffisant.");
+            return;
         }
+        
         // 2. Vérification de l'or
         if (_goldController.GetCurrentGold() < spellData.GoldCost)
         {

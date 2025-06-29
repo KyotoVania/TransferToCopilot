@@ -14,6 +14,7 @@ public class FeverManager : MonoBehaviour
     [Tooltip("Nombre maximum de paliers de Fever (0-based, donc 4 = 5 niveaux: 0,1,2,3,4)")]
     [SerializeField]
     private int maxFeverLevel = 4;
+    public int MaxFeverLevel => maxFeverLevel; // Rendre le niveau max accessible publiquement
 
     [Header("État (lecture seule)")]
     [SerializeField]
@@ -73,6 +74,9 @@ public class FeverManager : MonoBehaviour
         {
             ActivateFeverMode(shouldBeActive);
         }
+        
+        // on veut que tout les observateurs soient notifiés du changement de niveau
+        
     }
 
     private void HandleComboBroken()
@@ -128,6 +132,8 @@ public class FeverManager : MonoBehaviour
         
         // Notifier les observateurs du changement de niveau
         OnFeverLevelChanged?.Invoke(_currentFeverLevel);
+        // Notifier l'état du mode Fever
+        
     }
 
     private float CalculateRTPCValue(int feverLevel)

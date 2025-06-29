@@ -47,10 +47,13 @@ public abstract class Unit : MonoBehaviour, ITileReservationObserver
     private bool _canReceiveFeverBuffs = false;
     public bool IsFeverActive { get; private set; } = false;
 
-
+	[Header("Fever Aura VFX")]
+    [Tooltip("Prefab de l'aura Fever à instancier sous l'unité quand le mode Fever est actif.")]
+    [SerializeField] private GameObject feverAuraPrefab;
+    private GameObject _activeFeverAuraInstance;
 
 	public StatSheet_SO CharacterStatSheets;
-    public int Health { get; protected set; } // La vie actuelle est séparée des stats de base
+    public int Health { get; protected set;}
     
     public virtual int Attack => CurrentStats != null ? CurrentStats.Attack : 0;
     public virtual int Defense => CurrentStats != null ? CurrentStats.Defense : 0;
@@ -149,7 +152,15 @@ public abstract class Unit : MonoBehaviour, ITileReservationObserver
         SetState(UnitState.Idle);
         if (FeverManager.Instance != null)
         {
-            FeverManager.Instance.OnFeverStateChanged += HandleFeverStateChanged;
+            // Si le mode Fever est déjà à son niveau maximum lors de l'apparition de l'unité,
+            // on applique les effets immédiatement.
+            if (FeverManager.Instance.CurrentFeverLevel > 0 && FeverManager.Instance.CurrentFeverLevel == FeverManager.Instance.MaxFeverLevel)
+            {
+                ApplyFeverEffects();
+            }
+            
+            // On s'abonne aux changements de niveau pour les futurs paliers ou la fin du mode Fever.
+            FeverManager.Instance.OnFeverLevelChanged += HandleFeverLevelChanged;
         }
         yield return StartCoroutine(AttachToNearestTile());
 
@@ -210,36 +221,62 @@ public abstract class Unit : MonoBehaviour, ITileReservationObserver
     }
 #endif
 
-      private void HandleFeverStateChanged(bool isFeverActive)
-     {
-        // On vérifie si l'unité est éligible et a des stats de base
-        if (!_canReceiveFeverBuffs )
+    private void HandleFeverLevelChanged(int newFeverLevel)
+    {
+        // Si le mode Fever s'active (n'importe quel niveau > 0) ET que cette unité n'a pas encore ses buffs
+        if (newFeverLevel > 0 && !IsFeverActive)
         {
-            Debug.LogWarning($"[{name}] Unit is not eligible for Fever buffs. Skipping Fever state change handling.");
-            return;
+            ApplyFeverEffects();
         }
-        IsFeverActive = isFeverActive;
-
-        if (baseStats == null)
+        // Si le mode Fever se désactive (niveau 0) ET que cette unité avait ses buffs
+        else if (newFeverLevel == 0 && IsFeverActive)
         {
-            Debug.LogWarning($"[{name}] BaseStats is null. Cannot apply fever buffs.");
-            return;
-        }
-
-        if (isFeverActive)
-        {
-            Debug.Log($"[{name}] Mode Fever activé ! Application des bonus.");
-            // On utilise directement la struct locale _feverBuffs
-            CurrentStats.AttackDelay = Mathf.Max(1, (int)(baseStats.AttackDelay / _feverBuffs.AttackSpeedMultiplier));
-            CurrentStats.Defense = (int)(baseStats.Defense * _feverBuffs.DefenseMultiplier);
-        }
-        else
-        {
-            Debug.Log($"[{name}] Mode Fever désactivé. Retour aux stats normales.");
-            CurrentStats.AttackDelay = baseStats.AttackDelay;
-            CurrentStats.Defense = baseStats.Defense;
+            RemoveFeverEffects();
         }
     }
+
+    private void ApplyFeverEffects()
+    {
+        if (!_canReceiveFeverBuffs || baseStats == null)
+        {
+            if (debugUnitCombat) Debug.LogWarning($"[{name}] Cannot apply Fever effects: unit is not eligible or baseStats are null.");
+            return;
+        }
+
+        IsFeverActive = true;
+        if(debugUnitCombat) Debug.Log($"[{name}] Applying Fever effects.");
+
+        // Appliquer les buffs de stats
+        CurrentStats.AttackDelay = Mathf.Max(1, (int)(baseStats.AttackDelay / _feverBuffs.AttackSpeedMultiplier));
+        CurrentStats.Defense = (int)(baseStats.Defense * _feverBuffs.DefenseMultiplier);
+
+        // Activer le VFX
+        if (_activeFeverAuraInstance == null && feverAuraPrefab != null)
+        {
+            _activeFeverAuraInstance = Instantiate(feverAuraPrefab, transform);
+            _activeFeverAuraInstance.transform.localPosition = Vector3.zero;
+        }
+    }
+
+    private void RemoveFeverEffects()
+    {
+        if (baseStats == null) return; // Sécurité
+
+        IsFeverActive = false;
+        if(debugUnitCombat) Debug.Log($"[{name}] Removing Fever effects.");
+
+        // Restaurer les stats de base
+        CurrentStats.AttackDelay = baseStats.AttackDelay;
+        CurrentStats.Defense = baseStats.Defense;
+
+        // Détruire le VFX
+        if (_activeFeverAuraInstance != null)
+        {
+            Destroy(_activeFeverAuraInstance);
+            _activeFeverAuraInstance = null;
+        }
+    }
+
     private IEnumerator AttachToNearestTile()
     {
         while (!isAttached)
@@ -1157,6 +1194,15 @@ public abstract class Unit : MonoBehaviour, ITileReservationObserver
     
     public virtual void OnDestroy()
     {
+        if (FeverManager.Instance != null)
+        {
+            FeverManager.Instance.OnFeverLevelChanged -= HandleFeverLevelChanged;
+        }
+        if (_activeFeverAuraInstance != null)
+        {
+            Destroy(_activeFeverAuraInstance);
+            _activeFeverAuraInstance = null;
+        }
         if (MusicManager.Instance != null)
         {
             MusicManager.Instance.OnBeat -= OnRhythmBeatInternal;
@@ -1190,10 +1236,6 @@ public abstract class Unit : MonoBehaviour, ITileReservationObserver
             {
                 StopCoroutine(buff.ExpiryCoroutine);
             }
-        }
-        if (FeverManager.Instance != null)
-        {
-            FeverManager.Instance.OnFeverStateChanged -= HandleFeverStateChanged;
         }
         activeBuffs.Clear();
     }
@@ -1305,6 +1347,4 @@ public abstract class Unit : MonoBehaviour, ITileReservationObserver
     }
     #endregion
 }
-
-
 
