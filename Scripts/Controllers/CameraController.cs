@@ -1,10 +1,11 @@
 using UnityEngine;
-using Sirenix.OdinInspector; // Si tu utilises Odin Inspector
-using System.Collections; // Pour les coroutines si tu veux un dezoom animé
+using Sirenix.OdinInspector;
+using System.Collections;
+using UnityEngine.InputSystem; // Added for Input System
 
 /// <summary>
 /// Camera controller for a rhythm game that supports right-click drag panning in 3D space,
-/// arrow key movement, and mouse wheel zooming.
+/// arrow key movement, mouse wheel zooming, and gamepad targeting with lock mode.
 /// </summary>
 public class RhythmGameCameraController : MonoBehaviour
 {
@@ -72,11 +73,23 @@ public class RhythmGameCameraController : MonoBehaviour
     [ReadOnly]
     [SerializeField] private bool isDragging = false;
 
+    [TitleGroup("Lock Mode Settings")]
+    [Tooltip("Speed at which camera moves to follow target when locked")]
+    [SerializeField] private float lockFollowSpeed = 5f;
+
+    [Tooltip("Distance to maintain from target when locked")]
+    [SerializeField] private float lockDistance = 10f;
+
+    [Tooltip("Height offset when following target")]
+    [SerializeField] private float lockHeightOffset = 5f;
+
     [TitleGroup("Locking Mechanism")]
     [ReadOnly]
     [SerializeField] public bool controlsLocked = false; // Pour verrouiller tous les contrôles
     [ReadOnly] // NOUVEAU : Pour voir l'état du verrouillage du zoom
     [SerializeField] private bool zoomLocked = false;    // Pour verrouiller uniquement le zoom
+    [ReadOnly]
+    [SerializeField] private bool isCameraLocked = false; // New: Camera lock state
 
     private Vector3 initialPosition;
     private float initialZoomValue;
@@ -85,6 +98,13 @@ public class RhythmGameCameraController : MonoBehaviour
     private bool isOrthographic;
 
     private Coroutine _zoomCoroutine;
+
+    // Lock mode variables
+    private Transform currentTarget;
+    private Vector3 targetPosition;
+
+    // Events for BannerController communication
+    public static event System.Action OnToggleCameraLockRequested;
 
     private void Awake()
     {
@@ -109,14 +129,61 @@ public class RhythmGameCameraController : MonoBehaviour
         }
     }
 
+    private void OnEnable()
+    {
+        // Subscribe to ToggleCameraLock input
+        if (InputManager.Instance != null)
+        {
+            InputManager.Instance.GameplayActions.ToggleCameraLock.performed += OnToggleCameraLockPressed;
+        }
+    }
+
+    private void OnDisable()
+    {
+        // Unsubscribe from input
+        if (InputManager.Instance != null)
+        {
+            InputManager.Instance.GameplayActions.ToggleCameraLock.performed -= OnToggleCameraLockPressed;
+        }
+    }
+
     private void Update()
     {
-        if (controlsLocked) // Si tous les contrôles sont verrouillés, ne rien faire
+        if (controlsLocked)
             return;
-        // Les autres inputs sont traités même si seul le zoom est verrouillé
-        HandleMouseInput();
-        HandleKeyboardInput();
-        HandleZoomInput(); // Cette méthode vérifiera zoomLocked en interne
+
+        if (isCameraLocked)
+        {
+            HandleLockedCameraMovement();
+        }
+        else
+        {
+            HandleMouseInput();
+            HandleKeyboardInput();
+        }
+        
+        HandleZoomInput(); // Zoom works in both modes unless specifically locked
+    }
+
+    private void OnToggleCameraLockPressed(InputAction.CallbackContext context)
+    {
+        // Inform BannerController that toggle was requested
+        OnToggleCameraLockRequested?.Invoke();
+    }
+
+    private void HandleLockedCameraMovement()
+    {
+        if (currentTarget == null) return;
+
+        // Calculate desired position relative to target
+        Vector3 desiredPosition = currentTarget.position - (currentTarget.forward * lockDistance);
+        desiredPosition.y = currentTarget.position.y + lockHeightOffset;
+
+        // Smoothly move to target position
+        transform.position = Vector3.Lerp(transform.position, desiredPosition, lockFollowSpeed * Time.deltaTime);
+        
+        // Look at target
+        transform.LookAt(currentTarget.position);
     }
 
     private void HandleMouseInput()
@@ -162,7 +229,6 @@ public class RhythmGameCameraController : MonoBehaviour
 
     private void HandleKeyboardInput()
     {
-        // ... (code existant inchangé)
         float horizontalInput = Input.GetAxis("Horizontal");
         float verticalInput = Input.GetAxis("Vertical");
 
@@ -379,5 +445,36 @@ public class RhythmGameCameraController : MonoBehaviour
         ResetCameraToInitialState(); // Retour à l'état initial
         Debug.Log("[RhythmGameCameraController] Controls unlocked and camera reset.");
     }
+
+    /// <summary>
+    /// Activates lock mode and sets the target to follow
+    /// </summary>
+    public void LockOnTarget(Transform newTarget)
+    {
+        if (newTarget == null)
+        {
+            Debug.LogWarning("[RhythmGameCameraController] Cannot lock on null target");
+            return;
+        }
+
+        currentTarget = newTarget;
+        isCameraLocked = true;
+        Debug.Log($"[RhythmGameCameraController] Camera locked on target: {newTarget.name}");
+    }
+
+    /// <summary>
+    /// Deactivates lock mode and returns to free camera movement
+    /// </summary>
+    public void UnlockCamera()
+    {
+        isCameraLocked = false;
+        currentTarget = null;
+        Debug.Log("[RhythmGameCameraController] Camera unlocked - returning to free movement");
+    }
+
+    /// <summary>
+    /// Returns whether the camera is currently in lock mode
+    /// </summary>
+    public bool IsLocked => isCameraLocked;
     // -------------------------
 }

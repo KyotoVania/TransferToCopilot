@@ -1,6 +1,8 @@
 using UnityEngine;
 using System.Collections.Generic;
 using Game.Observers;
+using UnityEngine.InputSystem;
+using System.Linq;
 
 public class BannerController : MonoBehaviour
 {
@@ -14,6 +16,13 @@ public class BannerController : MonoBehaviour
     public Building CurrentBuilding => _currentBuilding;
     public Tile CurrentTile => _currentTile;
 
+    // Targeting system for gamepad controls
+    [Header("Targeting Settings")]
+    [SerializeField] private bool isTargetingMode = false;
+    [SerializeField] private int currentTargetIndex = 0;
+    private List<Building> targetableBuildings = new List<Building>();
+    private Building currentlyHighlightedBuilding;
+    
     private readonly List<IBannerObserver> observers = new List<IBannerObserver>();
 
     private static BannerController instance;
@@ -40,6 +49,16 @@ public class BannerController : MonoBehaviour
         {
             MusicManager.Instance.OnBeat += HandleBeat;
         }
+
+        // Subscribe to camera lock toggle requests
+        RhythmGameCameraController.OnToggleCameraLockRequested += HandleToggleCameraLockRequest;
+
+        // Subscribe to gamepad targeting inputs
+        if (InputManager.Instance != null)
+        {
+            InputManager.Instance.GameplayActions.CycleTarget.performed += OnCycleTargetPressed;
+            InputManager.Instance.GameplayActions.PlaceBanner.performed += OnPlaceBannerPressed;
+        }
     }
 
     private void OnDisable()
@@ -47,6 +66,16 @@ public class BannerController : MonoBehaviour
         if (MusicManager.Instance != null)
         {
             MusicManager.Instance.OnBeat -= HandleBeat;
+        }
+
+        // Unsubscribe from camera events
+        RhythmGameCameraController.OnToggleCameraLockRequested -= HandleToggleCameraLockRequest;
+
+        // Unsubscribe from gamepad inputs
+        if (InputManager.Instance != null)
+        {
+            InputManager.Instance.GameplayActions.CycleTarget.performed -= OnCycleTargetPressed;
+            InputManager.Instance.GameplayActions.PlaceBanner.performed -= OnPlaceBannerPressed;
         }
     }
 
@@ -218,4 +247,228 @@ public class BannerController : MonoBehaviour
             instance = null;
         }
     }
+
+    #region Targeting System for Gamepad
+
+    /// <summary>
+    /// Handles the toggle camera lock request from the camera controller
+    /// </summary>
+    private void HandleToggleCameraLockRequest()
+    {
+        if (isTargetingMode)
+        {
+            ExitTargetingMode();
+        }
+        else
+        {
+            EnterTargetingMode();
+        }
+    }
+
+    /// <summary>
+    /// Enters targeting mode: scans for buildings, selects first target, locks camera
+    /// </summary>
+    private void EnterTargetingMode()
+    {
+        Debug.Log("[BannerController] Entering targeting mode");
+        
+        // Scan for all targetable buildings
+        ScanForTargetableBuildings();
+        
+        if (targetableBuildings.Count == 0)
+        {
+            Debug.LogWarning("[BannerController] No targetable buildings found!");
+            return;
+        }
+
+        isTargetingMode = true;
+        currentTargetIndex = 0;
+
+        // Find the closest building to current camera position as default target
+        SelectClosestBuildingAsDefault();
+        
+        // Lock camera on the selected target and highlight it
+        UpdateCurrentTarget();
+
+        Debug.Log($"[BannerController] Targeting mode activated with {targetableBuildings.Count} targetable buildings");
+    }
+
+    /// <summary>
+    /// Exits targeting mode: unlocks camera, clears highlights
+    /// </summary>
+    private void ExitTargetingMode()
+    {
+        Debug.Log("[BannerController] Exiting targeting mode");
+        
+        isTargetingMode = false;
+        
+        // Clear building highlight
+        ClearBuildingHighlight();
+        
+        // Unlock camera
+        var cameraController = FindFirstObjectByType<RhythmGameCameraController>();
+        if (cameraController != null)
+        {
+            cameraController.UnlockCamera();
+        }
+
+        // Clear targetable buildings list
+        targetableBuildings.Clear();
+        currentTargetIndex = 0;
+        currentlyHighlightedBuilding = null;
+    }
+
+    /// <summary>
+    /// Scans the scene for all targetable buildings and organizes them predictably
+    /// </summary>
+    private void ScanForTargetableBuildings()
+    {
+        // Find all buildings in the scene
+        Building[] allBuildings = FindObjectsOfType<Building>();
+        
+        // Filter for targetable buildings and sort them (left to right by X position)
+        targetableBuildings = allBuildings
+            .Where(building => building.IsTargetable)
+            .OrderBy(building => building.transform.position.x)
+            .ThenBy(building => building.transform.position.z)
+            .ToList();
+
+        Debug.Log($"[BannerController] Found {targetableBuildings.Count} targetable buildings");
+    }
+
+    /// <summary>
+    /// Finds the building closest to the camera's current position and sets it as default
+    /// </summary>
+    private void SelectClosestBuildingAsDefault()
+    {
+        if (targetableBuildings.Count == 0) return;
+
+        var cameraController = FindFirstObjectByType<RhythmGameCameraController>();
+        if (cameraController == null) return;
+
+        Vector3 cameraPosition = cameraController.transform.position;
+        float closestDistance = float.MaxValue;
+        int closestIndex = 0;
+
+        for (int i = 0; i < targetableBuildings.Count; i++)
+        {
+            float distance = Vector3.Distance(cameraPosition, targetableBuildings[i].transform.position);
+            if (distance < closestDistance)
+            {
+                closestDistance = distance;
+                closestIndex = i;
+            }
+        }
+
+        currentTargetIndex = closestIndex;
+    }
+
+    /// <summary>
+    /// Updates the current target, camera lock, and visual feedback
+    /// </summary>
+    private void UpdateCurrentTarget()
+    {
+        if (targetableBuildings.Count == 0) return;
+
+        // Clear previous highlight
+        ClearBuildingHighlight();
+
+        // Get current target building
+        Building targetBuilding = targetableBuildings[currentTargetIndex];
+        currentlyHighlightedBuilding = targetBuilding;
+
+        // Highlight the building
+        HighlightBuilding(targetBuilding);
+
+        // Lock camera on target
+        var cameraController = FindFirstObjectByType<RhythmGameCameraController>();
+        if (cameraController != null)
+        {
+            cameraController.LockOnTarget(targetBuilding.transform);
+        }
+
+        Debug.Log($"[BannerController] Target updated to: {targetBuilding.name} (Index: {currentTargetIndex})");
+    }
+
+    /// <summary>
+    /// Highlights a building using its BuildingOutlineFeedback component
+    /// </summary>
+    private void HighlightBuilding(Building building)
+    {
+        var outlineFeedback = building.GetComponent<BuildingOutlineFeedback>();
+        if (outlineFeedback != null)
+        {
+            outlineFeedback.ShowOutline();
+        }
+        else
+        {
+            Debug.LogWarning($"[BannerController] Building {building.name} does not have BuildingOutlineFeedback component");
+        }
+    }
+
+    /// <summary>
+    /// Clears the highlight from the currently highlighted building
+    /// </summary>
+    private void ClearBuildingHighlight()
+    {
+        if (currentlyHighlightedBuilding != null)
+        {
+            var outlineFeedback = currentlyHighlightedBuilding.GetComponent<BuildingOutlineFeedback>();
+            if (outlineFeedback != null)
+            {
+                outlineFeedback.HideOutline();
+            }
+            currentlyHighlightedBuilding = null;
+        }
+    }
+
+    /// <summary>
+    /// Handles target cycling input from gamepad
+    /// </summary>
+    private void OnCycleTargetPressed(InputAction.CallbackContext context)
+    {
+        if (!isTargetingMode || targetableBuildings.Count <= 1) return;
+
+        // Cycle to next target (with wraparound)
+        currentTargetIndex = (currentTargetIndex + 1) % targetableBuildings.Count;
+        
+        // Update target, camera, and visual feedback
+        UpdateCurrentTarget();
+
+        Debug.Log($"[BannerController] Cycled to target {currentTargetIndex}: {targetableBuildings[currentTargetIndex].name}");
+    }
+
+    /// <summary>
+    /// Handles banner placement input from gamepad when in targeting mode
+    /// </summary>
+    private void OnPlaceBannerPressed(InputAction.CallbackContext context)
+    {
+        // Only handle gamepad placement when in targeting mode
+        if (!isTargetingMode) return;
+
+        if (targetableBuildings.Count == 0 || currentTargetIndex >= targetableBuildings.Count)
+        {
+            Debug.LogWarning("[BannerController] No valid target selected for banner placement");
+            return;
+        }
+
+        Building targetBuilding = targetableBuildings[currentTargetIndex];
+        
+        // Place banner on the selected building
+        bool placementSuccess = PlaceBannerOnBuilding(targetBuilding);
+        
+        if (placementSuccess)
+        {
+            Debug.Log($"[BannerController] Banner placed on {targetBuilding.name} via gamepad");
+            
+            // Optionally exit targeting mode after successful placement
+            // ExitTargetingMode();
+        }
+        else
+        {
+            Debug.LogWarning($"[BannerController] Failed to place banner on {targetBuilding.name}");
+        }
+    }
+
+    #endregion
 }
