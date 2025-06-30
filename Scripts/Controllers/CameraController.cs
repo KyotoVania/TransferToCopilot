@@ -253,7 +253,6 @@ public class RhythmGameCameraController : MonoBehaviour
         Debug.Log("[RhythmGameCameraController] All controls locked and zooming to max.");
     }
 
-    // --- NOUVELLE MÉTHODE SPÉCIFIQUE POUR LE ZOOM ---
     public void ZoomOutToMaxAndLockZoomOnly(bool animate = true, float animationDuration = 1.0f)
     {
         zoomLocked = true; // Verrouille uniquement le zoom
