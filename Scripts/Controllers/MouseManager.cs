@@ -1,7 +1,7 @@
 using UnityEngine;
-using System.Collections.Generic; // Nécessaire pour LayerMaskToString si vous le gardez
-
-public class MouseManager : MonoBehaviour
+using System.Collections.Generic; 
+using Game.Observers;
+public class MouseManager : MonoBehaviour,IBannerObserver 
 {
     [Header("Click Settings")]
     [SerializeField] private float clickCooldown = 0.01f;
@@ -240,54 +240,53 @@ public class MouseManager : MonoBehaviour
         return info;
     }
 
-    // Dans MouseManager.cs
-private float GetTopOfBuilding(Building building)
-{
-    if (building == null)
+    private float GetTopOfBuilding(Building building)
     {
-        if (debugClicks) Debug.LogWarning("[MouseManager/GetTopOfBuilding] Tentative d'obtenir la hauteur d'un bâtiment null.");
-        return 0f; // Retourner 0 ou une hauteur par défaut appropriée
-    }
-
-    Renderer[] renderers = building.GetComponentsInChildren<Renderer>();
-    Collider[] colliders = building.GetComponentsInChildren<Collider>(); // Peut aussi aider
-
-    float maxY = building.transform.position.y; // Valeur de base si pas de renderers/colliders
-
-    bool foundBounds = false;
-
-    if (renderers.Length > 0)
-    {
-        Bounds combinedBounds = renderers[0].bounds;
-        for (int i = 1; i < renderers.Length; i++)
+        if (building == null)
         {
-            // Ignorer les renderers qui pourraient être des particules ou des effets spéciaux très étendus
-            if (renderers[i] is ParticleSystemRenderer || renderers[i] is TrailRenderer) continue;
-            combinedBounds.Encapsulate(renderers[i].bounds);
+            if (debugClicks) Debug.LogWarning("[MouseManager/GetTopOfBuilding] Tentative d'obtenir la hauteur d'un bâtiment null.");
+            return 0f; // Retourner 0 ou une hauteur par défaut appropriée
         }
-        maxY = combinedBounds.max.y;
-        foundBounds = true;
-        if (debugClicks) Debug.Log($"[MouseManager/GetTopOfBuilding] Hauteur du bâtiment '{building.name}' via Renderers: {maxY}. Bounds Center: {combinedBounds.center}, Size: {combinedBounds.size}");
-    }
-    else if (colliders.Length > 0) // Fallback sur les colliders si pas de renderers
-    {
-        Bounds combinedBounds = colliders[0].bounds;
-        for (int i = 1; i < colliders.Length; i++)
+
+        Renderer[] renderers = building.GetComponentsInChildren<Renderer>();
+        Collider[] colliders = building.GetComponentsInChildren<Collider>(); // Peut aussi aider
+
+        float maxY = building.transform.position.y; // Valeur de base si pas de renderers/colliders
+
+        bool foundBounds = false;
+
+        if (renderers.Length > 0)
         {
-            combinedBounds.Encapsulate(colliders[i].bounds);
+            Bounds combinedBounds = renderers[0].bounds;
+            for (int i = 1; i < renderers.Length; i++)
+            {
+                // Ignorer les renderers qui pourraient être des particules ou des effets spéciaux très étendus
+                if (renderers[i] is ParticleSystemRenderer || renderers[i] is TrailRenderer) continue;
+                combinedBounds.Encapsulate(renderers[i].bounds);
+            }
+            maxY = combinedBounds.max.y;
+            foundBounds = true;
+            if (debugClicks) Debug.Log($"[MouseManager/GetTopOfBuilding] Hauteur du bâtiment '{building.name}' via Renderers: {maxY}. Bounds Center: {combinedBounds.center}, Size: {combinedBounds.size}");
         }
-        maxY = combinedBounds.max.y;
-        foundBounds = true;
-        if (debugClicks) Debug.Log($"[MouseManager/GetTopOfBuilding] Hauteur du bâtiment '{building.name}' via Colliders: {maxY}. Bounds Center: {combinedBounds.center}, Size: {combinedBounds.size}");
-    }
+        else if (colliders.Length > 0) // Fallback sur les colliders si pas de renderers
+        {
+            Bounds combinedBounds = colliders[0].bounds;
+            for (int i = 1; i < colliders.Length; i++)
+            {
+                combinedBounds.Encapsulate(colliders[i].bounds);
+            }
+            maxY = combinedBounds.max.y;
+            foundBounds = true;
+            if (debugClicks) Debug.Log($"[MouseManager/GetTopOfBuilding] Hauteur du bâtiment '{building.name}' via Colliders: {maxY}. Bounds Center: {combinedBounds.center}, Size: {combinedBounds.size}");
+        }
 
-    if (!foundBounds && debugClicks)
-    {
-        Debug.LogWarning($"[MouseManager/GetTopOfBuilding] Aucun Renderer ou Collider trouvé pour le bâtiment '{building.name}'. Utilisation de sa position Y transform: {maxY}. La hauteur de la bannière pourrait être incorrecte.");
-    }
+        if (!foundBounds && debugClicks)
+        {
+            Debug.LogWarning($"[MouseManager/GetTopOfBuilding] Aucun Renderer ou Collider trouvé pour le bâtiment '{building.name}'. Utilisation de sa position Y transform: {maxY}. La hauteur de la bannière pourrait être incorrecte.");
+        }
 
-    return maxY;
-}
+        return maxY;
+    }
 
     // Gère le survol de la souris pour l'outline et le preview de la bannière
     private void HandleMouseHover()
@@ -295,45 +294,46 @@ private float GetTopOfBuilding(Building building)
         Ray ray = Camera.main.ScreenPointToRay(Input.mousePosition);
         BuildingInfo info = GetBuildingInfoFromRay(ray);
 
-        if (info.building != null) // Si on survole un bâtiment
+        BuildingSelectionFeedback newHoveredFeedback = info.feedbackComponent;
+
+        // Si le bâtiment survolé a changé...
+        if (newHoveredFeedback != currentlyHoveredBuildingFeedback)
         {
-            // Gestion de l'outline
-            if (currentlyHoveredBuildingFeedback != info.feedbackComponent)
+            // 1. Nettoyer l'ancien bâtiment survolé
+            if (currentlyHoveredBuildingFeedback != null)
             {
-                // Cacher l'outline de l'ancien bâtiment, s'il y en avait un
-                if (currentlyHoveredBuildingFeedback != null)
+                // On ne le remet par défaut que s'il était en survol, pour ne pas écraser l'état "Selected".
+                if (currentlyHoveredBuildingFeedback.CurrentState == OutlineState.Hover)
                 {
-                    currentlyHoveredBuildingFeedback.HideSelectionOutline();
+                    currentlyHoveredBuildingFeedback.SetOutlineState(OutlineState.Default);
                 }
-
-                // Montrer l'outline du nouveau bâtiment, s'il a le composant
-                if (info.feedbackComponent != null)
-                {
-                    info.feedbackComponent.ShowSelectionOutline();
-                }
-                currentlyHoveredBuildingFeedback = info.feedbackComponent;
-
             }
-            // Gestion du preview de la bannière (ne change pas)
-            if (debugClicks && !isHoveringValidTarget) Debug.Log($"[MouseManager] Preview Banner pour {info.building.name}");
+
+            // 2. Mettre en surbrillance le nouveau bâtiment
+            if (newHoveredFeedback != null)
+            {
+                // On ne le met en survol que s'il n'est pas déjà "Selected".
+                if (newHoveredFeedback.CurrentState != OutlineState.Selected)
+                {
+                    newHoveredFeedback.SetOutlineState(OutlineState.Hover);
+                }
+            }
+            
+            // Mettre à jour la référence
+            currentlyHoveredBuildingFeedback = newHoveredFeedback;
+        }
+
+        // Gérer le preview de la bannière et le curseur (logique existante)
+        if (info.building != null)
+        {
             ShowBanner(persistentPreviewBanner, info.position, info.height, true);
             if (!isHoveringValidTarget) SetHoverCursor();
             isHoveringValidTarget = true;
         }
-        // Cas 2 : On ne survole plus aucun bâtiment valide
         else
         {
-            // S'il y avait un bâtiment survolé avant, on cache son outline
-            if (currentlyHoveredBuildingFeedback != null)
-            {
-                currentlyHoveredBuildingFeedback.HideSelectionOutline();
-                currentlyHoveredBuildingFeedback = null;
-            }
-
-            // Gestion du preview de la bannière (ne change pas)
             if (isHoveringValidTarget)
             {
-                if (debugClicks) Debug.Log("[MouseManager] Hiding Preview Banner (no valid target).");
                 HideBanner(persistentPreviewBanner);
                 SetDefaultCursor();
             }
@@ -411,102 +411,58 @@ private float GetTopOfBuilding(Building building)
         }
     }
 
+   
     private void HandleBannerPlacement()
     {
-        // 1. Cacher la bannière de prévisualisation si elle est active
+        // 1. Cacher la bannière de prévisualisation (ça ne change pas)
         HideBanner(persistentPreviewBanner);
 
-        // 2. Lancer un rayon depuis la position de la souris
+        // 2. Lancer un rayon et obtenir les infos (ça ne change pas)
         Ray ray = Camera.main.ScreenPointToRay(Input.mousePosition);
-        if (debugClicks) Debug.DrawRay(ray.origin, ray.direction * raycastDistance, Color.magenta, 3f); // Magenta pour le clic
-
-        // 3. Obtenir les informations sur le bâtiment/la tuile sous la souris
         BuildingInfo info = GetBuildingInfoFromRay(ray);
 
-        // Log pour déboguer ce que GetBuildingInfoFromRay retourne lors d'un clic
+        // Vos logs de débogage sont importants, on les garde !
         if (debugClicks)
         {
             if (info.building != null)
             {
-                Debug.Log($"[MouseManager/HandleBannerPlacement] GetBuildingInfoFromRay AU CLIC a retourné -> Bâtiment: {info.building.name}, Tuile: {(info.tile != null ? info.tile.name : "PAS DE TUILE")}, Position du bâtiment: {info.position}");
+                Debug.Log($"[MouseManager/HandleBannerPlacement] CLIC sur -> Bâtiment: {info.building.name}");
             }
             else
             {
-                Debug.LogWarning("[MouseManager/HandleBannerPlacement] GetBuildingInfoFromRay AU CLIC n'a retourné AUCUN bâtiment (info.building est null).");
+                Debug.LogWarning("[MouseManager/HandleBannerPlacement] CLIC n'a retourné AUCUN bâtiment.");
             }
         }
 
-        // 4. Vérifier si un bâtiment valide a été trouvé
+        // 3. Agir en fonction du résultat du rayon
         if (info.building != null)
         {
-            if (debugClicks) Debug.Log($"[MouseManager/HandleBannerPlacement] Clic détecté sur/près du bâtiment '{info.building.name}'. Tentative de placement de la bannière.");
+            // CAS 1 : On a cliqué sur un bâtiment valide.
+            // On ne fait plus de vérifications compliquées ici.
+            // On se contente d'informer le BannerController de l'intention de l'utilisateur.
+            // C'est lui le chef d'orchestre.
+            if (debugClicks) Debug.Log($"[MouseManager] Appel de BannerController.PlaceBannerOnBuilding({info.building.name}).");
 
-            // Si une bannière existe déjà sur un AUTRE bâtiment, ou si aucune bannière n'existe, on procède.
-            // Si la bannière est déjà sur CE bâtiment, BannerController.PlaceBannerOnBuilding devrait gérer la logique (peut-être ne rien faire ou rafraîchir).
-            bool shouldPlace = true;
-            if (BannerController.Exists && BannerController.Instance.HasActiveBanner)
-            {
-                if (BannerController.Instance.CurrentBuilding == info.building)
-                {
-                     if (debugClicks) Debug.Log($"[MouseManager/HandleBannerPlacement] Clic sur le même bâtiment '{info.building.name}' où la bannière est déjà. Le BannerController décidera.");
-                    // On laisse BannerController.PlaceBannerOnBuilding décider s'il faut replacer ou non.
-                }
-                else // Bannière existante, mais sur un bâtiment différent
-                {
-                     if (debugClicks) Debug.Log($"[MouseManager/HandleBannerPlacement] Nettoyage de l'ancienne bannière sur '{BannerController.Instance.CurrentBuilding?.name}' pour la placer sur '{info.building.name}'.");
-                     BannerController.Instance.ClearBanner(); // Nettoie la logique du BannerController
-                     // HideBanner(persistentBanner) sera appelé ci-dessous de toute façon.
-                }
-            }
-
-            // Cacher le GameObjet de la bannière actuelle avant de potentiellement le replacer/réactiver.
-            HideBanner(persistentBanner);
-            currentBanner = null; // Réinitialiser la référence au GameObject de la bannière active.
-
-            bool registeredInController = false;
             if (BannerController.Exists)
             {
-                if (debugClicks) Debug.Log($"[MouseManager/HandleBannerPlacement] Appel de BannerController.PlaceBannerOnBuilding({info.building.name}).");
-                registeredInController = BannerController.Instance.PlaceBannerOnBuilding(info.building);
-                if (debugClicks) Debug.Log($"[MouseManager/HandleBannerPlacement] BannerController.PlaceBannerOnBuilding a retourné : {registeredInController}");
-            }
-            else
-            {
-                if (debugClicks) Debug.LogWarning("[MouseManager/HandleBannerPlacement] BannerController n'existe pas. Placement visuel uniquement.");
-                registeredInController = true; // Simuler le succès si pas de BannerController pour le test visuel
-            }
-
-            if (registeredInController)
-            {
-                if (debugClicks) Debug.Log($"[MouseManager/HandleBannerPlacement] Enregistrement dans BannerController réussi (ou BannerController absent). Affichage de la bannière sur {info.building.name} à la position de base {info.position}, hauteur du top {info.height}.");
-
-                // info.position est la position de base du bâtiment.
-                // info.height est le Y du sommet du bâtiment.
-                ShowBanner(persistentBanner, info.position, info.height, false);
-                currentBanner = persistentBanner; // Mettre à jour la référence au GameObject de la bannière.
-
-                if (BannerController.Exists)
-                {
-                    if (debugClicks) Debug.Log("[MouseManager/HandleBannerPlacement] Forçage de la notification des observateurs du BannerController.");
-                    BannerController.Instance.ForceNotifyObservers();
-                }
-            }
-            else
-            {
-                if (debugClicks) Debug.LogWarning($"[MouseManager/HandleBannerPlacement] Échec de l'enregistrement de la bannière avec BannerController pour le bâtiment '{info.building.name}'.");
+                // On délègue la décision et l'action au BannerController.
+                // Si la bannière est placée, il notifiera les observateurs, et notre
+                // méthode OnBannerPlaced s'occupera de l'affichage.
+                BannerController.Instance.PlaceBannerOnBuilding(info.building);
             }
         }
-        else // info.building était null après GetBuildingInfoFromRay
+        else
         {
-            if (debugClicks) Debug.LogWarning("[MouseManager/HandleBannerPlacement] Aucun bâtiment valide trouvé au point de clic. La bannière n'est pas placée.");
-
-            // Optionnel : Si l'on veut que cliquer dans le vide retire la bannière existante
+            // CAS 2 : On a cliqué dans le vide.
+            // On vérifie s'il y a une bannière active à retirer.
             if (BannerController.Exists && BannerController.Instance.HasActiveBanner)
             {
-               if (debugClicks) Debug.Log("[MouseManager/HandleBannerPlacement] Clic dans le vide, suppression de la bannière existante.");
+               if (debugClicks) Debug.Log("[MouseManager] Clic dans le vide, demande de suppression de la bannière.");
+
+               // On demande au BannerController de nettoyer.
+               // Sa méthode ClearBanner() appellera aussi les observateurs,
+               // ce qui cachera la bannière visuelle via notre OnBannerPlaced.
                BannerController.Instance.ClearBanner();
-               HideBanner(persistentBanner); // Cacher aussi le GameObjet visuel
-               currentBanner = null;
             }
         }
     }
@@ -516,11 +472,58 @@ private float GetTopOfBuilding(Building building)
         HideBanner(persistentBanner);
         if (currentlyHoveredBuildingFeedback != null)
         {
-            currentlyHoveredBuildingFeedback.HideSelectionOutline();
+            // Nettoyage final de l'outline au cas où
+            if(currentlyHoveredBuildingFeedback.CurrentState == OutlineState.Hover)
+            {
+                currentlyHoveredBuildingFeedback.SetOutlineState(OutlineState.Default);
+            }
             currentlyHoveredBuildingFeedback = null;
+        }
+        if (BannerController.Exists)
+        {
+            BannerController.Instance.RemoveObserver(this);
         }
         Cursor.SetCursor(null, Vector2.zero, CursorMode.Auto);
     }
+    
+    public void OnBannerPlaced(int column, int row)
+    {
+        // Au moment où cette notification est reçue, le BannerController
+        // a déjà mis à jour son état. On peut donc lui demander le bâtiment actuel.
+        Building currentBuilding = BannerController.Instance.CurrentBuilding;
+
+        // On vérifie que le bâtiment existe (la notification peut aussi servir à effacer)
+        if (currentBuilding != null)
+        {
+            // On s'assure que le bâtiment reçu correspond bien aux coordonnées
+            // (c'est une sécurité, normalement toujours vrai)
+            Tile tile = currentBuilding.GetOccupiedTile();
+            if (tile != null && tile.column == column && tile.row == row)
+            {
+                // On a le bâtiment, on peut faire la mise à jour visuelle !
+                Vector3 buildingPos = currentBuilding.transform.position;
+                float buildingTopY = GetTopOfBuilding(currentBuilding);
+
+                ShowBanner(persistentBanner, buildingPos, buildingTopY, false);
+                currentBanner = persistentBanner;
+            }
+        }
+        else
+        {
+            // Si currentBuilding est null, ça veut dire que la bannière a été retirée.
+            HideBanner(persistentBanner);
+            currentBanner = null;
+        }
+    }
+    private void OnEnable()
+    {
+        // S'abonner aux événements du BannerController
+        if (BannerController.Exists)
+        {
+            BannerController.Instance.AddObserver(this);
+        }
+    }
+
     
     private void OnDestroy()
     {

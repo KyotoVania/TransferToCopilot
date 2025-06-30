@@ -131,24 +131,40 @@ public class BannerController : MonoBehaviour
     /// </summary>
     public bool PlaceBannerOnBuilding(Building building)
     {
-        if (building == null)
-        {
-            return false;
-        }
+        if (building == null) return false;
 
-        // Store the current building reference
-        _currentBuilding = building;
-
-        // Get the tile that this building occupies
         Tile occupiedTile = building.GetOccupiedTile();
-        if (occupiedTile == null)
-        {
-            _currentBuilding = null;
-            return false;
-        }
+        if (occupiedTile == null) return false;
 
-        // Call the original PlaceBanner method with the tile
-        return PlaceBanner(occupiedTile);
+        // Avant de changer, sauvegardons l'ancien bâtiment pour nettoyer son outline.
+        Building previousBuildingWithBanner = _currentBuilding;
+
+        // Appel à la méthode de placement principale
+        bool placementSuccess = PlaceBanner(occupiedTile);
+
+        if (placementSuccess)
+        {
+            // Si le placement réussit, mettons à jour les outlines.
+
+            // 1. Nettoyer l'outline de l'ancien bâtiment s'il était différent.
+            if (previousBuildingWithBanner != null && previousBuildingWithBanner != building)
+            {
+                var oldFeedback = previousBuildingWithBanner.GetComponent<BuildingSelectionFeedback>();
+                if (oldFeedback != null)
+                {
+                    oldFeedback.SetOutlineState(OutlineState.Default);
+                }
+            }
+
+            // 2. Mettre le nouveau bâtiment en état "Selected".
+            var newFeedback = building.GetComponent<BuildingSelectionFeedback>();
+            if (newFeedback != null)
+            {
+                newFeedback.SetOutlineState(OutlineState.Selected);
+            }
+        }
+        
+        return placementSuccess;
     }
 
     /// <summary>
@@ -201,6 +217,16 @@ public class BannerController : MonoBehaviour
     {
         if (HasActiveBanner)
         {
+            if (_currentBuilding != null)
+            {
+                var feedback = _currentBuilding.GetComponent<BuildingSelectionFeedback>();
+                if (feedback != null)
+                {
+                    // Remettre à l'état par défaut quand la bannière est retirée
+                    feedback.SetOutlineState(OutlineState.Default);
+                }
+            }
+
             HasActiveBanner = false;
             CurrentBannerPosition = Vector2Int.zero;
             _currentBuilding = null;
@@ -366,28 +392,25 @@ public class BannerController : MonoBehaviour
     /// <summary>
     /// Updates the current target, camera lock, and visual feedback
     /// </summary>
-    private void UpdateCurrentTarget()
+   private void UpdateCurrentTarget()
     {
         if (targetableBuildings.Count == 0) return;
-
-        // Clear previous highlight
+        
+        // 1. Nettoyer l'highlight de l'ancienne cible
         ClearBuildingHighlight();
 
-        // Get current target building
+        // 2. Définir la nouvelle cible
         Building targetBuilding = targetableBuildings[currentTargetIndex];
         currentlyHighlightedBuilding = targetBuilding;
 
-        // Highlight the building
+        // 3. Mettre la nouvelle cible en surbrillance (état Hover)
         HighlightBuilding(targetBuilding);
 
-        // Lock camera on target
         var cameraController = FindFirstObjectByType<RhythmGameCameraController>();
         if (cameraController != null)
         {
             cameraController.LockOnTarget(targetBuilding.transform);
         }
-
-        Debug.Log($"[BannerController] Target updated to: {targetBuilding.name} (Index: {currentTargetIndex})");
     }
 
     /// <summary>
@@ -395,17 +418,17 @@ public class BannerController : MonoBehaviour
     /// </summary>
     private void HighlightBuilding(Building building)
     {
-        var outlineFeedback = building.GetComponent<BuildingSelectionFeedback>();
-        if (outlineFeedback != null)
+        if (building == null) return;
+        var feedback = building.GetComponent<BuildingSelectionFeedback>();
+        if (feedback != null)
         {
-            outlineFeedback.ShowSelectionOutline();
-        }
-        else
-        {
-            Debug.LogWarning($"[BannerController] Building {building.name} does not have BuildingSelectionFeedback component");
+            // Ne passe en mode Hover que si le bâtiment n'est pas déjà sélectionné
+            if (feedback.CurrentState != OutlineState.Selected)
+            {
+                feedback.SetOutlineState(OutlineState.Hover);
+            }
         }
     }
-
     /// <summary>
     /// Clears the highlight from the currently highlighted building
     /// </summary>
@@ -413,11 +436,15 @@ public class BannerController : MonoBehaviour
     {
         if (currentlyHighlightedBuilding != null)
         {
-            var outlineFeedback = currentlyHighlightedBuilding.GetComponent<BuildingSelectionFeedback>();
-            if (outlineFeedback != null)
+            var feedback = currentlyHighlightedBuilding.GetComponent<BuildingSelectionFeedback>();
+            if (feedback != null)
             {
-                outlineFeedback.HideSelectionOutline();
-                
+                // Ne remet à Default que si l'état actuel était Hover.
+                // Cela empêche d'effacer l'état "Selected" en changeant de cible.
+                if (feedback.CurrentState == OutlineState.Hover)
+                {
+                    feedback.SetOutlineState(OutlineState.Default);
+                }
             }
             currentlyHighlightedBuilding = null;
         }

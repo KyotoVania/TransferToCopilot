@@ -1,35 +1,39 @@
 ﻿using UnityEngine;
 
-// Assurez-vous que ce script est sur le même GameObject que le Renderer que vous voulez modifier.
+public enum OutlineState { Default, Hover, Selected }
+
 public class BuildingSelectionFeedback : MonoBehaviour
 {
+    private OutlineState _currentState;
+    public OutlineState CurrentState => _currentState;
+
     private Renderer _renderer;
     private MaterialPropertyBlock _propertyBlock;
-    private bool _isOutlineActive = false;
 
-    // Variables pour stocker les valeurs d'origine de l'outline
     private Color _originalOutlineColor;
     private float _originalOutlineSize;
 
-    // Références aux noms des propriétés du shader pour éviter les erreurs de frappe
     private static readonly int OutlineColorID = Shader.PropertyToID("_OutlineColor");
     private static readonly int OutlineSizeID = Shader.PropertyToID("_OutlineSize");
+
+    // Couleurs et valeurs pour les nouveaux états
+    private static readonly Color HoverColor = Color.white;
+    private static readonly Color SelectedColor = Color.red;
+    private const float HighlightSize = 20f;
 
     void Awake()
     {
         _renderer = GetComponent<Renderer>();
         _propertyBlock = new MaterialPropertyBlock();
+        _currentState = OutlineState.Default; // Initialiser l'état
 
         if (_renderer == null)
         {
-            Debug.LogError("Aucun composant Renderer trouvé sur cet objet. L'outline ne fonctionnera pas.", this);
+            Debug.LogError("Aucun composant Renderer trouvé. L'outline ne fonctionnera pas.", this);
             enabled = false;
-            return; // Important de sortir ici pour éviter d'autres erreurs
+            return;
         }
 
-        // --- CORRECTION MAJEURE ---
-        // On lit et stocke les valeurs initiales ICI, depuis le matériau de base.
-        // On utilise sharedMaterial pour ne pas créer d'instance inutilement.
         if (_renderer.sharedMaterial.HasProperty(OutlineColorID))
         {
             _originalOutlineColor = _renderer.sharedMaterial.GetColor(OutlineColorID);
@@ -37,47 +41,45 @@ public class BuildingSelectionFeedback : MonoBehaviour
         }
         else
         {
-            // Si le matériau n'a même pas ces propriétés, on met des valeurs par défaut sûres.
-            Debug.LogWarning($"Le matériau sur {gameObject.name} ne semble pas avoir les propriétés d'outline attendues.", this);
+            Debug.LogWarning($"Le matériau sur {gameObject.name} n'a pas les propriétés d'outline.", this);
             _originalOutlineColor = Color.black;
             _originalOutlineSize = 0f;
         }
     }
 
-    // Méthode pour activer l'outline de sélection
-    public void ShowSelectionOutline()
+    /// <summary>
+    /// Méthode de contrôle unique pour changer l'état visuel de l'outline.
+    /// C'est le seul point d'entrée pour modifier l'apparence depuis d'autres scripts.
+    /// </summary>
+    /// <param name="newState">Le nouvel état à appliquer.</param>
+    public void SetOutlineState(OutlineState newState)
     {
-        if (_renderer == null || _isOutlineActive) return;
+        // Optimisation : ne rien faire si l'état demandé est déjà l'état actuel.
+        if (newState == _currentState) return;
 
-        // On n'a plus besoin de sauvegarder quoi que ce soit ici.
-        // On récupère le bloc de propriétés pour le modifier.
         _renderer.GetPropertyBlock(_propertyBlock);
 
-        // Définir les nouvelles valeurs pour la couleur et la largeur de sélection
-        _propertyBlock.SetColor(OutlineColorID, Color.white);
-        _propertyBlock.SetFloat(OutlineSizeID, 20f);
+        // Appliquer les bonnes propriétés en fonction de l'état demandé.
+        switch (newState)
+        {
+            case OutlineState.Hover:
+                _propertyBlock.SetColor(OutlineColorID, HoverColor);
+                _propertyBlock.SetFloat(OutlineSizeID, HighlightSize);
+                break;
 
-        // Appliquer le bloc de propriétés modifié au renderer
+            case OutlineState.Selected:
+                _propertyBlock.SetColor(OutlineColorID, SelectedColor);
+                _propertyBlock.SetFloat(OutlineSizeID, HighlightSize);
+                break;
+
+            case OutlineState.Default:
+            default:
+                _propertyBlock.SetColor(OutlineColorID, _originalOutlineColor);
+                _propertyBlock.SetFloat(OutlineSizeID, _originalOutlineSize);
+                break;
+        }
+
         _renderer.SetPropertyBlock(_propertyBlock);
-        
-        _isOutlineActive = true;
-    }
-
-    // Méthode pour désactiver et RESTAURER l'outline
-    public void HideSelectionOutline()
-    {
-        if (_renderer == null || !_isOutlineActive) return;
-
-        // On récupère le bloc de propriétés actuel pour être sûr de ne pas écraser d'autres changements.
-        _renderer.GetPropertyBlock(_propertyBlock);
-        
-        // On restaure les valeurs sauvegardées au démarrage.
-        _propertyBlock.SetColor(OutlineColorID, _originalOutlineColor);
-        _propertyBlock.SetFloat(OutlineSizeID, _originalOutlineSize);
-
-        // On applique le bloc de propriétés restauré
-        _renderer.SetPropertyBlock(_propertyBlock);
-        
-        _isOutlineActive = false;
+        _currentState = newState; // Mettre à jour l'état actuel
     }
 }
