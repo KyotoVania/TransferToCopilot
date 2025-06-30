@@ -37,7 +37,7 @@ public class MouseManager : MonoBehaviour
     private bool isHoveringValidTarget = false; // Track if we're hovering over a valid target
     private bool arePreabsInitialized = false; // Track if the persistent prefabs are initialized
 
-    private BuildingOutlineFeedback currentlyHoveredBuildingOutline;
+    private BuildingSelectionFeedback currentlyHoveredBuildingFeedback;
 
     // Structure to store building information
     private struct BuildingInfo
@@ -46,7 +46,8 @@ public class MouseManager : MonoBehaviour
         public Tile tile;
         public Vector3 position;
         public float height;
-        public BuildingOutlineFeedback outlineFeedback; // --- AJOUT POUR L'OUTLINE ---
+
+        public BuildingSelectionFeedback feedbackComponent;
     }
 
     private void Start()
@@ -179,7 +180,7 @@ public class MouseManager : MonoBehaviour
         info.tile = null;
         info.position = Vector3.zero;
         info.height = 0f;
-        info.outlineFeedback = null;
+        info.feedbackComponent = null;
 
         RaycastHit[] buildingHits = Physics.RaycastAll(ray, raycastDistance, buildingLayerMask);
         float closestBuildingHitDistance = float.MaxValue;
@@ -211,7 +212,7 @@ public class MouseManager : MonoBehaviour
             info.tile = occupiedTileForLog; // Utiliser la tuile récupérée ici
             info.position = directlyHitBuilding.transform.position;
             info.height = GetTopOfBuilding(directlyHitBuilding);
-            info.outlineFeedback = directlyHitBuilding.GetComponent<BuildingOutlineFeedback>();
+            info.feedbackComponent = directlyHitBuilding.GetComponent<BuildingSelectionFeedback>();
             // Log AJOUTÉ pour le débogage
             if (debugClicks) Debug.Log($"[MouseManager/GetBuildingInfoFromRay] RETOUR (Direct Hit): Building='{info.building?.name}', Tile='{info.tile?.name}', Pos='{info.position}'");
             return info;
@@ -228,7 +229,7 @@ public class MouseManager : MonoBehaviour
                 info.tile = tileComponent;
                 info.position = tileComponent.currentBuilding.transform.position;
                 info.height = GetTopOfBuilding(tileComponent.currentBuilding);
-                info.outlineFeedback = tileComponent.currentBuilding.GetComponent<BuildingOutlineFeedback>();
+                info.feedbackComponent = tileComponent.currentBuilding.GetComponent<BuildingSelectionFeedback>();
                 // Log AJOUTÉ pour le débogage
                 if (debugClicks) Debug.Log($"[MouseManager/GetBuildingInfoFromRay] RETOUR (Tile Hit): Building='{info.building?.name}', Tile='{info.tile?.name}', Pos='{info.position}'");
                 return info;
@@ -297,44 +298,39 @@ private float GetTopOfBuilding(Building building)
         if (info.building != null) // Si on survole un bâtiment
         {
             // Gestion de l'outline
-            if (info.outlineFeedback != null)
+            if (currentlyHoveredBuildingFeedback != info.feedbackComponent)
             {
-                if (currentlyHoveredBuildingOutline != info.outlineFeedback)
+                // Cacher l'outline de l'ancien bâtiment, s'il y en avait un
+                if (currentlyHoveredBuildingFeedback != null)
                 {
-                    currentlyHoveredBuildingOutline?.HideOutline(); // Cacher l'ancien
-                    currentlyHoveredBuildingOutline = info.outlineFeedback;
-                    currentlyHoveredBuildingOutline.ShowOutline();
-                    if (debugClicks) Debug.Log($"[MouseManager] Hover IN: {info.building.name}");
+                    currentlyHoveredBuildingFeedback.HideSelectionOutline();
                 }
-            }
-            else // Pas de composant d'outline sur ce bâtiment, mais on en survolait peut-être un avant
-            {
-                if (currentlyHoveredBuildingOutline != null)
-                {
-                     if (debugClicks) Debug.Log($"[MouseManager] Hover OUT (vers bâtiment sans outline): {currentlyHoveredBuildingOutline.gameObject.name}");
-                    currentlyHoveredBuildingOutline.HideOutline();
-                    currentlyHoveredBuildingOutline = null;
-                }
-            }
 
-            // Gestion du preview de la bannière (existante)
+                // Montrer l'outline du nouveau bâtiment, s'il a le composant
+                if (info.feedbackComponent != null)
+                {
+                    info.feedbackComponent.ShowSelectionOutline();
+                }
+                currentlyHoveredBuildingFeedback = info.feedbackComponent;
+
+            }
+            // Gestion du preview de la bannière (ne change pas)
             if (debugClicks && !isHoveringValidTarget) Debug.Log($"[MouseManager] Preview Banner pour {info.building.name}");
-            ShowBanner(persistentPreviewBanner, info.position, info.height, true); // info.position est maintenant celle du bâtiment
-
+            ShowBanner(persistentPreviewBanner, info.position, info.height, true);
             if (!isHoveringValidTarget) SetHoverCursor();
             isHoveringValidTarget = true;
         }
-        else // Si on ne survole aucun bâtiment valide
+        // Cas 2 : On ne survole plus aucun bâtiment valide
+        else
         {
-            // Gestion de l'outline
-            if (currentlyHoveredBuildingOutline != null)
+            // S'il y avait un bâtiment survolé avant, on cache son outline
+            if (currentlyHoveredBuildingFeedback != null)
             {
-                 if (debugClicks) Debug.Log($"[MouseManager] Hover OUT (vers rien): {currentlyHoveredBuildingOutline.gameObject.name}");
-                currentlyHoveredBuildingOutline.HideOutline();
-                currentlyHoveredBuildingOutline = null;
+                currentlyHoveredBuildingFeedback.HideSelectionOutline();
+                currentlyHoveredBuildingFeedback = null;
             }
 
-            // Gestion du preview de la bannière (existante)
+            // Gestion du preview de la bannière (ne change pas)
             if (isHoveringValidTarget)
             {
                 if (debugClicks) Debug.Log("[MouseManager] Hiding Preview Banner (no valid target).");
@@ -518,23 +514,20 @@ private float GetTopOfBuilding(Building building)
     {
         HideBanner(persistentPreviewBanner);
         HideBanner(persistentBanner);
-        if (currentlyHoveredBuildingOutline != null) // Cacher l'outline si le manager est désactivé
+        if (currentlyHoveredBuildingFeedback != null)
         {
-            currentlyHoveredBuildingOutline.HideOutline();
-            currentlyHoveredBuildingOutline = null;
+            currentlyHoveredBuildingFeedback.HideSelectionOutline();
+            currentlyHoveredBuildingFeedback = null;
         }
         Cursor.SetCursor(null, Vector2.zero, CursorMode.Auto);
     }
-
+    
     private void OnDestroy()
     {
         if (persistentPreviewBanner != null) Destroy(persistentPreviewBanner);
         if (persistentBanner != null) Destroy(persistentBanner);
         if (debugPreviewSphere != null) Destroy(debugPreviewSphere);
         if (debugBannerSphere != null) Destroy(debugBannerSphere);
-        // Pas besoin de gérer currentlyHoveredBuildingOutline.HideOutline() ici,
-        // car si le MouseManager est détruit, l'objet survolé ne devrait plus être surligné.
-        // Le OnDisable de BuildingOutlineFeedback s'en chargera si l'objet lui-même est désactivé/détruit.
         if (Application.isPlaying) Cursor.SetCursor(null, Vector2.zero, CursorMode.Auto);
     }
 }

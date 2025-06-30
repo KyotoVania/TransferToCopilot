@@ -92,7 +92,6 @@ public class NeutralBuilding : Building
 
     public override void OnDestroy()
     {
-        // --- MODIFICATION : Utilisation de MusicManager.Instance ---
         if (MusicManager.Instance != null)
         {
             MusicManager.Instance.OnBeat -= HandleBeatLogic;
@@ -100,7 +99,6 @@ public class NeutralBuilding : Building
         base.OnDestroy();
     }
     
-    // --- MODIFICATION : Signature de la méthode mise à jour ---
     private void HandleBeatLogic(float beatDuration)
     {
         if (unitesQuiCapturentActuellement.Count > 0 && teamActuellementEnCapture != this.Team && teamActuellementEnCapture != TeamType.Neutral)
@@ -124,7 +122,6 @@ public class NeutralBuilding : Building
         }
     }
     
-    // ... (Le reste du script NeutralBuilding.cs reste inchangé) ...
     #region Unchanged Code
     private void FindRoofRenderer()
     {

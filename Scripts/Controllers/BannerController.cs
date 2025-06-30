@@ -42,7 +42,7 @@ public class BannerController : MonoBehaviour
             return instance;
         }
     }
-
+    //BuildingSelectionFeedback
     private void OnEnable()
     {
         if (MusicManager.Instance != null)
@@ -391,18 +391,18 @@ public class BannerController : MonoBehaviour
     }
 
     /// <summary>
-    /// Highlights a building using its BuildingOutlineFeedback component
+    /// Highlights a building using its BuildingSelectionFeedback component
     /// </summary>
     private void HighlightBuilding(Building building)
     {
-        var outlineFeedback = building.GetComponent<BuildingOutlineFeedback>();
+        var outlineFeedback = building.GetComponent<BuildingSelectionFeedback>();
         if (outlineFeedback != null)
         {
-            outlineFeedback.ShowOutline();
+            outlineFeedback.ShowSelectionOutline();
         }
         else
         {
-            Debug.LogWarning($"[BannerController] Building {building.name} does not have BuildingOutlineFeedback component");
+            Debug.LogWarning($"[BannerController] Building {building.name} does not have BuildingSelectionFeedback component");
         }
     }
 
@@ -413,10 +413,11 @@ public class BannerController : MonoBehaviour
     {
         if (currentlyHighlightedBuilding != null)
         {
-            var outlineFeedback = currentlyHighlightedBuilding.GetComponent<BuildingOutlineFeedback>();
+            var outlineFeedback = currentlyHighlightedBuilding.GetComponent<BuildingSelectionFeedback>();
             if (outlineFeedback != null)
             {
-                outlineFeedback.HideOutline();
+                outlineFeedback.HideSelectionOutline();
+                
             }
             currentlyHighlightedBuilding = null;
         }
