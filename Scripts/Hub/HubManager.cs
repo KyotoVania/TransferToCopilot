@@ -10,6 +10,22 @@ using UnityEngine.InputSystem;
 
 public class HubManager : MonoBehaviour
 {
+    
+    public static HubManager Instance { get; private set; }
+    
+    private void Awake()
+    {
+        if (Instance == null)
+        {
+            Instance = this;
+            DontDestroyOnLoad(gameObject);
+        }
+        else
+        {
+            Debug.LogWarning("[HubManager] Une autre instance de HubManager existe déjà. Destruction de la nouvelle instance.");
+            Destroy(gameObject);
+        }
+    }
     [Header("UI Panels")]
     [SerializeField] private GameObject panelMainHub;
     [SerializeField] private GameObject panelLevelSelection;
@@ -37,7 +53,8 @@ public class HubManager : MonoBehaviour
     [Header("Navigation & Points d'Intérêt")]
     [Tooltip("Configurez ici les points d'intérêt du Hub. L'ordre dans la liste définit l'ordre de navigation.")]
     [SerializeField] private List<HubPointOfInterest> hubPointsOfInterest = new List<HubPointOfInterest>();
-    
+    private bool _hubControlsActive = true; 
+
     private HubCameraManager _hubCameraManager;
     private bool _isTransitioning = false;
     private HubViewpoint _currentViewpoint = HubViewpoint.General;
@@ -192,11 +209,17 @@ public class HubManager : MonoBehaviour
         // Vérifier si un des panels de section est actif
         if (_currentViewpoint != HubViewpoint.General)
         {
+            if (!_hubControlsActive)
+            {
+                // Si les contrôles du hub sont désactivés, on ne permet pas la navigation
+                return true;
+            }
             var point = hubPointsOfInterest.FirstOrDefault(p => p.Viewpoint == _currentViewpoint);
             if (point != null && point.UIPanel != null && point.UIPanel.activeSelf)
             {
                 return true;
             }
+            
         }
         return false;
     }
@@ -347,5 +370,15 @@ public class HubManager : MonoBehaviour
         // Optionnel : Mettre à jour l'UI si elle est ouverte et affiche des niveaux/XP.
         // Si vous êtes sur le panel d'équipement, il faudrait le notifier pour qu'il se rafraîchisse.
         // Pour l'instant, quitter et rouvrir le panel suffira pour voir les changements.
+    }
+    
+    public void DisableHubControls()
+    {
+        _hubControlsActive = false;
+    }
+
+    public void EnableHubControls()
+    {
+        _hubControlsActive = true;
     }
 }

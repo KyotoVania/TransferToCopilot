@@ -1,4 +1,6 @@
-﻿using UnityEngine;
+﻿// Scripts/Hub/UI/AvailableCharacterListItemUI.cs
+
+using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
 using System;
@@ -8,22 +10,22 @@ public class AvailableCharacterListItemUI : MonoBehaviour
 {
     [Header("Références UI")]
     [SerializeField] private TextMeshProUGUI characterNameText;
-    [SerializeField] private Image characterIcon; // Assurez-vous d'avoir une Image pour l'icône du perso
-    [SerializeField] private TextMeshProUGUI characterLevelText; // Pour le "Lv47" etc.
-    // Ajoutez d'autres références si nécessaire (ex: puissance, etc.)
+    [SerializeField] private Image characterIcon;
+    [SerializeField] private TextMeshProUGUI characterLevelText;
+    
     [Header("Effets Visuels")]
-    [SerializeField] private GameObject focusEffectVisual; // Glissez ici votre objet de focus
+    [SerializeField] private GameObject focusEffectVisual;
 
     [Header("Interaction")]
     [SerializeField] private Button selectButton;
 
     private CharacterData_SO _characterData;
-    private Action<CharacterData_SO> _onSelectCallback;
+    private Action<CharacterData_SO> _onCharacterSelectedCallback;
 
     public void Setup(CharacterData_SO data, Action<CharacterData_SO> onSelect, int level)
     {
         _characterData = data;
-        _onSelectCallback = onSelect;
+        _onCharacterSelectedCallback = onSelect; // Le nom du paramètre est 'onSelect'
         SetSelected(false);
 
         if (_characterData == null)
@@ -32,7 +34,6 @@ public class AvailableCharacterListItemUI : MonoBehaviour
             return;
         }
 
-        // Peupler les champs UI
         if (characterNameText != null)
             characterNameText.text = _characterData.DisplayName;
 
@@ -47,7 +48,6 @@ public class AvailableCharacterListItemUI : MonoBehaviour
             characterLevelText.text = $"Lv. {level}";
         }
 
-        // Configurer le bouton
         if (selectButton != null)
         {
             selectButton.onClick.RemoveAllListeners();
@@ -62,12 +62,11 @@ public class AvailableCharacterListItemUI : MonoBehaviour
 
     private void HandleClick()
     {
-        _onSelectCallback?.Invoke(_characterData);
+        _onCharacterSelectedCallback?.Invoke(_characterData);
     }
+
     public CharacterData_SO GetCharacterData()
     {
         return _characterData;
     }
-
-    
 }

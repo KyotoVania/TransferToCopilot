@@ -84,7 +84,10 @@ public static class TeamSlotUIExtensions
         TeamManager.OnActiveTeamChanged += HandleActiveTeamChanged;
         RefreshAllUI();
         SelectCharacterForDetails(null);
-        
+        if (HubManager.Instance != null)
+        {
+            HubManager.Instance.DisableHubControls();
+        }
         // Configuration de la navigation à la manette
         StartCoroutine(SetupInitialSelection());
     }
@@ -95,6 +98,10 @@ public static class TeamSlotUIExtensions
         if (TeamManager.Instance != null)
         {
             TeamManager.OnActiveTeamChanged -= HandleActiveTeamChanged;
+        }
+        if (HubManager.Instance != null)
+        {
+            HubManager.Instance.EnableHubControls();
         }
         
         // Sauvegarder la sélection actuelle
