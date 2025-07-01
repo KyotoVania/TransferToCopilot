@@ -171,7 +171,7 @@ public static class TeamSlotUIExtensions
         // Unity gère automatiquement la navigation horizontale grâce au Horizontal Layout Group
         
         // Mais on peut aussi configurer la navigation explicite si nécessaire
-        for (int i = 0; i < _instantiatedTeamSlots.Count; i++)
+        /*for (int i = 0; i < _instantiatedTeamSlots.Count; i++)
         {
             var slotUI = _instantiatedTeamSlots[i];
             if (slotUI == null) continue;
@@ -224,6 +224,7 @@ public static class TeamSlotUIExtensions
             }
             readyButton.navigation = readyNav;
         }
+        */
     }
 
     private IEnumerator SetupInitialSelection()
