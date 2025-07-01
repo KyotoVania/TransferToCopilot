@@ -451,30 +451,109 @@ public class BannerController : MonoBehaviour
     }
 
     /// <summary>
-    /// Handles target cycling input from gamepad
+    /// Handles target cycling input from gamepad - now supports bi-directional cycling and works in both lock/unlock modes
     /// </summary>
     private void OnCycleTargetPressed(InputAction.CallbackContext context)
     {
-        if (!isTargetingMode || targetableBuildings.Count <= 1) return;
-
-        // Cycle to next target (with wraparound)
-        currentTargetIndex = (currentTargetIndex + 1) % targetableBuildings.Count;
+        // NEW: Allow cycling even when camera is unlocked
+        // If not in targeting mode, initialize targeting without locking camera
+        if (!isTargetingMode)
+        {
+            InitializeTargetingWithoutCameraLock();
+            if (targetableBuildings.Count == 0) return;
+        }
         
-        // Update target, camera, and visual feedback
-        UpdateCurrentTarget();
+        if (targetableBuildings.Count <= 1) return;
 
-        Debug.Log($"[BannerController] Cycled to target {currentTargetIndex}: {targetableBuildings[currentTargetIndex].name}");
+        // Read the axis value to determine direction
+        float axisValue = context.ReadValue<float>();
+        
+        // Only proceed if the input is significant enough (avoid noise)
+        if (Mathf.Abs(axisValue) < 0.5f) return;
+        
+        // Determine direction based on axis value
+        if (axisValue > 0.5f)
+        {
+            // Positive value (D-Pad Right) - cycle forward
+            currentTargetIndex = (currentTargetIndex + 1) % targetableBuildings.Count;
+            Debug.Log($"[BannerController] Cycled FORWARD to target {currentTargetIndex}: {targetableBuildings[currentTargetIndex].name}");
+        }
+        else if (axisValue < -0.5f)
+        {
+            // Negative value (D-Pad Left) - cycle backward
+            currentTargetIndex = (currentTargetIndex - 1 + targetableBuildings.Count) % targetableBuildings.Count;
+            Debug.Log($"[BannerController] Cycled BACKWARD to target {currentTargetIndex}: {targetableBuildings[currentTargetIndex].name}");
+        }
+        
+        // Update target and visual feedback (camera lock is now conditional)
+        UpdateCurrentTargetConditional();
     }
 
     /// <summary>
-    /// Handles banner placement input from gamepad when in targeting mode
+    /// NEW: Initialize targeting system without locking the camera
+    /// </summary>
+    private void InitializeTargetingWithoutCameraLock()
+    {
+        Debug.Log("[BannerController] Initializing targeting without camera lock");
+        
+        // Scan for all targetable buildings
+        ScanForTargetableBuildings();
+        
+        if (targetableBuildings.Count == 0)
+        {
+            Debug.LogWarning("[BannerController] No targetable buildings found!");
+            return;
+        }
+
+        // Set targeting mode but don't lock camera yet
+        isTargetingMode = true;
+        currentTargetIndex = 0;
+
+        // Find the closest building to current camera position as default target
+        SelectClosestBuildingAsDefault();
+        
+        Debug.Log($"[BannerController] Free targeting mode activated with {targetableBuildings.Count} targetable buildings");
+    }
+
+    /// <summary>
+    /// NEW: Updates current target with conditional camera locking
+    /// </summary>
+    private void UpdateCurrentTargetConditional()
+    {
+        if (targetableBuildings.Count == 0) return;
+        
+        // 1. Clear highlight from previous target
+        ClearBuildingHighlight();
+
+        // 2. Set new target
+        Building targetBuilding = targetableBuildings[currentTargetIndex];
+        currentlyHighlightedBuilding = targetBuilding;
+
+        // 3. Highlight the new target
+        HighlightBuilding(targetBuilding);
+
+        // 4. NEW: Only lock camera if it's already locked
+        var cameraController = FindFirstObjectByType<RhythmGameCameraController>();
+        if (cameraController != null && cameraController.IsLocked)
+        {
+            // Camera is already locked, so follow the new target
+            cameraController.LockOnTarget(targetBuilding.transform);
+            Debug.Log($"[BannerController] Camera following new target: {targetBuilding.name}");
+        }
+        else
+        {
+            // Camera is free, only update visual feedback
+            Debug.Log($"[BannerController] Free targeting - highlighting {targetBuilding.name} without camera movement");
+        }
+    }
+
+    /// <summary>
+    /// Handles banner placement input from gamepad - now works in both lock/unlock modes
     /// </summary>
     private void OnPlaceBannerPressed(InputAction.CallbackContext context)
     {
-        // Only handle gamepad placement when in targeting mode
-        if (!isTargetingMode) return;
-
-        if (targetableBuildings.Count == 0 || currentTargetIndex >= targetableBuildings.Count)
+        // NEW: Allow placement even when camera is unlocked, as long as we have a highlighted target
+        if (!isTargetingMode || targetableBuildings.Count == 0 || currentTargetIndex >= targetableBuildings.Count)
         {
             Debug.LogWarning("[BannerController] No valid target selected for banner placement");
             return;
@@ -487,10 +566,9 @@ public class BannerController : MonoBehaviour
         
         if (placementSuccess)
         {
-            Debug.Log($"[BannerController] Banner placed on {targetBuilding.name} via gamepad");
-            
-            // Optionally exit targeting mode after successful placement
-            // ExitTargetingMode();
+            var cameraController = FindFirstObjectByType<RhythmGameCameraController>();
+            string mode = (cameraController != null && cameraController.IsLocked) ? "lock" : "free";
+            Debug.Log($"[BannerController] Banner placed on {targetBuilding.name} via gamepad in {mode} mode");
         }
         else
         {

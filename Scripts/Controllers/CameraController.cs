@@ -57,19 +57,13 @@ public class RhythmGameCameraController : MonoBehaviour
 
     [ShowIf("useBounds")]
     [Tooltip("Minimum Y position the camera can move to (used for perspective zoom limit)")]
-    [SerializeField] private float minY = 2f; // Renommé pour clarté
+    [SerializeField] private float minY = 2f;
 
     [ShowIf("useBounds")]
     [Tooltip("Maximum Y position the camera can move to (used for perspective zoom limit)")]
-    [SerializeField] private float maxY = 50f; // Renommé pour clarté
+    [SerializeField] private float maxY = 50f;
 
     [TitleGroup("Debug")]
-    [ReadOnly]
-    [SerializeField] private bool isRightMouseDown = false;
-
-    [ReadOnly]
-    [SerializeField] private Vector3 lastMousePosition;
-
     [ReadOnly]
     [SerializeField] private bool isDragging = false;
 
@@ -82,16 +76,33 @@ public class RhythmGameCameraController : MonoBehaviour
 
     [Tooltip("Height offset when following target")]
     [SerializeField] private float lockHeightOffset = 5f;
+    [SerializeField] private float unlockAnimationDuration = 0.4f;
+    [SerializeField] private float lockMoveSmoothTime = 0.2f;
+    private Vector3 _cameraVelocity = Vector3.zero;
+
 
     [TitleGroup("Locking Mechanism")]
     [ReadOnly]
-    [SerializeField] public bool controlsLocked = false; // Pour verrouiller tous les contrôles
-    [ReadOnly] // NOUVEAU : Pour voir l'état du verrouillage du zoom
-    [SerializeField] private bool zoomLocked = false;    // Pour verrouiller uniquement le zoom
+    [SerializeField] public bool controlsLocked = false;
     [ReadOnly]
-    [SerializeField] private bool isCameraLocked = false; // New: Camera lock state
+    [SerializeField] private bool zoomLocked = false;
+    [ReadOnly]
+    [SerializeField] private bool isCameraLocked = false;
+
+    // NEW: Variables for smooth unlock transition
+    [TitleGroup("Unlock Transition")]
+    [Tooltip("Duration of the smooth transition when unlocking camera")]
+    [SerializeField] private float unlockTransitionDuration = 0.5f;
+    
+    [Tooltip("If true, camera returns to initial scene position when unlocking. If false, returns to pre-lock position.")]
+    [SerializeField] private bool returnToInitialPositionOnUnlock = false;
+    
+    private Vector3 preLockPosition;
+    private Quaternion preLockRotation;
+    private Coroutine unlockTransitionCoroutine;
 
     private Vector3 initialPosition;
+    private Quaternion initialRotation; // NEW: Save initial rotation from scene
     private float initialZoomValue;
 
     private Camera cameraComponent;
@@ -105,7 +116,9 @@ public class RhythmGameCameraController : MonoBehaviour
 
     // Events for BannerController communication
     public static event System.Action OnToggleCameraLockRequested;
-
+    private Vector3 _preLockPosition;
+    private Quaternion _preLockRotation;
+    private Coroutine _cameraAnimationCoroutine;
     private void Awake()
     {
         cameraComponent = GetComponent<Camera>();
@@ -117,7 +130,10 @@ public class RhythmGameCameraController : MonoBehaviour
         }
 
         isOrthographic = cameraComponent.orthographic;
+        
+        // NEW: Save BOTH initial position AND rotation from scene setup
         initialPosition = transform.position;
+        initialRotation = transform.rotation; // This preserves your scene setup angle!
 
         if (isOrthographic)
         {
@@ -127,6 +143,8 @@ public class RhythmGameCameraController : MonoBehaviour
         {
             initialZoomValue = cameraComponent.fieldOfView;
         }
+        
+        Debug.Log($"[RhythmGameCameraController] Initial state saved - Position: {initialPosition}, Rotation: {initialRotation.eulerAngles}");
     }
 
     private void OnEnable()
@@ -175,67 +193,121 @@ public class RhythmGameCameraController : MonoBehaviour
     {
         if (currentTarget == null) return;
 
-        // Calculate desired position relative to target
-        Vector3 desiredPosition = currentTarget.position - (currentTarget.forward * lockDistance);
+        // Le calcul de la position désirée ne change pas
+        Vector3 desiredPosition = currentTarget.position - (transform.forward * lockDistance);
         desiredPosition.y = currentTarget.position.y + lockHeightOffset;
 
-        // Smoothly move to target position
-        transform.position = Vector3.Lerp(transform.position, desiredPosition, lockFollowSpeed * Time.deltaTime);
-        
-        // Look at target
-        transform.LookAt(currentTarget.position);
+        // SmoothDamp va lisser le mouvement de manière plus naturelle et éviter les à-coups.
+        transform.position = Vector3.SmoothDamp(transform.position, desiredPosition, ref _cameraVelocity, lockMoveSmoothTime);
+
+        // La rotation va maintenant suivre un mouvement de position beaucoup plus fluide,
+        // ce qui éliminera les rotations étranges.
+        Quaternion targetRotation = Quaternion.LookRotation(currentTarget.position - transform.position);
+        transform.rotation = Quaternion.Slerp(transform.rotation, targetRotation, lockFollowSpeed * Time.deltaTime);
     }
-
-    private void HandleMouseInput()
+    private void HandleFreeMovement()
     {
-        if (Input.GetMouseButtonDown(1))
-        {
-            isRightMouseDown = true;
-            lastMousePosition = Input.mousePosition;
-            isDragging = true;
-        }
+        // On utilise les actions de l'InputManager
+        Vector2 moveInput = InputManager.Instance.GameplayActions.CameraMove.ReadValue<Vector2>(); // Stick + ZQSD/WASD
+        Vector2 panInput = InputManager.Instance.GameplayActions.CameraPan.ReadValue<Vector2>();   // Clic droit souris
 
-        if (Input.GetMouseButtonUp(1))
-        {
-            isRightMouseDown = false;
-            isDragging = false;
-        }
-
-        if (isRightMouseDown && isDragging)
-        {
-            Vector3 currentMousePosition = Input.mousePosition;
-            Vector3 mouseDelta = currentMousePosition - lastMousePosition;
-
-            if (mouseDelta.sqrMagnitude > 0.1f)
-            {
-                float horizontalMovement = -mouseDelta.x * mousePanSpeed * 0.01f;
-                float verticalMovement = -mouseDelta.y * mousePanSpeed * 0.01f;
-
-                if (invertMousePan)
-                {
-                    horizontalMovement = -horizontalMovement;
-                    verticalMovement = -verticalMovement;
-                }
-
-                Vector3 right = transform.right;
-                Vector3 forward = Vector3.Cross(transform.right, Vector3.up);
-
-                transform.position += right * horizontalMovement + forward * verticalMovement;
-                lastMousePosition = currentMousePosition;
-                if (useBounds) EnforceBounds();
-            }
-        }
-    }
-
-    private void HandleKeyboardInput()
-    {
-        float horizontalInput = Input.GetAxis("Horizontal");
-        float verticalInput = Input.GetAxis("Vertical");
-
-        if (horizontalInput != 0 || verticalInput != 0)
+        // Mouvement clavier/stick
+        if (moveInput.sqrMagnitude > 0.1f)
         {
             float moveSpeed = keyboardMoveSpeed * Time.deltaTime;
-            Vector3 movement = new Vector3(horizontalInput, 0, verticalInput).normalized * moveSpeed;
+            Vector3 movement = new Vector3(moveInput.x, 0, moveInput.y).normalized * moveSpeed;
+            Vector3 forward = Vector3.ProjectOnPlane(transform.forward, Vector3.up).normalized;
+            Vector3 right = Vector3.Cross(Vector3.up, forward).normalized;
+            Vector3 moveDirection = right * movement.x + forward * movement.z;
+            transform.position += moveDirection;
+        }
+        
+        // Mouvement "drag" souris
+        if (panInput.sqrMagnitude > 0.1f)
+        {
+            float horizontalMovement = -panInput.x * mousePanSpeed * 0.01f;
+            float verticalMovement = -panInput.y * mousePanSpeed * 0.01f;
+
+            if (invertMousePan)
+            {
+                horizontalMovement = -horizontalMovement;
+                verticalMovement = -verticalMovement;
+            }
+
+            Vector3 right = transform.right;
+            Vector3 forward = Vector3.Cross(transform.right, Vector3.up);
+
+            transform.position += right * horizontalMovement + forward * verticalMovement;
+        }
+
+        if (useBounds) EnforceBounds();
+    }
+    private void HandleMouseInput()
+    {
+        // NEW: Use Input System for mouse panning
+        Vector2 cameraPanInput = InputManager.Instance.GameplayActions.CameraPan.ReadValue<Vector2>();
+        
+        // Check if right mouse button is being held (CameraPan composite action handles this)
+        bool isCurrentlyDragging = cameraPanInput.sqrMagnitude > 0.1f;
+        
+        if (isCurrentlyDragging)
+        {
+            if (!isDragging)
+            {
+                isDragging = true;
+            }
+
+            float horizontalMovement = -cameraPanInput.x * mousePanSpeed * 0.01f;
+            float verticalMovement = -cameraPanInput.y * mousePanSpeed * 0.01f;
+
+            if (invertMousePan)
+            {
+                horizontalMovement = -horizontalMovement;
+                verticalMovement = -verticalMovement;
+            }
+
+            Vector3 right = transform.right;
+            Vector3 forward = Vector3.Cross(transform.right, Vector3.up);
+
+            transform.position += right * horizontalMovement + forward * verticalMovement;
+            if (useBounds) EnforceBounds();
+        }
+        else
+        {
+            isDragging = false;
+        }
+    }
+    private IEnumerator AnimateToStateCoroutine(Vector3 targetPosition, Quaternion targetRotation, float duration)
+    {
+        controlsLocked = true; // On bloque les inputs pendant l'animation
+        float elapsedTime = 0f;
+        Vector3 startPosition = transform.position;
+        Quaternion startRotation = transform.rotation;
+
+        while (elapsedTime < duration)
+        {
+            elapsedTime += Time.deltaTime;
+            float t = Mathf.SmoothStep(0, 1, elapsedTime / duration);
+            transform.position = Vector3.Lerp(startPosition, targetPosition, t);
+            transform.rotation = Quaternion.Slerp(startRotation, targetRotation, t);
+            yield return null;
+        }
+
+        // S'assurer qu'on est bien à la position finale
+        transform.position = targetPosition;
+        transform.rotation = targetRotation;
+        controlsLocked = false; // On libère les inputs
+        _cameraAnimationCoroutine = null;
+    }
+    private void HandleKeyboardInput()
+    {
+        // NEW: Use Input System for keyboard/gamepad movement
+        Vector2 moveInput = InputManager.Instance.GameplayActions.CameraMove.ReadValue<Vector2>();
+
+        if (moveInput.sqrMagnitude > 0.1f)
+        {
+            float moveSpeed = keyboardMoveSpeed * Time.deltaTime;
+            Vector3 movement = new Vector3(moveInput.x, 0, moveInput.y).normalized * moveSpeed;
             Vector3 forward = Vector3.ProjectOnPlane(transform.forward, Vector3.up).normalized;
             if (forward.sqrMagnitude < 0.001f) forward = transform.up;
             Vector3 right = Vector3.Cross(Vector3.up, forward).normalized;
@@ -247,34 +319,32 @@ public class RhythmGameCameraController : MonoBehaviour
 
     private void HandleZoomInput()
     {
-        // --- MODIFIÉ ---
-        if (zoomLocked || controlsLocked) // Vérifie si le zoom spécifique ou tous les contrôles sont verrouillés
+        if (zoomLocked || controlsLocked)
         {
             return;
         }
-        // ---------------
 
-        float scrollInput = Input.GetAxis("Mouse ScrollWheel");
+        // NEW: Use Input System for zoom (supports both mouse wheel and gamepad triggers)
+        float zoomInput = InputManager.Instance.GameplayActions.CameraZoom.ReadValue<float>();
 
-        if (scrollInput != 0)
+        if (Mathf.Abs(zoomInput) > 0.01f)
         {
-            // ... (code existant pour le zoom ortho et perspective) ...
             if (invertZoom)
             {
-                scrollInput = -scrollInput;
+                zoomInput = -zoomInput;
             }
 
             if (isOrthographic)
             {
                 cameraComponent.orthographicSize = Mathf.Clamp(
-                    cameraComponent.orthographicSize - scrollInput * zoomSpeed,
+                    cameraComponent.orthographicSize - zoomInput * zoomSpeed,
                     minZoom,
                     maxZoom
                 );
             }
             else
             {
-                Vector3 zoomDirection = transform.forward * scrollInput * zoomSpeed;
+                Vector3 zoomDirection = transform.forward * zoomInput * zoomSpeed;
                 transform.position += zoomDirection;
                 if (useBounds)
                 {
@@ -288,16 +358,19 @@ public class RhythmGameCameraController : MonoBehaviour
     {
         Vector3 pos = transform.position;
         pos.x = Mathf.Clamp(pos.x, minX, maxX);
-        pos.y = Mathf.Clamp(pos.y, minY, maxY); // minY/maxY pour la perspective
+        pos.y = Mathf.Clamp(pos.y, minY, maxY);
         pos.z = Mathf.Clamp(pos.z, minZ, maxZ);
         transform.position = pos;
     }
 
     [Button("Reset Camera")]
-    public void ResetCameraToInitialState() // Renommé pour plus de clarté
+    public void ResetCameraToInitialState()
     {
         if (_zoomCoroutine != null) StopCoroutine(_zoomCoroutine);
+        if (unlockTransitionCoroutine != null) StopCoroutine(unlockTransitionCoroutine);
+        
         transform.position = initialPosition;
+        transform.rotation = initialRotation; // NEW: Restore scene setup rotation instead of identity
 
         if (isOrthographic)
         {
@@ -305,24 +378,21 @@ public class RhythmGameCameraController : MonoBehaviour
         }
         else
         {
-            cameraComponent.fieldOfView = initialZoomValue; // Si tu utilisais FoV
-            // Si le zoom perspective est basé sur Y, initialPosition.y est déjà pris en compte.
+            cameraComponent.fieldOfView = initialZoomValue;
         }
         Debug.Log("[RhythmGameCameraController] Camera reset to initial state.");
     }
 
     public void ZoomOutToMaxAndLockControls(bool animate = true, float animationDuration = 1.0f)
     {
-        // Cette méthode verrouille TOUS les contrôles
-        controlsLocked = true; // Verrouille aussi le mouvement/pan
-        ZoomOutToMaxAndLockZoomOnly(animate, animationDuration); // Appelle la nouvelle méthode qui ne verrouille que le zoom
+        controlsLocked = true;
+        ZoomOutToMaxAndLockZoomOnly(animate, animationDuration);
         Debug.Log("[RhythmGameCameraController] All controls locked and zooming to max.");
     }
 
     public void ZoomOutToMaxAndLockZoomOnly(bool animate = true, float animationDuration = 1.0f)
     {
-        zoomLocked = true; // Verrouille uniquement le zoom
-        // Ne pas mettre controlsLocked = true ici
+        zoomLocked = true;
         Debug.Log("[RhythmGameCameraController] Zoom locked. Zooming out to maximum.");
 
         if (_zoomCoroutine != null)
@@ -344,30 +414,19 @@ public class RhythmGameCameraController : MonoBehaviour
     {
         if (isOrthographic)
         {
-            cameraComponent.orthographicSize = maxZoom; // maxZoom est la taille ortho max
+            cameraComponent.orthographicSize = maxZoom;
         }
-        else // Perspective
+        else
         {
             if (useBounds)
             {
-                // Pour la perspective, "max zoom out" signifie atteindre la position Y maximale.
-                // Nous devons préserver X et Z autant que possible tout en atteignant maxY.
-                // Une approche simple est de définir Y directement si c'est la contrainte principale.
-                // Attention, cela pourrait changer l'angle de vue si la caméra n'est pas censée bouger uniquement sur Y.
-                // Si le zoom est un "dolly" (avant/arrière), il faudrait reculer jusqu'à atteindre maxY.
-
-                // Approche simple : fixer Y à maxY si les bornes sont utilisées.
                 Vector3 targetPos = transform.position;
                 targetPos.y = maxY;
                 transform.position = targetPos;
-                EnforceBounds(); // S'assurer que X et Z sont toujours dans les bornes
+                EnforceBounds();
             }
             else
             {
-                // Si pas de bornes, le concept de "maxZoom" pour une caméra perspective
-                // est moins bien défini par les paramètres actuels (qui affectent la position).
-                // Tu pourrais augmenter le Field of View ici si tu veux.
-                // cameraComponent.fieldOfView = unValeurMaxFoV; (ex: 90)
                 Debug.LogWarning("[RhythmGameCameraController] Max zoom for perspective camera without 'useBounds' enabled is not performing a position change. Consider adjusting Field of View or enabling bounds with maxY.");
             }
         }
@@ -380,10 +439,9 @@ public class RhythmGameCameraController : MonoBehaviour
         if (isOrthographic)
         {
             float startSize = cameraComponent.orthographicSize;
-            float targetSize = maxZoom; // maxZoom est la taille ortho max
+            float targetSize = maxZoom;
             while (elapsedTime < duration)
             {
-                // Utiliser Time.unscaledDeltaTime car cette animation peut se jouer quand Time.timeScale = 0
                 elapsedTime += Time.unscaledDeltaTime;
                 float t = Mathf.Clamp01(elapsedTime / duration);
                 cameraComponent.orthographicSize = Mathf.Lerp(startSize, targetSize, Mathf.SmoothStep(0f, 1f, t));
@@ -391,27 +449,21 @@ public class RhythmGameCameraController : MonoBehaviour
             }
             cameraComponent.orthographicSize = targetSize;
         }
-        else // Perspective
+        else
         {
             Vector3 startPosition = transform.position;
-            Vector3 targetPosition = startPosition; // Commence avec la position actuelle
+            Vector3 targetPosition = startPosition;
 
             if (useBounds)
             {
-                targetPosition.y = maxY; // Cible la hauteur maximale
-                // Si tu veux préserver X et Z, c'est déjà fait car on part de startPosition.
-                // EnforceBounds sera appelé à la fin pour s'assurer.
+                targetPosition.y = maxY;
             }
             else
             {
-                // Si pas de bornes, on pourrait reculer la caméra d'une certaine distance comme "max zoom"
-                // targetPosition -= transform.forward * uneCertaineDistancePourMaxZoomPerspective;
-                // Pour l'instant, on ne fait rien de spécial pour la position si pas de bornes,
-                // car `maxZoom` n'est pas défini pour la position perspective sans bornes.
                 Debug.LogWarning("[RhythmGameCameraController] Animated max zoom for perspective camera without 'useBounds' is not changing position. Consider Field of View animation or enabling bounds.");
-                controlsLocked = true; // Assurer que les contrôles sont bien bloqués
+                controlsLocked = true;
                 _zoomCoroutine = null;
-                yield break; // Sortir si pas de bornes pour l'animation perspective
+                yield break;
             }
 
             while (elapsedTime < duration)
@@ -419,11 +471,11 @@ public class RhythmGameCameraController : MonoBehaviour
                 elapsedTime += Time.unscaledDeltaTime;
                 float t = Mathf.Clamp01(elapsedTime / duration);
                 transform.position = Vector3.Lerp(startPosition, targetPosition, Mathf.SmoothStep(0f, 1f, t));
-                if (useBounds) EnforceBounds(); // Appliquer pendant l'animation pour éviter de sortir des bornes X/Z
+                if (useBounds) EnforceBounds();
                 yield return null;
             }
             transform.position = targetPosition;
-            if (useBounds) EnforceBounds(); // Une dernière fois pour la précision
+            if (useBounds) EnforceBounds();
         }
         _zoomCoroutine = null;
         Debug.Log("[RhythmGameCameraController] Animated zoom out complete.");
@@ -432,18 +484,18 @@ public class RhythmGameCameraController : MonoBehaviour
     public void UnlockZoomOnly()
     {
         zoomLocked = false;
-        // Optionnel: Réinitialiser le zoom à une valeur par défaut ou le laisser tel quel
-        // if (isOrthographic) cameraComponent.orthographicSize = initialZoomValue;
-        // else { /* ajuster position Y ou FoV si besoin */ }
         Debug.Log("[RhythmGameCameraController] Zoom controls unlocked.");
     }
 
-    public void UnlockControlsAndReset() // Optionnel
+    public void UnlockControlsAndReset()
     {
         if (_zoomCoroutine != null) StopCoroutine(_zoomCoroutine);
+        if (unlockTransitionCoroutine != null) StopCoroutine(unlockTransitionCoroutine);
         controlsLocked = false;
-        ResetCameraToInitialState(); // Retour à l'état initial
-        Debug.Log("[RhythmGameCameraController] Controls unlocked and camera reset.");
+        isCameraLocked = false; // NEW: Make sure to unlock camera state
+        currentTarget = null;   // NEW: Clear target
+        ResetCameraToInitialState(); // This now correctly restores initial rotation
+        Debug.Log("[RhythmGameCameraController] Controls unlocked and camera reset to scene setup.");
     }
 
     /// <summary>
@@ -451,30 +503,86 @@ public class RhythmGameCameraController : MonoBehaviour
     /// </summary>
     public void LockOnTarget(Transform newTarget)
     {
-        if (newTarget == null)
+        if (newTarget == null) return;
+
+        // Si on n'était pas déjà locké, on sauvegarde la position/rotation
+        if (!isCameraLocked)
         {
-            Debug.LogWarning("[RhythmGameCameraController] Cannot lock on null target");
-            return;
+            _preLockPosition = transform.position;
+            _preLockRotation = transform.rotation;
         }
 
-        currentTarget = newTarget;
+        Building buildingComponent = newTarget.GetComponent<Building>();
+        // On vérifie si on a un bâtiment et s'il a une tuile
+        if (buildingComponent != null && buildingComponent.GetOccupiedTile() != null)
+        {
+            // La cible devient la TUILE, pas le bâtiment
+            currentTarget = buildingComponent.GetOccupiedTile().transform;
+        }
+        else
+        {
+            // Si ce n'est pas un bâtiment ou s'il n'a pas de tuile, on cible l'objet lui-même
+            currentTarget = newTarget;
+        }
+        
         isCameraLocked = true;
-        Debug.Log($"[RhythmGameCameraController] Camera locked on target: {newTarget.name}");
     }
 
     /// <summary>
-    /// Deactivates lock mode and returns to free camera movement
+    /// Deactivates lock mode and returns to free camera movement with smooth transition
     /// </summary>
     public void UnlockCamera()
     {
+        if (!isCameraLocked) return;
+
         isCameraLocked = false;
         currentTarget = null;
-        Debug.Log("[RhythmGameCameraController] Camera unlocked - returning to free movement");
+        
+        // On lance la coroutine pour un retour en douceur
+        if (_cameraAnimationCoroutine != null) StopCoroutine(_cameraAnimationCoroutine);
+        _cameraAnimationCoroutine = StartCoroutine(AnimateToStateCoroutine(_preLockPosition, _preLockRotation, unlockAnimationDuration));
+    }
+
+    /// <summary>
+    /// NEW: Smooth transition coroutine for unlocking camera
+    /// FIXED: Returns to initial scene rotation, position configurable
+    /// </summary>
+    private IEnumerator SmoothUnlockTransition()
+    {
+        Vector3 startPosition = transform.position;
+        Quaternion startRotation = transform.rotation;
+        
+        // NEW: Choose target position based on setting
+        Vector3 targetPosition = returnToInitialPositionOnUnlock ? initialPosition : preLockPosition;
+        
+        float elapsedTime = 0f;
+
+        while (elapsedTime < unlockTransitionDuration)
+        {
+            elapsedTime += Time.deltaTime;
+            float t = Mathf.Clamp01(elapsedTime / unlockTransitionDuration);
+            
+            // Use SmoothStep for a more natural transition
+            float smoothT = Mathf.SmoothStep(0f, 1f, t);
+            
+            transform.position = Vector3.Lerp(startPosition, targetPosition, smoothT);
+            transform.rotation = Quaternion.Slerp(startRotation, initialRotation, smoothT); // Always return to initial scene rotation
+            
+            yield return null;
+        }
+
+        // Ensure final state is exact
+        transform.position = targetPosition;
+        transform.rotation = initialRotation; // Always restore the scene setup angle
+        
+        unlockTransitionCoroutine = null;
+        
+        string positionType = returnToInitialPositionOnUnlock ? "initial scene" : "pre-lock";
+        Debug.Log($"[RhythmGameCameraController] Unlock transition completed - returned to {positionType} position and initial scene angle");
     }
 
     /// <summary>
     /// Returns whether the camera is currently in lock mode
     /// </summary>
     public bool IsLocked => isCameraLocked;
-    // -------------------------
 }

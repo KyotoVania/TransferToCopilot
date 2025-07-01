@@ -96,6 +96,10 @@ public class WinLoseController : MonoBehaviour
         IsGameOverScreenActive = true;
 
         Debug.Log("[WinLoseController] CONDITIONS DE VICTOIRE REMPLIES !", this);
+        
+        // NEW: Disable targeting system and unlock camera before game over sequence
+        DisableTargetingSystemOnGameOver();
+        
         HandleRewards();
 
         DeactivateAllUnitGameObjects();
@@ -117,6 +121,9 @@ public class WinLoseController : MonoBehaviour
 
         Debug.Log("[WinLoseController] CONDITIONS DE DÉFAITE REMPLIES !", this);
 
+        // NEW: Disable targeting system and unlock camera before game over sequence
+        DisableTargetingSystemOnGameOver();
+
         DeactivateAllUnitGameObjects();
 
         if (loseBannerObject != null) loseBannerObject.SetActive(true);
@@ -126,6 +133,29 @@ public class WinLoseController : MonoBehaviour
         if (nextLevelBoardSleeveObject != null) nextLevelBoardSleeveObject.SetActive(false);
 
         ActivateGameOverSequence("DÉFAITE !");
+    }
+
+    /// <summary>
+    /// NEW: Properly disables the targeting system and unlocks camera when game ends
+    /// </summary>
+    private void DisableTargetingSystemOnGameOver()
+    {
+        // Disable targeting system in BannerController
+        if (BannerController.Exists)
+        {
+            var bannerController = BannerController.Instance;
+            // Force exit targeting mode by calling the private method through reflection or add a public method
+            // For now, we'll use a simple approach by clearing the banner which should reset the state
+            bannerController.ClearBanner();
+            Debug.Log("[WinLoseController] BannerController targeting system disabled");
+        }
+
+        // Unlock camera completely
+        if (gameCameraController != null)
+        {
+            gameCameraController.UnlockCamera(); // This unlocks targeting mode
+            Debug.Log("[WinLoseController] Camera targeting unlocked");
+        }
     }
 
     private void HandleRewards()
