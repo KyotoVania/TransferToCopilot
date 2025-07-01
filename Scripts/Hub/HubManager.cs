@@ -6,6 +6,7 @@ using UnityEngine.Events;
 using System.Linq;
 using ScriptableObjects;
 using System.Collections;
+using UnityEngine.InputSystem;
 
 public class HubManager : MonoBehaviour
 {
@@ -40,6 +41,10 @@ public class HubManager : MonoBehaviour
     private HubCameraManager _hubCameraManager;
     private bool _isTransitioning = false;
     private HubViewpoint _currentViewpoint = HubViewpoint.General;
+    
+    // Variables pour la gestion de l'input
+    private float _navigationCooldown = 0.2f; // Empêche la navigation trop rapide
+    private float _lastNavigationTime = 0f;
 
     void Start()
     {
@@ -60,9 +65,6 @@ public class HubManager : MonoBehaviour
 
         if (buttonBackToMainMenu != null) buttonBackToMainMenu.onClick.AddListener(GoBackToMainMenu);
 
-        // Plus besoin d'InitializeHubPoints() si tout est configuré via l'inspecteur.
-        // Si vous vouliez ajouter dynamiquement des points, cette méthode serait utile.
-
         UpdateCurrencyDisplay(PlayerDataManager.Instance.Data.Currency);
         UpdateExperienceDisplay(PlayerDataManager.Instance.Data.Experience);
         PlayerDataManager.OnCurrencyChanged += UpdateCurrencyDisplay;
@@ -75,7 +77,8 @@ public class HubManager : MonoBehaviour
         _currentViewpoint = HubViewpoint.General;
         ShowCorrectPanelForCurrentView();
     }
-	private void UpdateTitle()
+	
+    private void UpdateTitle()
     {
         if (hubTitleText == null) return;
 
@@ -110,6 +113,7 @@ public class HubManager : MonoBehaviour
 
         hubTitleCanvasGroup.alpha = endAlpha;
     }
+    
     private void OnDestroy()
     {
         if (PlayerDataManager.Instance != null)
@@ -123,48 +127,78 @@ public class HubManager : MonoBehaviour
     {
         if (_isTransitioning) return;
 
-        HandleKeyboardNavigation();
+        HandleInputSystemNavigation();
     }
 
-    private void HandleKeyboardNavigation()
+    private void HandleInputSystemNavigation()
     {
         if (hubPointsOfInterest.Count == 0) return;
+        
+        // Ne pas traiter les inputs si un panel de section est actif
+        if (IsSectionPanelActive()) return;
+        
+        // Vérifier le cooldown pour éviter la navigation trop rapide
+        if (Time.time - _lastNavigationTime < _navigationCooldown) return;
 
+        // Récupérer l'InputManager
+        var inputManager = InputManager.Instance;
+        if (inputManager == null) return;
+
+        // Récupérer la valeur de navigation (Vector2)
+        Vector2 navigationInput = inputManager.UIActions.Navigate.ReadValue<Vector2>();
         HubViewpoint nextView = _currentViewpoint;
 
-        switch (_currentViewpoint)
+        // Navigation horizontale uniquement (axe X)
+        if (Mathf.Abs(navigationInput.x) > 0.5f) // Seuil pour éviter les inputs accidentels
         {
-            case HubViewpoint.General:
-                if (Input.GetKeyDown(KeyCode.LeftArrow) || Input.GetKeyDown(KeyCode.A))
-                    nextView = HubViewpoint.LevelSelection; // Gauche = Sélection de niveaux
-                else if (Input.GetKeyDown(KeyCode.RightArrow) || Input.GetKeyDown(KeyCode.D))
-                    nextView = HubViewpoint.TeamManagement; // Droite = Gestion d'équipe
-                break;
+            switch (_currentViewpoint)
+            {
+                case HubViewpoint.General:
+                    if (navigationInput.x < 0) // Gauche
+                        nextView = HubViewpoint.LevelSelection;
+                    else if (navigationInput.x > 0) // Droite
+                        nextView = HubViewpoint.TeamManagement;
+                    break;
 
-            case HubViewpoint.LevelSelection:
-                if (Input.GetKeyDown(KeyCode.RightArrow) || Input.GetKeyDown(KeyCode.D))
-                    nextView = HubViewpoint.General; // Depuis la gauche, on retourne au centre
-                // Si on appuie à gauche, on ne fait rien (on est au bout)
-                break;
+                case HubViewpoint.LevelSelection:
+                    if (navigationInput.x > 0) // Droite depuis la gauche = retour au centre
+                        nextView = HubViewpoint.General;
+                    break;
 
-            case HubViewpoint.TeamManagement:
-                if (Input.GetKeyDown(KeyCode.LeftArrow) || Input.GetKeyDown(KeyCode.A))
-                    nextView = HubViewpoint.General; // Depuis la droite, on retourne au centre
-                // Si on appuie à droite, on ne fait rien (on est au bout)
-                break;
+                case HubViewpoint.TeamManagement:
+                    if (navigationInput.x < 0) // Gauche depuis la droite = retour au centre
+                        nextView = HubViewpoint.General;
+                    break;
+            }
+
+            // Si la vue a changé, on lance la transition
+            if (nextView != _currentViewpoint)
+            {
+                _lastNavigationTime = Time.time;
+                StartCoroutine(TransitionToView(nextView));
+            }
         }
 
-        // Si la vue a changé, on lance la transition
-        if (nextView != _currentViewpoint)
-        {
-            StartCoroutine(TransitionToView(nextView));
-        }
-        // Si on est sur une vue de section et qu'on appuie sur Espace
-        else if (_currentViewpoint != HubViewpoint.General && (Input.GetKeyDown(KeyCode.Return) || Input.GetKeyDown(KeyCode.Space)))
+        // Gestion de l'action Submit (validation)
+        if (_currentViewpoint != HubViewpoint.General && inputManager.UIActions.Submit.WasPressedThisFrame())
         {
             StartCoroutine(FadeTitle(false));
             ShowCorrectPanelForCurrentView();
         }
+    }
+    
+    private bool IsSectionPanelActive()
+    {
+        // Vérifier si un des panels de section est actif
+        if (_currentViewpoint != HubViewpoint.General)
+        {
+            var point = hubPointsOfInterest.FirstOrDefault(p => p.Viewpoint == _currentViewpoint);
+            if (point != null && point.UIPanel != null && point.UIPanel.activeSelf)
+            {
+                return true;
+            }
+        }
+        return false;
     }
 
  	private IEnumerator TransitionToView(HubViewpoint newView)
@@ -192,7 +226,7 @@ public class HubManager : MonoBehaviour
         }
     }
 
-     private void ShowCorrectPanelForCurrentView()
+    private void ShowCorrectPanelForCurrentView()
     {
         HideAllSectionPanels();
 
@@ -211,8 +245,6 @@ public class HubManager : MonoBehaviour
         }
     }
     
-
- 	
     private void HideAllSectionPanels()
     {
         if (panelMainHub != null) panelMainHub.SetActive(false);
@@ -227,7 +259,6 @@ public class HubManager : MonoBehaviour
         if (_isTransitioning) return;
         StartCoroutine(TransitionToView(HubViewpoint.General));
     }
-    
 
     private void UpdateCurrencyDisplay(int newAmount)
     {
@@ -317,5 +348,4 @@ public class HubManager : MonoBehaviour
         // Si vous êtes sur le panel d'équipement, il faudrait le notifier pour qu'il se rafraîchisse.
         // Pour l'instant, quitter et rouvrir le panel suffira pour voir les changements.
     }
-
 }

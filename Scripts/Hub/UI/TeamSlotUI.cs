@@ -93,8 +93,42 @@ public class TeamSlotUI : MonoBehaviour
     {
         _onAddCallback?.Invoke(_slotIndex);
     }
+    
     private void HandleShowEquipmentClick()
     {
         _onShowEquipmentCallback?.Invoke(_characterData);
+    }
+    
+    // --- NOUVELLES MÉTHODES POUR LA NAVIGATION ---
+    
+    /// <summary>
+    /// Retourne le bouton principal du slot (celui sur lequel on navigue)
+    /// </summary>
+    public Button GetMainButton()
+    {
+        if (_characterData != null)
+        {
+            return mainCardButton; // Le bouton de la carte quand occupée
+        }
+        else
+        {
+            return addButton; // Le bouton Add quand vide
+        }
+    }
+    
+    /// <summary>
+    /// Retourne le bouton Add (uniquement valide pour les slots vides)
+    /// </summary>
+    public Button GetAddButton()
+    {
+        return addButton;
+    }
+    
+    /// <summary>
+    /// Indique si le slot contient un personnage
+    /// </summary>
+    public bool HasCharacter()
+    {
+        return _characterData != null;
     }
 }
