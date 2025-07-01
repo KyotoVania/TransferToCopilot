@@ -35,6 +35,11 @@ public class CharacterSelectionUI : MonoBehaviour
     [SerializeField] private Character3DPreview characterPreview; // Référence à notre nouveau script
     private readonly List<AvailableCharacterListItemUI> _instantiatedListItems = new List<AvailableCharacterListItemUI>();
 
+    
+    //Controller support 
+    [Header("Gamepad Navigation")]
+    [SerializeField] private GameObject _firstSelectedButton;
+
     // Références aux managers
     private TeamManager _teamManager;
 

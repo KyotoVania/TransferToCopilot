@@ -2,9 +2,27 @@ using UnityEngine;
 using UnityEngine.SceneManagement;
 using System;
 using System.Collections;
+using System.Collections.Generic;
 using ScriptableObjects;
 
 public enum GameState { Boot, MainMenu, Hub, Loading, InLevel, EndGame }
+
+public enum InputMode { UI, Gameplay, Disabled }
+
+[System.Serializable]
+public class GameStateConfig
+{
+    public string musicState;
+    public bool immediateTransition;
+    public InputMode inputMode;
+
+    public GameStateConfig(string musicState, bool immediateTransition, InputMode inputMode)
+    {
+        this.musicState = musicState;
+        this.immediateTransition = immediateTransition;
+        this.inputMode = inputMode;
+    }
+}
 
 public class GameManager : SingletonPersistent<GameManager>
 {
@@ -19,6 +37,17 @@ public class GameManager : SingletonPersistent<GameManager>
     [SerializeField] private LevelData_SO mainMenuSceneData;
     [SerializeField] private LevelData_SO hubSceneData;
     public static LevelData_SO CurrentLevelToLoad { get; private set; }
+
+    // Configuration des états du jeu
+    private static readonly Dictionary<GameState, GameStateConfig> _gameStateConfigs = new Dictionary<GameState, GameStateConfig>
+    {
+        { GameState.Boot, new GameStateConfig("", false, InputMode.Disabled) },
+        { GameState.Loading, new GameStateConfig("Silence", false, InputMode.UI) },
+        { GameState.MainMenu, new GameStateConfig("MainMenu", true, InputMode.UI) },
+        { GameState.Hub, new GameStateConfig("Hub", false, InputMode.UI) },
+        { GameState.InLevel, new GameStateConfig("Exploration", false, InputMode.Gameplay) },
+        { GameState.EndGame, new GameStateConfig("", false, InputMode.UI) } // EndGame music géré par WinLoseController
+    };
 
     protected override void Awake()
     {
@@ -277,51 +306,55 @@ public class GameManager : SingletonPersistent<GameManager>
             CurrentLevelToLoad = null; // Réinitialiser le niveau actuel
             Debug.Log("[GameManager] Retour au Hub/Menu. Les données du niveau actuel ont été nettoyées.");
         }
-        // Gérer l'état musical
-        if (MusicManager.Instance != null)
+        // Gérer les configurations d'état (musique et input)
+        if (_gameStateConfigs.TryGetValue(newState, out GameStateConfig config))
         {
-            string musicStateToSet = "";
-            bool immediateTransition = false; // Par défaut, transitions douces gérées par Wwise
-
-            switch (newState)
+            // Gérer la musique
+            if (MusicManager.Instance != null)
             {
-                case GameState.Boot: // Géré par Start qui charge MainMenu
-                case GameState.Loading:
-                    musicStateToSet = "Silence";
-                    break;
-                case GameState.MainMenu:
-                    musicStateToSet = "MainMenu";
-                    immediateTransition = true;
-                    break;
-                case GameState.Hub:
-                    musicStateToSet = "Hub";
-                    break;
-                case GameState.InLevel:
-                    musicStateToSet = "Exploration";
-                    break;
-                case GameState.EndGame:
-                    // La musique pour EndGame est déclenchée par WinLoseController.ActivateGameOverSequence
-                    // MusicManager.Instance.SetMusicState("EndGame");
-                    // On ne veut pas que GameManager rechange cet état s'il vient d'être mis par WinLoseController.
-                    // Si previousState n'était pas EndGame, WinLoseController s'en est chargé.
-                    // Si newState est EndGame, on laisse ce que WinLoseController a fait.
-                    // On ne met à jour musicStateToSet que si ce n'est pas WinLoseController qui gère.
-                    // Ici, on considère que WinLoseController gère la musique pour EndGame.
-                    break;
-                default:
-                    Debug.LogWarning($"[GameManager] Aucun état musical Wwise défini pour GameState: {newState}");
-                    break;
+                if (!string.IsNullOrEmpty(config.musicState))
+                {
+                    MusicManager.Instance.SetMusicState(config.musicState, config.immediateTransition);
+                    Debug.Log($"[GameManager] Musique changée vers '{config.musicState}' (transition immédiate: {config.immediateTransition})");
+                }
+            }
+            else
+            {
+                Debug.LogWarning("[GameManager] MusicManager.Instance est null. Impossible de changer l'état musical.");
             }
 
-            if (!string.IsNullOrEmpty(musicStateToSet))
+            // Gérer les Action Maps d'Input
+            if (InputManager.Instance != null)
             {
-              
-                MusicManager.Instance.SetMusicState(musicStateToSet, immediateTransition);
+                switch (config.inputMode)
+                {
+                    case InputMode.UI:
+                        InputManager.Instance.UIActions.Enable();
+                        InputManager.Instance.GameplayActions.Disable();
+                        Debug.Log("[GameManager] Action Maps: UI activée, Gameplay désactivée");
+                        break;
+                    
+                    case InputMode.Gameplay:
+                        InputManager.Instance.GameplayActions.Enable();
+                        InputManager.Instance.UIActions.Disable();
+                        Debug.Log("[GameManager] Action Maps: Gameplay activée, UI désactivée");
+                        break;
+                    
+                    case InputMode.Disabled:
+                        InputManager.Instance.UIActions.Disable();
+                        InputManager.Instance.GameplayActions.Disable();
+                        Debug.Log("[GameManager] Action Maps: Toutes désactivées");
+                        break;
+                }
+            }
+            else
+            {
+                Debug.LogWarning("[GameManager] InputManager.Instance est null. Impossible de changer les Action Maps.");
             }
         }
         else
         {
-            Debug.LogWarning("[GameManager] MusicManager.Instance est null. Impossible de changer l'état musical.");
+            Debug.LogWarning($"[GameManager] Aucune configuration trouvée pour GameState: {newState}");
         }
     }
 }
