@@ -29,7 +29,10 @@ public class PlayerSaveData
     public Dictionary<string, List<string>> EquippedItems = new Dictionary<string, List<string>>();
     public Dictionary<string, CharacterProgress> CharacterProgressData = new Dictionary<string, CharacterProgress>();
 
-
+    // Options du jeu
+    public float MusicVolume = 0.7f;
+    public float SfxVolume = 0.75f;
+    public bool VibrationEnabled = true;
 }
 
 /// <summary>
@@ -453,4 +456,52 @@ public class PlayerDataManager : SingletonPersistent<PlayerDataManager>
              // Optionnel : Déclencher un événement si l'UI de l'inventaire doit être notifiée globalement.
          }
      }
+     
+     // --- Gestion des Options de Jeu ---
+     
+     /// <summary>
+     /// Événements pour notifier les changements d'options
+     /// </summary>
+     public static event Action<float> OnMusicVolumeChanged;
+     public static event Action<float> OnSfxVolumeChanged;
+     public static event Action<bool> OnVibrationChanged;
+     
+     public void SetMusicVolume(float volume)
+     {
+         volume = Mathf.Clamp01(volume);
+         if (!Mathf.Approximately(Data.MusicVolume, volume))
+         {
+             Data.MusicVolume = volume;
+             OnMusicVolumeChanged?.Invoke(volume);
+             SaveData();
+             Debug.Log($"[PlayerDataManager] Volume musique réglé : {volume * 100:F0}%");
+         }
+     }
+     
+     public void SetSfxVolume(float volume)
+     {
+         volume = Mathf.Clamp01(volume);
+         if (!Mathf.Approximately(Data.SfxVolume, volume))
+         {
+             Data.SfxVolume = volume;
+             OnSfxVolumeChanged?.Invoke(volume);
+             SaveData();
+             Debug.Log($"[PlayerDataManager] Volume SFX réglé : {volume * 100:F0}%");
+         }
+     }
+     
+     public void SetVibrationEnabled(bool enabled)
+     {
+         if (Data.VibrationEnabled != enabled)
+         {
+             Data.VibrationEnabled = enabled;
+             OnVibrationChanged?.Invoke(enabled);
+             SaveData();
+             Debug.Log($"[PlayerDataManager] Vibrations {(enabled ? "activées" : "désactivées")}");
+         }
+     }
+     
+     public float GetMusicVolume() => Data.MusicVolume;
+     public float GetSfxVolume() => Data.SfxVolume;
+     public bool IsVibrationEnabled() => Data.VibrationEnabled;
 }

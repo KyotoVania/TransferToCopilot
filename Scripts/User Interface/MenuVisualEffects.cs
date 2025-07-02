@@ -14,7 +14,6 @@ public class MenuVisualEffects : MonoBehaviour
     [SerializeField] private float buttonAnimationSpeed = 0.2f;
 
     [Header("Background Effects")]
-    [SerializeField] private Image backgroundImage;
     [SerializeField] private float backgroundPulseSpeed = 1f;
     [SerializeField] private float backgroundPulseIntensity = 0.05f;
 
@@ -42,7 +41,6 @@ public class MenuVisualEffects : MonoBehaviour
     private void AnimateBackground()
     {
         float pulse = Mathf.Sin(Time.time * backgroundPulseSpeed) * backgroundPulseIntensity;
-        backgroundImage.color = new Color(1f, 1f, 1f, 1f + pulse);
     }
 
     public void OnButtonHoverEnter(Button button)
