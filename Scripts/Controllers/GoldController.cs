@@ -30,6 +30,7 @@ public class GoldController : MonoBehaviour
         InitializeGold();
     }
 
+
     private void OnEnable()
     {
         //SequenceController.OnSequenceExecuted += OnSequenceExecuted;

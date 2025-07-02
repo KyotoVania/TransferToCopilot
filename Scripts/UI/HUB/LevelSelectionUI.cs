@@ -15,7 +15,6 @@ public class LevelSelectionUI : MonoBehaviour
 
     [Header("Prefabs des États de Niveau")]
     [SerializeField] private GameObject stageLockPrefab;
-    [Tooltip("Prefab pour un niveau débloqué mais non complété (StageNeutral).")]
     [SerializeField] private GameObject stageNeutralPrefab;
     [SerializeField] private GameObject stageCompletePrefab;
     
@@ -28,7 +27,6 @@ public class LevelSelectionUI : MonoBehaviour
     [SerializeField] private ScrollRect levelScrollRect;
     [SerializeField] private float scrollSpeed = 5f;
     
-    // === SYSTÈME DE NAVIGATION MANETTE ===
     private LevelData_SO _selectedLevel;
     private List<LevelSelectItemUI> _instantiatedItems = new List<LevelSelectItemUI>();
     private List<LevelData_SO> _loadedLevels = new List<LevelData_SO>();
@@ -48,7 +46,6 @@ public class LevelSelectionUI : MonoBehaviour
         backButton?.onClick.AddListener(OnBackButtonClicked);
         launchLevelButton?.onClick.AddListener(OnLaunchLevelButtonClicked);
         
-        // Trouver le ScrollRect automatiquement si pas assigné
         if (levelScrollRect == null && levelItemsContainer != null)
         {
             levelScrollRect = levelItemsContainer.GetComponentInParent<ScrollRect>();
@@ -59,7 +56,6 @@ public class LevelSelectionUI : MonoBehaviour
     {
         Debug.Log("[LevelSelectionUI] Panel activé - Prise de contrôle");
         
-        // 🎯 PRISE DE CONTRÔLE + CORRECTION ALPHA
         CanvasGroup canvasGroup = GetComponent<CanvasGroup>();
         if (canvasGroup != null)
         {
@@ -67,20 +63,14 @@ public class LevelSelectionUI : MonoBehaviour
         }
         
         TakeControlFromHub();
-        
         LoadAndDisplayLevels();
-        
-        // Setup de la sélection initiale
         StartCoroutine(SetupInitialSelection());
     }
 
     private void OnDisable()
     {
         Debug.Log("[LevelSelectionUI] Panel désactivé");
-        
         _lastSelectedObject = EventSystem.current.currentSelectedGameObject;
-        
-        // Rendre le contrôle au Hub
         ReturnControlToHub();
     }
 
@@ -92,11 +82,73 @@ public class LevelSelectionUI : MonoBehaviour
             OnBackButtonClicked();
         }
         
+        // Détecter le focus de la manette/clavier et mettre à jour l'affichage
+        UpdateFocusedItem();
+        
         // S'assurer qu'on a toujours quelque chose de sélectionné
         EnsureSelection();
         
         // Gérer le scroll automatique
         HandleLevelGridScrolling();
+    }
+
+    #endregion
+
+    #region Gestion du Focus et Sélection
+
+    /// <summary>
+    /// Met à jour l'item avec le focus basé sur l'EventSystem
+    /// </summary>
+    private void UpdateFocusedItem()
+    {
+        GameObject currentSelected = EventSystem.current.currentSelectedGameObject;
+        
+        // Parcourir tous les items et mettre à jour leur état de focus
+        foreach (var itemUI in _instantiatedItems)
+        {
+            if (itemUI != null)
+            {
+                bool isFocused = (currentSelected == itemUI.gameObject || 
+                                 currentSelected == itemUI.GetComponent<Button>()?.gameObject);
+                itemUI.SetFocused(isFocused);
+            }
+        }
+        
+        // Gérer le hover souris
+        if (Input.GetMouseButtonDown(0) || Input.GetAxis("Mouse X") != 0 || Input.GetAxis("Mouse Y") != 0)
+        {
+            HandleMouseHover();
+        }
+    }
+
+    /// <summary>
+    /// Gère le hover de la souris sur les items
+    /// </summary>
+    private void HandleMouseHover()
+    {
+        PointerEventData pointerData = new PointerEventData(EventSystem.current)
+        {
+            position = Input.mousePosition
+        };
+        
+        List<RaycastResult> results = new List<RaycastResult>();
+        EventSystem.current.RaycastAll(pointerData, results);
+        
+        // Vérifier si on hover un item de niveau
+        bool foundHoveredItem = false;
+        foreach (var result in results)
+        {
+            LevelSelectItemUI itemUI = result.gameObject.GetComponentInParent<LevelSelectItemUI>();
+            if (itemUI != null && _instantiatedItems.Contains(itemUI))
+            {
+                // Sélectionner automatiquement l'item survolé
+                EventSystem.current.SetSelectedGameObject(itemUI.gameObject);
+                foundHoveredItem = true;
+                break;
+            }
+        }
+        
+        // Si on ne survole aucun item, ne pas changer la sélection
     }
 
     #endregion
@@ -127,21 +179,19 @@ public class LevelSelectionUI : MonoBehaviour
 
     private IEnumerator SetupInitialSelection()
     {
-        yield return null; // Attendre que tout soit initialisé
+        yield return null;
         
         GameObject targetObject = null;
         
-        // Priorité: dernier objet sélectionné → premier niveau débloqué → bouton retour
         if (_lastSelectedObject != null && _lastSelectedObject.activeInHierarchy)
         {
             targetObject = _lastSelectedObject;
         }
         else
         {
-            // Chercher le premier niveau débloqué (pas locked)
             foreach (var item in _instantiatedItems)
             {
-                if (item != null && item.GetLevelData() != null) // Pas un niveau bloqué
+                if (item != null && item.GetLevelData() != null)
                 {
                     Button itemButton = item.GetComponent<Button>();
                     if (itemButton != null && itemButton.interactable)
@@ -152,7 +202,6 @@ public class LevelSelectionUI : MonoBehaviour
                 }
             }
             
-            // Fallback vers le bouton retour
             if (targetObject == null && backButton != null)
             {
                 targetObject = backButton.gameObject;
@@ -187,7 +236,6 @@ public class LevelSelectionUI : MonoBehaviour
         GameObject currentSelected = EventSystem.current.currentSelectedGameObject;
         if (currentSelected == null) return;
         
-        // Vérifier si l'objet sélectionné est un niveau
         bool isLevelItem = false;
         foreach (var item in _instantiatedItems)
         {
@@ -203,13 +251,11 @@ public class LevelSelectionUI : MonoBehaviour
         RectTransform selectedRect = currentSelected.GetComponent<RectTransform>();
         if (selectedRect == null) return;
 
-        // Calculer la position pour le scroll automatique
         RectTransform contentRect = levelScrollRect.content;
         RectTransform viewportRect = levelScrollRect.viewport;
         
         if (contentRect == null || viewportRect == null) return;
         
-        // Obtenir les positions relatives  
         Vector3[] contentCorners = new Vector3[4];
         contentRect.GetWorldCorners(contentCorners);
         
@@ -219,13 +265,11 @@ public class LevelSelectionUI : MonoBehaviour
         Vector3[] viewportCorners = new Vector3[4];
         viewportRect.GetWorldCorners(viewportCorners);
         
-        // Vérifier si l'item est visible dans le viewport
         float itemTop = itemCorners[1].y;
         float itemBottom = itemCorners[0].y;
         float viewportTop = viewportCorners[1].y;
         float viewportBottom = viewportCorners[0].y;
         
-        // Si l'item n'est pas entièrement visible, ajuster le scroll
         if (itemTop > viewportTop || itemBottom < viewportBottom)
         {
             float contentHeight = contentCorners[1].y - contentCorners[0].y;
@@ -295,7 +339,6 @@ public class LevelSelectionUI : MonoBehaviour
             
             if (!isUnlocked)
             {
-                // Niveau bloqué
                 itemGO = Instantiate(stageLockPrefab, levelItemsContainer);
                 Debug.Log($"[LevelSelectionUI] Niveau {levelData.OrderIndex} : BLOQUÉ");
             }
@@ -306,18 +349,15 @@ public class LevelSelectionUI : MonoBehaviour
 
                 if (isCompleted)
                 {
-                    // Niveau complété
                     itemGO = Instantiate(stageCompletePrefab, levelItemsContainer);
                     Debug.Log($"[LevelSelectionUI] Niveau {levelData.OrderIndex} : COMPLÉTÉ ({stars} étoiles)");
                 }
                 else
                 {
-                    // Niveau débloqué mais pas complété
                     itemGO = Instantiate(stageNeutralPrefab, levelItemsContainer);
                     Debug.Log($"[LevelSelectionUI] Niveau {levelData.OrderIndex} : DISPONIBLE");
                 }
 
-                // Configurer l'item s'il a le script LevelSelectItemUI
                 LevelSelectItemUI itemUI = itemGO.GetComponent<LevelSelectItemUI>();
                 if (itemUI != null)
                 {
@@ -330,20 +370,15 @@ public class LevelSelectionUI : MonoBehaviour
         Debug.Log($"[LevelSelectionUI] Créé {_instantiatedItems.Count} items de niveau interactifs");
     }
 
-    /// <summary>
-    /// Configure la navigation en grille pour les niveaux
-    /// </summary>
     private void ConfigureLevelGridNavigation()
     {
         if (_instantiatedItems.Count == 0) return;
         
-        // Déterminer le nombre de colonnes de la grid
         GridLayoutGroup gridLayout = levelItemsContainer.GetComponent<GridLayoutGroup>();
-        int columnsCount = 3; // Valeur par défaut
+        int columnsCount = 3;
         
         if (gridLayout != null)
         {
-            // Calculer le nombre de colonnes basé sur la largeur
             RectTransform containerRect = levelItemsContainer.GetComponent<RectTransform>();
             if (containerRect != null)
             {
@@ -355,7 +390,6 @@ public class LevelSelectionUI : MonoBehaviour
         
         Debug.Log($"[LevelSelectionUI] Configuration navigation grille - {columnsCount} colonnes, {_instantiatedItems.Count} niveaux");
         
-        // Configurer la navigation pour chaque niveau
         for (int i = 0; i < _instantiatedItems.Count; i++)
         {
             Button currentButton = _instantiatedItems[i].GetComponent<Button>();
@@ -364,19 +398,17 @@ public class LevelSelectionUI : MonoBehaviour
             Navigation nav = currentButton.navigation;
             nav.mode = Navigation.Mode.Explicit;
             
-            // Calculer la position dans la grille
             int row = i / columnsCount;
             int col = i % columnsCount;
             
-            // Navigation horizontale (gauche/droite)
-            if (col > 0) // Pas la première colonne
+            if (col > 0)
             {
                 int leftIndex = i - 1;
                 Button leftButton = _instantiatedItems[leftIndex].GetComponent<Button>();
                 nav.selectOnLeft = leftButton;
             }
             
-            if (col < columnsCount - 1) // Pas la dernière colonne
+            if (col < columnsCount - 1)
             {
                 int rightIndex = i + 1;
                 if (rightIndex < _instantiatedItems.Count)
@@ -386,8 +418,7 @@ public class LevelSelectionUI : MonoBehaviour
                 }
             }
             
-            // Navigation verticale (haut/bas)
-            if (row > 0) // Pas la première ligne
+            if (row > 0)
             {
                 int upIndex = i - columnsCount;
                 if (upIndex >= 0)
@@ -397,7 +428,7 @@ public class LevelSelectionUI : MonoBehaviour
                 }
             }
             
-            if (row < (_instantiatedItems.Count - 1) / columnsCount) // Pas la dernière ligne
+            if (row < (_instantiatedItems.Count - 1) / columnsCount)
             {
                 int downIndex = i + columnsCount;
                 if (downIndex < _instantiatedItems.Count)
@@ -407,26 +438,22 @@ public class LevelSelectionUI : MonoBehaviour
                 }
                 else if (backButton != null)
                 {
-                    // Dernière ligne : connecter au bouton retour
                     nav.selectOnDown = backButton;
                 }
             }
             else if (backButton != null)
             {
-                // Dernière ligne : connecter au bouton retour
                 nav.selectOnDown = backButton;
             }
             
             currentButton.navigation = nav;
         }
         
-        // Configurer la navigation du bouton retour
         if (backButton != null && _instantiatedItems.Count > 0)
         {
             Navigation backNav = backButton.navigation;
             backNav.mode = Navigation.Mode.Explicit;
             
-            // Connecter à la dernière ligne de niveaux
             int lastRowStartIndex = (_instantiatedItems.Count - 1) / columnsCount * columnsCount;
             Button lastRowButton = _instantiatedItems[lastRowStartIndex].GetComponent<Button>();
             backNav.selectOnUp = lastRowButton;
@@ -455,7 +482,7 @@ public class LevelSelectionUI : MonoBehaviour
     {
         _selectedLevel = selectedLevel;
 
-        // Mettre à jour l'état visuel de tous les items
+        // Mettre à jour l'état visuel de sélection
         foreach(var item in _instantiatedItems)
         {
             if (item != null)
@@ -464,7 +491,6 @@ public class LevelSelectionUI : MonoBehaviour
             }
         }
 
-        // Activer/désactiver le bouton de lancement
         if (launchLevelButton != null)
         {
             launchLevelButton.interactable = (_selectedLevel != null);
@@ -472,7 +498,7 @@ public class LevelSelectionUI : MonoBehaviour
         
         Debug.Log($"[LevelSelectionUI] Niveau sélectionné : {_selectedLevel?.DisplayName ?? "None"}");
         
-        // Auto-lancement du niveau (comme dans l'ancien code)
+        // Auto-lancement du niveau
         if (_selectedLevel != null)
         {
             _hubManager?.StartLevel(_selectedLevel);
