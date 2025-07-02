@@ -1,5 +1,4 @@
-﻿// Scripts/Hub/UI/CharacterSelectionUI.cs
-
+﻿
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
@@ -43,7 +42,6 @@ public class CharacterSelectionUI : MonoBehaviour
     private readonly List<AvailableCharacterListItemUI> _instantiatedListItems = new List<AvailableCharacterListItemUI>();
     private TeamManager _teamManager;
     private CharacterData_SO _selectedCharacter;
-    private int _selectedIndex = -1;
     private GameObject _lastSelectedObject;
     
     void Awake()
@@ -62,26 +60,28 @@ public class CharacterSelectionUI : MonoBehaviour
 
     private void OnEnable()
     {
-        if (HubManager.Instance != null)
-        {
-            HubManager.Instance.DisableHubControls();
-        }
+        Debug.Log("[CharacterSelectionUI] Panel activé - Préparation de la sélection");
+        
+        // 🚀 PAS BESOIN DE DÉSACTIVER LES CONTRÔLES DU HUB
+        // Le TeamManagementUI l'a déjà fait et garde le contrôle
+        
         PopulateAvailableCharactersList();
-        SelectCharacter(null); // On ne sélectionne rien au départ
+        SelectCharacter(null); // Aucun personnage sélectionné au départ
         
         StartCoroutine(SetupInitialSelection());
     }
     
     private void OnDisable()
     {
+        // 🧹 NETTOYAGE SIMPLE - Plus besoin de gérer les contrôles du Hub
         _lastSelectedObject = EventSystem.current.currentSelectedGameObject;
+        
         if (characterPreview != null)
         {
             characterPreview.ClearPreview();
         }
     }
     
-    // NOUVELLE LOGIQUE : Détecter le focus de la manette/clavier
     private void Update()
     {
         // Gérer l'action "Cancel"
@@ -90,28 +90,22 @@ public class CharacterSelectionUI : MonoBehaviour
             OnBackClicked();
         }
         
-        // --- CŒUR DE LA MODIFICATION ---
-        // Détecter quel bouton est actuellement sélectionné par le système de navigation
+        // Détecter le focus de la manette/clavier pour l'affichage des détails
         GameObject currentSelected = EventSystem.current.currentSelectedGameObject;
-
-        // On vérifie si l'objet sélectionné est bien un de nos items de personnage
         if (currentSelected != null && currentSelected.transform.IsChildOf(availableCharactersContainer))
         {
             var itemUI = currentSelected.GetComponent<AvailableCharacterListItemUI>();
-            // Si l'item a un script et que le personnage qu'il représente n'est pas déjà
-            // celui qui est affiché dans le panneau de détails...
             if (itemUI != null && itemUI.GetCharacterData() != _selectedCharacter)
             {
-                // ...alors on met à jour le panneau de détails avec ce nouveau personnage.
-                // C'est cette étape qui permet l'affichage "au survol" (focus).
                 SelectCharacter(itemUI.GetCharacterData());
             }
         }
-        // --- FIN DE LA MODIFICATION ---
 
         EnsureSelection();
         HandleScrolling();
     }
+
+    #region Gestion de l'UI (Inchangée)
 
     private void PopulateAvailableCharactersList()
     {
@@ -148,10 +142,9 @@ public class CharacterSelectionUI : MonoBehaviour
         ConfigureGlobalNavigation();
     }
 
-    // Votre code de navigation est déjà bon, pas de changement majeur nécessaire ici.
     private void ConfigureGlobalNavigation()
     {
-        // Compléter la navigation verticale
+        // Configuration de la navigation (code inchangé)
         for (int i = 0; i < _instantiatedListItems.Count - 1; i++)
         {
             Button currentButton = _instantiatedListItems[i].GetComponent<Button>();
@@ -170,7 +163,6 @@ public class CharacterSelectionUI : MonoBehaviour
             }
         }
 
-        // Configurer le dernier item
         if(_instantiatedListItems.Count > 1)
         {
             Button lastItemButton = _instantiatedListItems[_instantiatedListItems.Count - 1].GetComponent<Button>();
@@ -181,7 +173,6 @@ public class CharacterSelectionUI : MonoBehaviour
             lastItemButton.navigation = lastItemNav;
         }
         
-        // Navigation horizontale de la liste vers les boutons
         foreach (var item in _instantiatedListItems)
         {
             Button itemButton = item.GetComponent<Button>();
@@ -193,7 +184,6 @@ public class CharacterSelectionUI : MonoBehaviour
             }
         }
         
-        // Configurer la navigation des boutons Add et Back
         if (addToTeamButton != null)
         {
             Navigation addNav = addToTeamButton.navigation;
@@ -258,12 +248,9 @@ public class CharacterSelectionUI : MonoBehaviour
         scrollRect.verticalNormalizedPosition = Mathf.Lerp(scrollRect.verticalNormalizedPosition, 1f - normalizedItemPos, Time.deltaTime * scrollSpeed);
     }
 
-    // Appelée par le bouton de l'item (via "Submit")
     private void OnCharacterItemClicked(CharacterData_SO characterData)
     {
         SelectCharacter(characterData);
-        // L'action de "Submit" est gérée par le bouton "addToTeamButton"
-        // Le clic sur l'item ne fait que le pré-sélectionner.
     }
     
     private void SelectCharacter(CharacterData_SO characterData)
@@ -275,7 +262,6 @@ public class CharacterSelectionUI : MonoBehaviour
         {
             if (itemUI != null)
             {
-                // L'item actuellement focus (pas forcément celui qui est dans le panneau de détail)
                 bool isFocused = EventSystem.current.currentSelectedGameObject == itemUI.gameObject;
                 itemUI.SetSelected(isFocused);
             }
@@ -317,6 +303,13 @@ public class CharacterSelectionUI : MonoBehaviour
         }
     }
 
+    #endregion
+
+    #region 🚀 NOUVELLES MÉTHODES DE TRANSITION SIMPLIFIÉES
+
+    /// <summary>
+    /// Ajoute un personnage à l'équipe et retourne au TeamManagement
+    /// </summary>
     private void OnAddToTeamClicked()
     {
         if (_selectedCharacter != null)
@@ -324,35 +317,54 @@ public class CharacterSelectionUI : MonoBehaviour
             bool added = _teamManager.TryAddCharacterToActiveTeam(_selectedCharacter);
             if (added)
             {
-                StartCoroutine(TransitionToPanel(teamManagementPanel));
+                Debug.Log($"[CharacterSelectionUI] Personnage {_selectedCharacter.DisplayName} ajouté, retour au TeamManagement");
+                ReturnToTeamManagement();
             }
         }
     }
 
+    /// <summary>
+    /// Annule la sélection et retourne au TeamManagement
+    /// </summary>
     private void OnBackClicked()
     {
-        StartCoroutine(TransitionToPanel(teamManagementPanel));
+        Debug.Log("[CharacterSelectionUI] Retour demandé, retour au TeamManagement");
+        ReturnToTeamManagement();
     }
 
-    private IEnumerator TransitionToPanel(GameObject panelToShow)
+    /// <summary>
+    /// 🎯 MÉTHODE SIMPLIFIÉE : Retour propre au TeamManagement
+    /// Plus besoin de transitions complexes - le TeamManagementUI gère tout
+    /// </summary>
+    private void ReturnToTeamManagement()
     {
-        CanvasGroup currentCg = GetComponent<CanvasGroup>() ?? gameObject.AddComponent<CanvasGroup>();
-        CanvasGroup nextCg = panelToShow.GetComponent<CanvasGroup>() ?? panelToShow.AddComponent<CanvasGroup>();
-        float duration = 0.25f;
-        float elapsedTime = 0f;
-
-        panelToShow.SetActive(true);
-        nextCg.alpha = 0;
-
-        while (elapsedTime < duration)
+        if (teamManagementPanel != null)
         {
-            currentCg.alpha = 1f - (elapsedTime / duration);
-            nextCg.alpha = elapsedTime / duration;
-            elapsedTime += Time.unscaledDeltaTime;
-            yield return null;
+            // ✨ LOGIQUE ULTRA-SIMPLE :
+            // 1. Réactiver le panel parent
+            teamManagementPanel.SetActive(true);
+            //set le alpha à 1 pour éviter les problèmes de transparence
+            CanvasGroup canvasGroup = teamManagementPanel.GetComponent<CanvasGroup>();
+            if (canvasGroup != null)
+            {
+                canvasGroup.alpha = 1f; // Assurez-vous que le panel est complètement opaque
+            }
+            
+            
+            // 2. Se désactiver
+            gameObject.SetActive(false);
+            
+            // 🎉 C'EST TOUT ! 
+            // Le TeamManagementUI va automatiquement :
+            // - Détecter qu'on revient d'un sous-panel (grâce à _isTransitioningToSubPanel)
+            // - Restaurer le focus mémorisé dans RestoreRememberedFocus()
+            // - Rafraîchir l'UI si nécessaire
         }
-        currentCg.alpha = 0;
-        nextCg.alpha = 1;
-        gameObject.SetActive(false);
+        else
+        {
+            Debug.LogError("[CharacterSelectionUI] Référence teamManagementPanel manquante !");
+        }
     }
+
+    #endregion
 }

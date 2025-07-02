@@ -26,7 +26,6 @@ public class TeamManagementUI : MonoBehaviour
     [SerializeField] private Transform activeTeamSlotsContainer;
 
     [Header("Panel de Détails Personnage (Optionnel)")]
-    // Gardé pour l'affichage des détails si vous cliquez sur un perso
     [SerializeField] private GameObject characterDetailsPanel;
     [SerializeField] private TextMeshProUGUI detailCharacterNameText;
     [SerializeField] private Image detailCharacterIconImage;
@@ -35,7 +34,7 @@ public class TeamManagementUI : MonoBehaviour
 
     [Header("Boutons UI")]
     [SerializeField] private Button backButton;
-    [SerializeField] private Button readyButton; // Le bouton "Ready" du nouveau design
+    [SerializeField] private Button readyButton;
     
     [Header("Panels Connectés")]
     [SerializeField] private GameObject characterSelectionPanel;
@@ -48,8 +47,31 @@ public class TeamManagementUI : MonoBehaviour
     private readonly List<TeamSlotUI> _instantiatedTeamSlots = new List<TeamSlotUI>();
     private CharacterData_SO _selectedCharacterForDetails = null;
     
-    // Pour tracker la sélection actuelle
-    private GameObject _lastSelectedObject;
+    // === NOUVEAU SYSTÈME DE MÉMORISATION DU FOCUS ===
+    [System.Serializable]
+    private class FocusMemory
+    {
+        public int lastSelectedSlotIndex = -1;
+        public bool wasLastSelectedSlotEmpty = false;
+        public bool wasBackButtonSelected = false;
+        public bool wasReadyButtonSelected = false;
+        
+        public void Reset()
+        {
+            lastSelectedSlotIndex = -1;
+            wasLastSelectedSlotEmpty = false;
+            wasBackButtonSelected = false;
+            wasReadyButtonSelected = false;
+        }
+        
+        public bool HasValidMemory()
+        {
+            return lastSelectedSlotIndex >= 0 || wasBackButtonSelected || wasReadyButtonSelected;
+        }
+    }
+    
+    private FocusMemory _focusMemory = new FocusMemory();
+    private bool _isTransitioningToSubPanel = false;
 
     #region Cycle de Vie Unity
 
@@ -59,53 +81,59 @@ public class TeamManagementUI : MonoBehaviour
         _teamManager = TeamManager.Instance;
         _hubManager = FindFirstObjectByType<HubManager>();
 
-        // --- Validation des références ---
+        // Validation des références
         if (_teamManager == null) Debug.LogError("[TeamManagementUI] TeamManager.Instance est null !");
         if (_hubManager == null) Debug.LogError("[TeamManagementUI] HubManager non trouvé !");
         if (teamSlotPrefab == null) Debug.LogError("[TeamManagementUI] Prefab 'teamSlotPrefab' non assigné !");
         if (activeTeamSlotsContainer == null) Debug.LogError("[TeamManagementUI] Conteneur 'activeTeamSlotsContainer' non assigné !");
 
         backButton?.onClick.AddListener(OnBackButtonClicked);
-        readyButton?.onClick.AddListener(OnBackButtonClicked); // Le bouton Ready fait la même chose pour l'instant
+        readyButton?.onClick.AddListener(OnBackButtonClicked);
     }
-
-// Extension du TeamSlotUI pour exposer les boutons nécessaires à la navigation
-public static class TeamSlotUIExtensions
-{
-    // Ces méthodes devront être ajoutées à TeamSlotUI.cs
-    // public Button GetMainButton() { return mainCardButton; }
-    // public Button GetAddButton() { return addButton; }
-    // public bool HasCharacter() { return _characterData != null; }
-}
 
     private void OnEnable()
     {
+        Debug.Log("[TeamManagementUI] Panel activé - Prise de contrôle");
+        
+        // 🎯 PRISE DE CONTRÔLE IMMÉDIATE
+        TakeControlFromHub();
+        
         // S'abonner aux événements
         TeamManager.OnActiveTeamChanged += HandleActiveTeamChanged;
+        
+        // Rafraîchir l'UI
         RefreshAllUI();
         SelectCharacterForDetails(null);
-        if (HubManager.Instance != null)
+        
+        // ⭐ LOGIQUE DE RESTAURATION DU FOCUS
+        if (_isTransitioningToSubPanel)
         {
-            HubManager.Instance.DisableHubControls();
+            // On revient d'un sous-panel, restaurer le focus mémorisé
+            _isTransitioningToSubPanel = false;
+            StartCoroutine(RestoreRememberedFocus());
         }
-        // Configuration de la navigation à la manette
-        StartCoroutine(SetupInitialSelection());
+        else
+        {
+            // Première ouverture du panel, sélection initiale normale
+            StartCoroutine(SetupInitialSelection());
+        }
     }
 
     private void OnDisable()
     {
+        Debug.Log("[TeamManagementUI] Panel désactivé - Libération du contrôle");
+        
         // Se désabonner
         if (TeamManager.Instance != null)
         {
             TeamManager.OnActiveTeamChanged -= HandleActiveTeamChanged;
         }
-        if (HubManager.Instance != null)
-        {
-            HubManager.Instance.EnableHubControls();
-        }
         
-        // Sauvegarder la sélection actuelle
-        _lastSelectedObject = EventSystem.current.currentSelectedGameObject;
+        // ⚠️ IMPORTANT : On ne rend le contrôle au Hub QUE si on ne va pas vers un sous-panel
+        if (!_isTransitioningToSubPanel)
+        {
+            ReturnControlToHub();
+        }
     }
 
     private void Update()
@@ -116,212 +144,202 @@ public static class TeamSlotUIExtensions
             OnCancelPressed();
         }
         
-        // S'assurer qu'on a toujours quelque chose de sélectionné pour la navigation manette
+        // S'assurer qu'on a toujours quelque chose de sélectionné
         EnsureSelection();
     }
 
     #endregion
 
-    #region Initialisation et Rafraîchissement de l'UI
+    #region Système de Contrôle Hub
 
-    private void RefreshAllUI()
+    /// <summary>
+    /// Prend le contrôle total de la navigation et désactive les contrôles du Hub
+    /// </summary>
+    private void TakeControlFromHub()
     {
-        PopulateActiveTeamSlots();
-        UpdateCharacterDetailsPanel();
-        ConfigureNavigation();
-    }
-
-    private void PopulateActiveTeamSlots()
-    {
-        // Nettoyer les anciens slots
-        foreach (Transform child in activeTeamSlotsContainer)
+        if (_hubManager != null)
         {
-            Destroy(child.gameObject);
-        }
-        _instantiatedTeamSlots.Clear();
-
-        if (_teamManager == null) return;
-
-        List<CharacterData_SO> activeTeam = _teamManager.ActiveTeam;
-
-        // Toujours instancier 4 slots
-        for (int i = 0; i < 4; i++)
-        {
-            GameObject slotGO = Instantiate(teamSlotPrefab, activeTeamSlotsContainer);
-            TeamSlotUI slotUI = slotGO.GetComponent<TeamSlotUI>();
-
-            if (slotUI != null)
-            {
-                CharacterData_SO characterInSlot = (i < activeTeam.Count) ? activeTeam[i] : null;
-            
-				int characterLevel = 1; // Niveau par défaut si aucune progression n'est trouvée
-            	if (characterInSlot != null && _playerDataManager.Data.CharacterProgressData.ContainsKey(characterInSlot.CharacterID))
-            	{
-                	characterLevel = _playerDataManager.Data.CharacterProgressData[characterInSlot.CharacterID].CurrentLevel;
-            	}
-            	// Passe le niveau au slot UI
-            	slotUI.Setup(characterInSlot, i, OnRemoveCharacter, OnAddCharacterSlotClicked, OnShowEquipmentPanel, characterLevel);
-
-            	_instantiatedTeamSlots.Add(slotUI);
-            }
-            else
-            {
-                Debug.LogError($"[TeamManagementUI] Le prefab 'teamSlotPrefab' n'a pas de script TeamSlotUI !");
-                Destroy(slotGO);
-            }
+            _hubManager.DisableHubControls();
+            Debug.Log("[TeamManagementUI] ✅ Contrôles du Hub désactivés");
         }
     }
 
-    private void ConfigureNavigation()
+    /// <summary>
+    /// Rend le contrôle au Hub quand on quitte définitivement ce panel
+    /// </summary>
+    private void ReturnControlToHub()
     {
-        // Configurer la navigation automatique entre les slots
-        // Unity gère automatiquement la navigation horizontale grâce au Horizontal Layout Group
-        
-        // Mais on peut aussi configurer la navigation explicite si nécessaire
-        /*for (int i = 0; i < _instantiatedTeamSlots.Count; i++)
+        if (_hubManager != null)
         {
-            var slotUI = _instantiatedTeamSlots[i];
-            if (slotUI == null) continue;
-            
-            // Récupérer le bouton principal du slot
-            Button mainButton = slotUI.GetMainButton();
-            if (mainButton != null)
-            {
-                Navigation nav = mainButton.navigation;
-                nav.mode = Navigation.Mode.Explicit;
-                
-                // Navigation horizontale entre les slots
-                if (i > 0) // Pas le premier
-                {
-                    Button leftButton = _instantiatedTeamSlots[i - 1].GetMainButton();
-                    nav.selectOnLeft = leftButton;
-                }
-                
-                if (i < _instantiatedTeamSlots.Count - 1) // Pas le dernier
-                {
-                    Button rightButton = _instantiatedTeamSlots[i + 1].GetMainButton();
-                    nav.selectOnRight = rightButton;
-                }
-                
-                // Navigation vers les boutons du bas
-                nav.selectOnDown = backButton; // Ou readyButton selon votre préférence
-                
-                mainButton.navigation = nav;
-            }
-        }
-        
-        // Configurer la navigation pour les boutons Back et Ready
-        if (backButton != null && readyButton != null)
-        {
-            Navigation backNav = backButton.navigation;
-            backNav.mode = Navigation.Mode.Explicit;
-            backNav.selectOnRight = readyButton;
-            if (_instantiatedTeamSlots.Count > 0 && _instantiatedTeamSlots[0].GetMainButton() != null)
-            {
-                backNav.selectOnUp = _instantiatedTeamSlots[0].GetMainButton();
-            }
-            backButton.navigation = backNav;
-            
-            Navigation readyNav = readyButton.navigation;
-            readyNav.mode = Navigation.Mode.Explicit;
-            readyNav.selectOnLeft = backButton;
-            if (_instantiatedTeamSlots.Count > 0 && _instantiatedTeamSlots[_instantiatedTeamSlots.Count - 1].GetMainButton() != null)
-            {
-                readyNav.selectOnUp = _instantiatedTeamSlots[_instantiatedTeamSlots.Count - 1].GetMainButton();
-            }
-            readyButton.navigation = readyNav;
-        }
-        */
-    }
-
-    private IEnumerator SetupInitialSelection()
-    {
-        // Attendre une frame pour s'assurer que tout est bien initialisé
-        yield return null;
-        
-        GameObject objectToSelect = null;
-        
-        // Priorité de sélection:
-        // 1. L'objet qu'on avait sélectionné avant (si toujours valide)
-        // 2. Le defaultSelectedObject configuré dans l'inspecteur
-        // 3. Le premier slot avec un personnage
-        // 4. Le premier slot vide (bouton Add)
-        // 5. Le bouton Back
-        
-        if (_lastSelectedObject != null && _lastSelectedObject.activeInHierarchy)
-        {
-            objectToSelect = _lastSelectedObject;
-        }
-        else if (defaultSelectedObject != null && defaultSelectedObject.activeInHierarchy)
-        {
-            objectToSelect = defaultSelectedObject;
-        }
-        else
-        {
-            // Chercher le premier slot avec un personnage
-            foreach (var slot in _instantiatedTeamSlots)
-            {
-                if (slot != null && slot.HasCharacter())
-                {
-                    Button mainButton = slot.GetMainButton();
-                    if (mainButton != null)
-                    {
-                        objectToSelect = mainButton.gameObject;
-                        break;
-                    }
-                }
-            }
-            
-            // Si aucun personnage, prendre le premier slot vide
-            if (objectToSelect == null)
-            {
-                foreach (var slot in _instantiatedTeamSlots)
-                {
-                    if (slot != null && !slot.HasCharacter())
-                    {
-                        Button addButton = slot.GetAddButton();
-                        if (addButton != null)
-                        {
-                            objectToSelect = addButton.gameObject;
-                            break;
-                        }
-                    }
-                }
-            }
-            
-            // En dernier recours, sélectionner le bouton Back
-            if (objectToSelect == null && backButton != null)
-            {
-                objectToSelect = backButton.gameObject;
-            }
-        }
-        
-        // Sélectionner l'objet
-        if (objectToSelect != null)
-        {
-            EventSystem.current.SetSelectedGameObject(objectToSelect);
-        }
-    }
-
-    private void EnsureSelection()
-    {
-        // Si rien n'est sélectionné et qu'on utilise une manette/clavier
-        if (EventSystem.current.currentSelectedGameObject == null)
-        {
-            // Vérifier si on utilise la navigation (pas la souris)
-            Vector2 navigationInput = InputManager.Instance?.UIActions.Navigate.ReadValue<Vector2>() ?? Vector2.zero;
-            bool submitPressed = InputManager.Instance?.UIActions.Submit.WasPressedThisFrame() ?? false;
-            
-            if (navigationInput != Vector2.zero || submitPressed)
-            {
-                StartCoroutine(SetupInitialSelection());
-            }
+            _hubManager.EnableHubControls();
+            Debug.Log("[TeamManagementUI] ✅ Contrôles du Hub réactivés");
         }
     }
 
     #endregion
 
-    #region Callbacks des Slots UI
+    #region Système de Mémorisation du Focus
+
+    /// <summary>
+    /// Mémorise l'état de sélection actuel avant de partir vers un sous-panel
+    /// </summary>
+    private void MemorizeCurrentFocus()
+    {
+        _focusMemory.Reset();
+        
+        GameObject currentSelected = EventSystem.current.currentSelectedGameObject;
+        if (currentSelected == null)
+        {
+            Debug.LogWarning("[TeamManagementUI] Aucun objet sélectionné à mémoriser");
+            return;
+        }
+
+        // Vérifier si c'est un des boutons principaux
+        if (currentSelected == backButton?.gameObject)
+        {
+            _focusMemory.wasBackButtonSelected = true;
+            Debug.Log("[TeamManagementUI] 💾 Mémorisé : BackButton");
+            return;
+        }
+        
+        if (currentSelected == readyButton?.gameObject)
+        {
+            _focusMemory.wasReadyButtonSelected = true;
+            Debug.Log("[TeamManagementUI] 💾 Mémorisé : ReadyButton");
+            return;
+        }
+
+        // Vérifier si c'est un slot d'équipe
+        for (int i = 0; i < _instantiatedTeamSlots.Count; i++)
+        {
+            var slot = _instantiatedTeamSlots[i];
+            if (slot != null)
+            {
+                Button slotButton = slot.GetMainButton();
+                if (slotButton != null && currentSelected == slotButton.gameObject)
+                {
+                    _focusMemory.lastSelectedSlotIndex = i;
+                    _focusMemory.wasLastSelectedSlotEmpty = !slot.HasCharacter();
+                    Debug.Log($"[TeamManagementUI] 💾 Mémorisé : Slot {i} (vide: {_focusMemory.wasLastSelectedSlotEmpty})");
+                    return;
+                }
+            }
+        }
+        
+        Debug.LogWarning($"[TeamManagementUI] Objet sélectionné non reconnu : {currentSelected.name}");
+    }
+
+    /// <summary>
+    /// Restaure le focus mémorisé après retour d'un sous-panel
+    /// </summary>
+    private IEnumerator RestoreRememberedFocus()
+    {
+        yield return null; // Attendre une frame pour que tout soit initialisé
+        
+        if (!_focusMemory.HasValidMemory())
+        {
+            Debug.LogWarning("[TeamManagementUI] Aucune mémoire valide, utilisation de la sélection par défaut");
+            yield return StartCoroutine(SetupInitialSelection());
+            yield break;
+        }
+
+        GameObject targetObject = null;
+
+        // Restaurer la sélection des boutons principaux
+        if (_focusMemory.wasBackButtonSelected && backButton != null)
+        {
+            targetObject = backButton.gameObject;
+            Debug.Log("[TeamManagementUI] 🎯 Restauration : BackButton");
+        }
+        else if (_focusMemory.wasReadyButtonSelected && readyButton != null)
+        {
+            targetObject = readyButton.gameObject;
+            Debug.Log("[TeamManagementUI] 🎯 Restauration : ReadyButton");
+        }
+        // Restaurer la sélection d'un slot
+        else if (_focusMemory.lastSelectedSlotIndex >= 0 && _focusMemory.lastSelectedSlotIndex < _instantiatedTeamSlots.Count)
+        {
+            var slot = _instantiatedTeamSlots[_focusMemory.lastSelectedSlotIndex];
+            if (slot != null)
+            {
+                // ⚡ LOGIQUE INTELLIGENTE : Adapter selon l'état actuel du slot
+                bool slotIsCurrentlyEmpty = !slot.HasCharacter();
+                
+                if (_focusMemory.wasLastSelectedSlotEmpty && slotIsCurrentlyEmpty)
+                {
+                    // Le slot était vide et l'est toujours → sélectionner le bouton Add
+                    targetObject = slot.GetAddButton()?.gameObject;
+                    Debug.Log($"[TeamManagementUI] 🎯 Restauration : Slot {_focusMemory.lastSelectedSlotIndex} (Add Button)");
+                }
+                else if (!_focusMemory.wasLastSelectedSlotEmpty && !slotIsCurrentlyEmpty)
+                {
+                    // Le slot avait un personnage et en a toujours un → sélectionner le bouton principal
+                    targetObject = slot.GetMainButton()?.gameObject;
+                    Debug.Log($"[TeamManagementUI] 🎯 Restauration : Slot {_focusMemory.lastSelectedSlotIndex} (Main Button)");
+                }
+                else
+                {
+                    // L'état du slot a changé → adapter intelligemment
+                    targetObject = slot.GetMainButton()?.gameObject;
+                    Debug.Log($"[TeamManagementUI] 🎯 Restauration adaptée : Slot {_focusMemory.lastSelectedSlotIndex} (état changé)");
+                }
+            }
+        }
+
+        // Appliquer la sélection
+        if (targetObject != null && targetObject.activeInHierarchy)
+        {
+            EventSystem.current.SetSelectedGameObject(targetObject);
+            Debug.Log($"[TeamManagementUI] ✅ Focus restauré sur : {targetObject.name}");
+        }
+        else
+        {
+            Debug.LogWarning("[TeamManagementUI] Impossible de restaurer le focus, fallback vers sélection par défaut");
+            yield return StartCoroutine(SetupInitialSelection());
+        }
+    }
+
+    #endregion
+
+    #region Méthodes de Transition Améliorées
+
+    /// <summary>
+    /// Transition améliorée vers un sous-panel avec mémorisation du focus
+    /// </summary>
+    private IEnumerator TransitionToSubPanel(GameObject panelToShow)
+    {
+        // 🧠 MÉMORISER LE FOCUS AVANT DE PARTIR
+        MemorizeCurrentFocus();
+        
+        // Marquer qu'on va vers un sous-panel
+        _isTransitioningToSubPanel = true;
+        
+        // Effectuer la transition visuelle
+        CanvasGroup currentCanvasGroup = GetComponent<CanvasGroup>() ?? gameObject.AddComponent<CanvasGroup>();
+        CanvasGroup nextCanvasGroup = panelToShow.GetComponent<CanvasGroup>() ?? panelToShow.AddComponent<CanvasGroup>();
+        
+        float duration = 0.25f;
+        float elapsedTime = 0f;
+
+        panelToShow.SetActive(true);
+        nextCanvasGroup.alpha = 0;
+
+        while (elapsedTime < duration)
+        {
+            currentCanvasGroup.alpha = 1f - (elapsedTime / duration);
+            nextCanvasGroup.alpha = elapsedTime / duration;
+            elapsedTime += Time.unscaledDeltaTime;
+            yield return null;
+        }
+
+        currentCanvasGroup.alpha = 0;
+        nextCanvasGroup.alpha = 1;
+        gameObject.SetActive(false);
+    }
+
+    #endregion
+
+    #region Callbacks des Slots UI (Modifiés)
     
     private void HandleActiveTeamChanged(List<CharacterData_SO> newActiveTeam)
     {
@@ -339,23 +357,23 @@ public static class TeamSlotUIExtensions
         if (characterData != null)
         {
             _teamManager.TryRemoveCharacterFromActiveTeam(characterData);
-            // La mise à jour de l'UI est gérée par l'événement OnActiveTeamChanged
             if (_selectedCharacterForDetails == characterData)
             {
-                SelectCharacterForDetails(null); // Cache les détails si on supprime le perso affiché
+                SelectCharacterForDetails(null);
             }
         }
     }
 
-    // Appelé quand on clique sur un slot "Add"
+    /// <summary>
+    /// Appelé quand on clique sur un slot "Add" - Version améliorée
+    /// </summary>
     private void OnAddCharacterSlotClicked(int slotIndex)
     {
-        Debug.Log($"Clic sur le slot vide numéro {slotIndex}. Ouverture du panel de sélection.");
+        Debug.Log($"[TeamManagementUI] Clic sur le slot vide numéro {slotIndex}. Transition vers CharacterSelection.");
     
         if (characterSelectionPanel != null)
         {
-            // Cacher le panel actuel et afficher le panel de sélection
-            StartCoroutine(TransitionToPanel(characterSelectionPanel));
+            StartCoroutine(TransitionToSubPanel(characterSelectionPanel));
         }
         else
         {
@@ -363,9 +381,146 @@ public static class TeamSlotUIExtensions
         }
     }
 
+    private void OnShowEquipmentPanel(CharacterData_SO character)
+    {
+        if (equipmentPanel != null)
+        {
+            Debug.Log($"[TeamManagementUI] Transition vers EquipmentPanel pour {character.DisplayName}");
+            
+            // Même logique de mémorisation pour l'equipment panel
+            MemorizeCurrentFocus();
+            _isTransitioningToSubPanel = true;
+            
+            gameObject.SetActive(false);
+            equipmentPanel.ShowPanelFor(character);
+        }
+        else
+        {
+            Debug.LogError("[TeamManagementUI] EquipmentPanel reference is not set!");
+        }
+    }
+
     #endregion
 
-    #region Panel de Détails (Logique conservée pour l'instant)
+    #region Logique Existante (Inchangée)
+
+    private void RefreshAllUI()
+    {
+        PopulateActiveTeamSlots();
+        UpdateCharacterDetailsPanel();
+        ConfigureNavigation();
+    }
+
+    private void PopulateActiveTeamSlots()
+    {
+        foreach (Transform child in activeTeamSlotsContainer)
+        {
+            Destroy(child.gameObject);
+        }
+        _instantiatedTeamSlots.Clear();
+
+        if (_teamManager == null) return;
+
+        List<CharacterData_SO> activeTeam = _teamManager.ActiveTeam;
+
+        for (int i = 0; i < 4; i++)
+        {
+            GameObject slotGO = Instantiate(teamSlotPrefab, activeTeamSlotsContainer);
+            TeamSlotUI slotUI = slotGO.GetComponent<TeamSlotUI>();
+
+            if (slotUI != null)
+            {
+                CharacterData_SO characterInSlot = (i < activeTeam.Count) ? activeTeam[i] : null;
+            
+                int characterLevel = 1;
+                if (characterInSlot != null && _playerDataManager.Data.CharacterProgressData.ContainsKey(characterInSlot.CharacterID))
+                {
+                    characterLevel = _playerDataManager.Data.CharacterProgressData[characterInSlot.CharacterID].CurrentLevel;
+                }
+                
+                slotUI.Setup(characterInSlot, i, OnRemoveCharacter, OnAddCharacterSlotClicked, OnShowEquipmentPanel, characterLevel);
+                _instantiatedTeamSlots.Add(slotUI);
+            }
+            else
+            {
+                Debug.LogError($"[TeamManagementUI] Le prefab 'teamSlotPrefab' n'a pas de script TeamSlotUI !");
+                Destroy(slotGO);
+            }
+        }
+    }
+
+    private void ConfigureNavigation()
+    {
+        // Navigation automatique gérée par Unity via Horizontal Layout Group
+    }
+
+    private IEnumerator SetupInitialSelection()
+    {
+        yield return null;
+        
+        GameObject objectToSelect = null;
+        
+        if (defaultSelectedObject != null && defaultSelectedObject.activeInHierarchy)
+        {
+            objectToSelect = defaultSelectedObject;
+        }
+        else
+        {
+            foreach (var slot in _instantiatedTeamSlots)
+            {
+                if (slot != null && slot.HasCharacter())
+                {
+                    Button mainButton = slot.GetMainButton();
+                    if (mainButton != null)
+                    {
+                        objectToSelect = mainButton.gameObject;
+                        break;
+                    }
+                }
+            }
+            
+            if (objectToSelect == null)
+            {
+                foreach (var slot in _instantiatedTeamSlots)
+                {
+                    if (slot != null && !slot.HasCharacter())
+                    {
+                        Button addButton = slot.GetAddButton();
+                        if (addButton != null)
+                        {
+                            objectToSelect = addButton.gameObject;
+                            break;
+                        }
+                    }
+                }
+            }
+            
+            if (objectToSelect == null && backButton != null)
+            {
+                objectToSelect = backButton.gameObject;
+            }
+        }
+        
+        if (objectToSelect != null)
+        {
+            EventSystem.current.SetSelectedGameObject(objectToSelect);
+            Debug.Log($"[TeamManagementUI] Sélection initiale : {objectToSelect.name}");
+        }
+    }
+
+    private void EnsureSelection()
+    {
+        if (EventSystem.current.currentSelectedGameObject == null)
+        {
+            Vector2 navigationInput = InputManager.Instance?.UIActions.Navigate.ReadValue<Vector2>() ?? Vector2.zero;
+            bool submitPressed = InputManager.Instance?.UIActions.Submit.WasPressedThisFrame() ?? false;
+            
+            if (navigationInput != Vector2.zero || submitPressed)
+            {
+                StartCoroutine(SetupInitialSelection());
+            }
+        }
+    }
 
     private void SelectCharacterForDetails(CharacterData_SO characterData)
     {
@@ -375,78 +530,21 @@ public static class TeamSlotUIExtensions
 
     private void UpdateCharacterDetailsPanel()
     {
-        // Cette logique est optionnelle. Vous pouvez la supprimer si le nouveau design
-        // n'inclut pas de panel de détails séparé.
         if (characterDetailsPanel == null) return;
-        
-        // Mettre le code d'affichage des détails ici si vous le conservez.
-        // Pour l'instant, on le laisse désactivé.
         characterDetailsPanel.SetActive(false);
     }
-    
-  	private void OnShowEquipmentPanel(CharacterData_SO character)
-    {
-        if (equipmentPanel != null)
-        {
-            gameObject.SetActive(false); // Hide this panel
-            equipmentPanel.ShowPanelFor(character);
-        }
-        else
-        {
-            Debug.LogError("[TeamManagementUI] EquipmentPanel reference is not set!");
-        }
-    }
-    
-    #endregion
-
-    #region Navigation
 
     private void OnCancelPressed()
     {
-        // Retourner au HubManager
         OnBackButtonClicked();
     }
 
     private void OnBackButtonClicked()
     {
+        // Marquer qu'on ne va PAS vers un sous-panel mais qu'on retourne au Hub
+        _isTransitioningToSubPanel = false;
         _hubManager?.GoToGeneralView();
     }
 
     #endregion
-    
-    private IEnumerator TransitionToPanel(GameObject panelToShow)
-    {
-        CanvasGroup currentPanelCanvasGroup = GetComponent<CanvasGroup>();
-        if (currentPanelCanvasGroup == null) currentPanelCanvasGroup = gameObject.AddComponent<CanvasGroup>();
-
-        CanvasGroup nextPanelCanvasGroup = panelToShow.GetComponent<CanvasGroup>();
-        if (nextPanelCanvasGroup == null) nextPanelCanvasGroup = panelToShow.AddComponent<CanvasGroup>();
-
-        float duration = 0.25f;
-        float elapsedTime = 0f;
-
-        // ÉTAPE 1 : Préparer le nouveau panel. On l'active, mais on le rend transparent.
-        panelToShow.SetActive(true);
-        nextPanelCanvasGroup.alpha = 0;
-
-        // ÉTAPE 2 : Animer les deux fondus en même temps dans une seule boucle.
-        while (elapsedTime < duration)
-        {
-            // Le panel actuel devient de plus en plus transparent.
-            currentPanelCanvasGroup.alpha = 1f - (elapsedTime / duration);
-        
-            // Le nouveau panel devient de plus en plus opaque.
-            nextPanelCanvasGroup.alpha = elapsedTime / duration;
-
-            elapsedTime += Time.unscaledDeltaTime;
-            yield return null;
-        }
-
-        // ÉTAPE 3 : S'assurer que les états finaux sont parfaits.
-        currentPanelCanvasGroup.alpha = 0;
-        nextPanelCanvasGroup.alpha = 1;
-
-        // C'est SEULEMENT MAINTENANT, à la toute fin, qu'on désactive l'ancien panel.
-        gameObject.SetActive(false);
-    }
 }
