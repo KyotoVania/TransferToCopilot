@@ -27,6 +27,9 @@ public class MenuManager : MonoBehaviour
     [Header("Timeline Management")]
     [SerializeField] private TimelineManager timelineManager;
     
+    [Header("Camera Management")]
+    [SerializeField] private MenuCameraManager cameraManager;
+    
     [Header("Options Management")]
     [SerializeField] private OptionsManager optionsManager;
     
@@ -55,6 +58,11 @@ public class MenuManager : MonoBehaviour
     private void Start()
     {
         Debug.Log("Start Menu Manager");
+        
+        // S'assurer que seul le menu principal est actif au démarrage
+        if (mainMenuPanel != null) mainMenuPanel.SetActive(true);
+        if (optionsPanel != null) optionsPanel.SetActive(false);
+        
         InitializeButtons();
         InitializeNavigation();
         LoadSettings();
@@ -62,6 +70,11 @@ public class MenuManager : MonoBehaviour
         if (timelineManager == null)
         {
             timelineManager = FindObjectOfType<TimelineManager>();
+        }
+        
+        if (cameraManager == null)
+        {
+            cameraManager = FindObjectOfType<MenuCameraManager>();
         }
         
         // Sélectionner le bouton Play par défaut
@@ -134,6 +147,13 @@ public class MenuManager : MonoBehaviour
     {
         mainMenuPanel.SetActive(false);
         optionsPanel.SetActive(true);
+        
+        // Transition de caméra vers la vue options
+        if (cameraManager != null)
+        {
+            cameraManager.TransitionToOptions();
+        }
+        
         StartCoroutine(SetInitialSelection());
     }
 
@@ -141,6 +161,13 @@ public class MenuManager : MonoBehaviour
     {
         optionsPanel.SetActive(false);
         mainMenuPanel.SetActive(true);
+        
+        // Transition de caméra vers la vue menu principal
+        if (cameraManager != null)
+        {
+            cameraManager.TransitionToMainMenu();
+        }
+        
         StartCoroutine(SetInitialSelection());
     }
 
@@ -166,8 +193,8 @@ public class MenuManager : MonoBehaviour
         SetupButtonNavigation(optionsButton, playButton, quitButton, null, null);
         SetupButtonNavigation(quitButton, optionsButton, null, null, null);
         
+        // Laisser le backButton avec sa navigation automatique (ne pas forcer Explicit)
         // La navigation du menu options est maintenant gérée par OptionsManager
-        SetupButtonNavigation(backButton, null, null, null, null);
     }
     
     private void SetupButtonNavigation(Button button, Button selectOnUp, Button selectOnDown, Button selectOnLeft, Button selectOnRight)
@@ -188,15 +215,38 @@ public class MenuManager : MonoBehaviour
         // Attendre une frame pour que tout soit initialisé
         yield return null;
         
+        // Désélectionner d'abord tout objet actuellement sélectionné
+        EventSystem.current.SetSelectedGameObject(null);
+        
+        // Attendre une frame supplémentaire
+        yield return null;
+        
         if (mainMenuPanel.activeInHierarchy && playButton != null)
         {
+            // Forcer la sélection du bouton Play
+            playButton.Select();
             EventSystem.current.SetSelectedGameObject(playButton.gameObject);
-            Debug.Log("[MenuManager] Sélection initiale: " + playButton.name);
+            Debug.Log("[MenuManager] Sélection initiale forcée: " + playButton.name);
+            
+            // Déclencher l'animation visuelle
+            if (visualEffects != null)
+            {
+                visualEffects.OnButtonHoverEnter(playButton);
+            }
         }
-        else if (optionsPanel.activeInHierarchy && backButton != null)
+        else if (optionsPanel.activeInHierarchy)
         {
-            EventSystem.current.SetSelectedGameObject(backButton.gameObject);
-            Debug.Log("[MenuManager] Sélection initiale: " + backButton.name);
+            // Dans le menu options, on laisse OptionsManager gérer la sélection
+            if (optionsManager != null)
+            {
+                optionsManager.SetInitialSelection();
+            }
+            else if (backButton != null)
+            {
+                backButton.Select();
+                EventSystem.current.SetSelectedGameObject(backButton.gameObject);
+                Debug.Log("[MenuManager] Sélection initiale: " + backButton.name);
+            }
         }
     }
     
@@ -231,7 +281,7 @@ public class MenuManager : MonoBehaviour
         GameObject currentSelected = EventSystem.current.currentSelectedGameObject;
         
         // Animer le bouton actuellement sélectionné
-        if (currentSelected != null && currentSelected != lastSelectedObject)
+        if (currentSelected != lastSelectedObject)
         {
             // Remettre l'ancien bouton à sa taille normale
             if (lastSelectedObject != null)
@@ -239,8 +289,15 @@ public class MenuManager : MonoBehaviour
                 AnimateButton(lastSelectedObject, Vector3.one, false);
             }
             
-            // Agrandir le nouveau bouton sélectionné
-            AnimateButton(currentSelected, Vector3.one * buttonScaleMultiplier, true);
+            // Agrandir le nouveau bouton sélectionné seulement s'il fait partie du menu actif
+            if (currentSelected != null)
+            {
+                Button selectedButton = currentSelected.GetComponent<Button>();
+                if (selectedButton != null && selectedButton.IsInteractable())
+                {
+                    AnimateButton(currentSelected, Vector3.one * buttonScaleMultiplier, true);
+                }
+            }
             
             lastSelectedObject = currentSelected;
         }

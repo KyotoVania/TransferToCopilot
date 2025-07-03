@@ -186,13 +186,20 @@ public class InputTargetingManager : MonoBehaviour
     
     private void EnterTargetingMode()
     {
-        if (debugLogs) Debug.Log("[InputTargetingManager] Entering targeting mode.");
+        if (debugLogs) Debug.Log("[InputTargetingManager] Entering targeting mode WITH camera lock.");
         ScanForTargetableBuildings();
         if (targetableBuildings.Count == 0) return;
 
         isTargetingMode = true;
         SelectClosestBuildingAsDefault();
-        UpdateGamepadTarget();
+        UpdateGamepadTarget(); // This will now lock camera since we're entering lock mode
+        
+        // Explicitly lock the camera when entering this mode
+        var cameraController = FindFirstObjectByType<RhythmGameCameraController>();
+        if (cameraController != null && targetableBuildings.Count > 0)
+        {
+            cameraController.LockOnTarget(targetableBuildings[currentTargetIndex].transform);
+        }
     }
 
     private void ExitTargetingMode()
@@ -204,12 +211,18 @@ public class InputTargetingManager : MonoBehaviour
         var cameraController = FindFirstObjectByType<RhythmGameCameraController>();
         if (cameraController != null) cameraController.UnlockCamera();
         
-        targetableBuildings.Clear();
+        targetableBuildings.Clear();        
     }
 
     private void OnCycleTargetPressed(InputAction.CallbackContext context)
     {
-        if (!isTargetingMode) EnterTargetingMode();
+        // Initialize targeting mode if not already active
+        if (!isTargetingMode) 
+        {
+            InitializeTargetingWithoutCameraLock();
+            return;
+        }
+        
         if (targetableBuildings.Count <= 1) return;
 
         float axisValue = context.ReadValue<float>();
@@ -219,6 +232,26 @@ public class InputTargetingManager : MonoBehaviour
         else currentTargetIndex = (currentTargetIndex - 1 + targetableBuildings.Count) % targetableBuildings.Count;
         
         UpdateGamepadTarget();
+    }
+
+    /// <summary>
+    /// Initialize targeting mode without locking the camera - only updates highlights
+    /// </summary>
+    private void InitializeTargetingWithoutCameraLock()
+    {
+        if (debugLogs) Debug.Log("[InputTargetingManager] Initializing targeting mode without camera lock.");
+        ScanForTargetableBuildings();
+        if (targetableBuildings.Count == 0) return;
+
+        isTargetingMode = true;
+        SelectClosestBuildingAsDefault();
+        
+        // Only update the highlight, don't lock the camera
+        if (targetableBuildings.Count > 0)
+        {
+            Building targetBuilding = targetableBuildings[currentTargetIndex];
+            UpdateHoveredBuilding(targetBuilding);
+        }
     }
 
     /// <summary>
@@ -240,8 +273,9 @@ public class InputTargetingManager : MonoBehaviour
         Building targetBuilding = targetableBuildings[currentTargetIndex];
         UpdateHoveredBuilding(targetBuilding);
 
+        // Only lock camera if we're already in camera lock mode
         var cameraController = FindFirstObjectByType<RhythmGameCameraController>();
-        if (cameraController != null)
+        if (cameraController != null && cameraController.IsLocked)
         {
             cameraController.LockOnTarget(targetBuilding.transform);
         }

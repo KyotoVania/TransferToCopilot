@@ -57,7 +57,7 @@ public class OptionsManager : MonoBehaviour
         if (isInitialized)
         {
             LoadCurrentSettings();
-            StartCoroutine(SetInitialSelection());
+            SetInitialSelection(); // CORRECTION: Pas de StartCoroutine
         }
     }
 
@@ -315,24 +315,63 @@ public class OptionsManager : MonoBehaviour
         {
             if (EventSystem.current.currentSelectedGameObject == null)
             {
-                StartCoroutine(SetInitialSelection());
+                SetInitialSelection(); // CORRECTION: Pas de StartCoroutine
             }
         }
     }
 
-    private IEnumerator SetInitialSelection()
+    public void SetInitialSelection()
     {
-        yield return null; // Attendre une frame
+        StartCoroutine(DelayedInitialSelection());
+    }
 
-        if (musicVolumeSlider != null && musicVolumeSlider.gameObject.activeInHierarchy)
+    private IEnumerator DelayedInitialSelection()
+    {
+        // Attendre une frame pour que tout soit initialisé
+        yield return null;
+    
+        // Désélectionner d'abord tout
+        EventSystem.current.SetSelectedGameObject(null);
+    
+        yield return null;
+    
+        // Sélectionner le premier élément interactif du menu options
+        // Cela pourrait être le premier slider, toggle ou le bouton Back
+        Selectable firstSelectable = null;
+    
+        // Chercher d'abord dans les sliders (volume musique, volume SFX, etc.)
+        Slider[] sliders = optionsPanel.GetComponentsInChildren<Slider>(false);
+        if (sliders.Length > 0)
         {
-            EventSystem.current.SetSelectedGameObject(musicVolumeSlider.gameObject);
-            Debug.Log("[OptionsManager] Sélection initiale: Music Volume Slider");
+            firstSelectable = sliders[0];
         }
-        else if (backButton != null)
+    
+        // Si pas de slider, chercher les toggles
+        if (firstSelectable == null)
         {
-            EventSystem.current.SetSelectedGameObject(backButton.gameObject);
-            Debug.Log("[OptionsManager] Sélection initiale: Back Button");
+            Toggle[] toggles = optionsPanel.GetComponentsInChildren<Toggle>(false);
+            if (toggles.Length > 0)
+            {
+                firstSelectable = toggles[0];
+            }
+        }
+    
+        // Si toujours rien, prendre le bouton Back
+        if (firstSelectable == null)
+        {
+            Button[] buttons = optionsPanel.GetComponentsInChildren<Button>(false);
+            if (buttons.Length > 0)
+            {
+                firstSelectable = buttons[0];
+            }
+        }
+    
+        // Sélectionner l'élément trouvé
+        if (firstSelectable != null && firstSelectable.interactable)
+        {
+            firstSelectable.Select();
+            EventSystem.current.SetSelectedGameObject(firstSelectable.gameObject);
+            Debug.Log($"[OptionsManager] Sélection initiale: {firstSelectable.name}");
         }
     }
 
@@ -381,7 +420,7 @@ public class OptionsManager : MonoBehaviour
         {
             optionsPanel.SetActive(true);
             LoadCurrentSettings();
-            StartCoroutine(SetInitialSelection());
+            SetInitialSelection(); // CORRECTION: Pas de StartCoroutine
         }
     }
 
@@ -411,4 +450,3 @@ public class OptionsManager : MonoBehaviour
 
     #endregion
 }
-
