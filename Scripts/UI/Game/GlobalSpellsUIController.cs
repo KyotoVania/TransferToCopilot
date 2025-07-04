@@ -1,5 +1,4 @@
-﻿
-using UnityEngine;
+﻿using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
 using System.Collections;
@@ -13,6 +12,7 @@ using Gameplay;
 /// <summary>
 /// Gère le panneau d'interface utilisateur pour les sorts globaux, affichant leur statut,
 /// leur cooldown, et fournissant un retour visuel pendant la saisie de la séquence.
+/// Supports both mouse hover (individual panels) and gamepad toggle (all panels).
 /// </summary>
 public class GlobalSpellsUIController : MonoBehaviour
 {
@@ -33,6 +33,10 @@ public class GlobalSpellsUIController : MonoBehaviour
 
         // Référence interne aux données du sort que cette carte représente.
         [HideInInspector] public GlobalSpellData_SO SpellData;
+        
+        // === NOUVEAU : Panneau cloné pour cette carte ===
+        [HideInInspector] public GameObject ClonedInfoPanel;
+        [HideInInspector] public CanvasGroup ClonedPanelCanvasGroup;
     }
 
     [Header("UI References")]
@@ -52,12 +56,16 @@ public class GlobalSpellsUIController : MonoBehaviour
     // Références aux managers et variables internes
     private GlobalSpellManager globalSpellManager; // Référence directe, c'est correct.
     private SequenceController _sequenceController;
+    private InputManager _inputManager; // NOUVEAU : Référence pour le TriggerUi
     
-    // Variables pour l'animation du panneau d'info
+    // Variables pour l'animation du panneau d'info (LOGIQUE CONSERVÉE)
     private CanvasGroup infoPanelCanvasGroup;
     private Coroutine currentPanelAnimation;
     private RectTransform infoPanelRectTransform;
-    private Transform originalInfoPanelParent; 
+    private Transform originalInfoPanelParent;
+    
+    // === NOUVEAU : Mode toggle simple ===
+    private bool _isGlobalDisplayMode = false;
 
     // Pour optimiser la mise à jour du texte
     private readonly StringBuilder stringBuilder = new StringBuilder();
@@ -69,12 +77,14 @@ public class GlobalSpellsUIController : MonoBehaviour
         // Récupérer les instances des managers.
         globalSpellManager = FindFirstObjectByType<GlobalSpellManager>();
         _sequenceController = FindObjectOfType<SequenceController>();
+        _inputManager = InputManager.Instance; // NOUVEAU
 
         // Valider que les managers nécessaires ont été trouvés.
         if (globalSpellManager == null) Debug.LogError("[GlobalSpellsUIController] Could not find GlobalSpellManager in the scene!", this);
         if (_sequenceController == null) Debug.LogError("[GlobalSpellsUIController] Could not find SequenceController in the scene!", this);
+        if (_inputManager == null) Debug.LogError("[GlobalSpellsUIController] InputManager.Instance is null!", this);
         
-        // Préparer le panneau d'information.
+        // Préparer le panneau d'information (LOGIQUE ORIGINALE CONSERVÉE).
         if (infoPanelObject != null)
         {
             originalInfoPanelParent = infoPanelObject.transform.parent;
@@ -93,20 +103,24 @@ public class GlobalSpellsUIController : MonoBehaviour
     void OnEnable()
     {
         // S'abonner aux événements lorsque l'UI devient active.
-        // --- CORRECTION : On utilise la bonne méthode handler ---
-        GlobalSpellManager.OnGlobalSpellsLoaded += PopulateSpellCards; 
+        GlobalSpellManager.OnGlobalSpellsLoaded += PopulateSpellCards;
 
         if (_sequenceController != null)
         {
             SequenceController.OnSequenceKeyPressed += HandleSequenceKeyPress;
             SequenceController.OnSequenceDisplayCleared += HandleSequenceCleared;
         }
+        
+        // NOUVEAU : Input pour le toggle
+        if (_inputManager != null)
+        {
+            _inputManager.GameplayActions.TriggerUi.performed += OnTriggerUiPerformed;
+        }
     }
 
     void OnDisable()
     {
         // Se désabonner pour éviter les erreurs.
-        // --- CORRECTION : On utilise la bonne méthode handler ---
         GlobalSpellManager.OnGlobalSpellsLoaded -= PopulateSpellCards;
 
         if (_sequenceController != null)
@@ -114,6 +128,15 @@ public class GlobalSpellsUIController : MonoBehaviour
             SequenceController.OnSequenceKeyPressed -= HandleSequenceKeyPress;
             SequenceController.OnSequenceDisplayCleared -= HandleSequenceCleared;
         }
+        
+        // NOUVEAU : Désabonnement input
+        if (_inputManager != null)
+        {
+            _inputManager.GameplayActions.TriggerUi.performed -= OnTriggerUiPerformed;
+        }
+        
+        // NOUVEAU : Nettoyage des panneaux clonés
+        CleanupAllClonedPanels();
     }
 
     void Update()
@@ -132,6 +155,119 @@ public class GlobalSpellsUIController : MonoBehaviour
     private void HandleSequenceCleared()
     {
         UpdateGlowFeedback();
+    }
+    
+    // NOUVEAU : Gestion du toggle
+    private void OnTriggerUiPerformed(UnityEngine.InputSystem.InputAction.CallbackContext context)
+    {
+        ToggleGlobalDisplayMode();
+    }
+    #endregion
+
+    #region Global Display Mode - NOUVEAU
+    private void ToggleGlobalDisplayMode()
+    {
+        _isGlobalDisplayMode = !_isGlobalDisplayMode;
+        
+        Debug.Log($"[GlobalSpellsUIController] Mode global : {(_isGlobalDisplayMode ? "ON" : "OFF")}");
+        
+        if (_isGlobalDisplayMode)
+        {
+            // Cacher le panneau original s'il est visible
+            if (currentPanelAnimation != null) StopCoroutine(currentPanelAnimation);
+            currentPanelAnimation = StartCoroutine(AnimateInfoPanel(false));
+            
+            // Créer et afficher tous les panneaux clonés
+            ShowAllClonedPanels();
+        }
+        else
+        {
+            // Cacher et détruire tous les panneaux clonés
+            HideAllClonedPanels();
+        }
+    }
+    
+    private void ShowAllClonedPanels()
+    {
+        foreach (var card in spellCards)
+        {
+            if (card.CardRoot.activeSelf && card.SpellData != null)
+            {
+                CreateAndShowClonedPanel(card);
+            }
+        }
+    }
+    
+    private void HideAllClonedPanels()
+    {
+        foreach (var card in spellCards)
+        {
+            if (card.ClonedInfoPanel != null)
+            {
+                Destroy(card.ClonedInfoPanel);
+                card.ClonedInfoPanel = null;
+            }
+        }
+    }
+    
+    private void CreateAndShowClonedPanel(SpellCardUI card)
+    {
+        if (infoPanelObject == null || card.SpellData == null) return;
+        
+        // Créer le clone
+        card.ClonedInfoPanel = Instantiate(infoPanelObject);
+        card.ClonedInfoPanel.name = $"InfoPanel_Clone_{spellCards.IndexOf(card)}";
+        
+        // Setup du clone
+        card.ClonedPanelCanvasGroup = card.ClonedInfoPanel.GetComponent<CanvasGroup>() ?? 
+                                     card.ClonedInfoPanel.AddComponent<CanvasGroup>();
+        
+        // LOGIQUE DE PARENTAGE ORIGINALE CONSERVÉE
+        card.ClonedInfoPanel.transform.SetParent(card.CardRoot.transform);
+        card.ClonedInfoPanel.transform.localScale = Vector3.one; // Ensure correct scale
+        
+        // NOUVEAU : Copier exactement les propriétés du panneau original
+        RectTransform clonedRect = card.ClonedInfoPanel.GetComponent<RectTransform>();
+        if (clonedRect != null && infoPanelRectTransform != null)
+        {
+            // Copier toutes les propriétés importantes du RectTransform
+            clonedRect.sizeDelta = infoPanelRectTransform.sizeDelta;
+            clonedRect.anchorMin = infoPanelRectTransform.anchorMin;
+            clonedRect.anchorMax = infoPanelRectTransform.anchorMax;
+            clonedRect.pivot = infoPanelRectTransform.pivot;
+            clonedRect.anchoredPosition = new Vector2(0, 150f); // Position finale de l'animation hover
+        }
+        
+        // Mettre à jour le contenu
+        UpdateClonedPanelContent(card);
+        
+        // Afficher immédiatement (pas d'animation pour cette première étape)
+        card.ClonedInfoPanel.SetActive(true);
+        card.ClonedPanelCanvasGroup.alpha = 1f;
+    }
+    
+    private void UpdateClonedPanelContent(SpellCardUI card)
+    {
+        if (card.ClonedInfoPanel == null || card.SpellData == null) return;
+        
+        // Trouver les composants de texte dans le clone
+        TextMeshProUGUI clonedTitle = card.ClonedInfoPanel.transform.Find("Text_Title")?.GetComponent<TextMeshProUGUI>();
+        TextMeshProUGUI clonedSequence = card.ClonedInfoPanel.transform.Find("Text")?.GetComponent<TextMeshProUGUI>();
+        
+        if (clonedTitle != null) clonedTitle.text = card.SpellData.DisplayName;
+        if (clonedSequence != null) clonedSequence.text = FormatSequence(card.SpellData.SpellSequence);
+    }
+    
+    private void CleanupAllClonedPanels()
+    {
+        foreach (var card in spellCards)
+        {
+            if (card.ClonedInfoPanel != null)
+            {
+                Destroy(card.ClonedInfoPanel);
+                card.ClonedInfoPanel = null;
+            }
+        }
     }
     #endregion
 
@@ -160,7 +296,19 @@ public class GlobalSpellsUIController : MonoBehaviour
             {
                 spellCards[i].CardRoot.SetActive(false);
                 spellCards[i].SpellData = null;
+                // Nettoyer le panneau cloné s'il existe
+                if (spellCards[i].ClonedInfoPanel != null)
+                {
+                    Destroy(spellCards[i].ClonedInfoPanel);
+                    spellCards[i].ClonedInfoPanel = null;
+                }
             }
+        }
+        
+        // Si on est en mode global, rafraîchir l'affichage
+        if (_isGlobalDisplayMode)
+        {
+            ShowAllClonedPanels();
         }
     }
 
@@ -234,6 +382,10 @@ public class GlobalSpellsUIController : MonoBehaviour
 
     private void OnCardHoverEnter(SpellCardUI hoveredCard)
     {
+        // NOUVEAU : Ignorer les hovers en mode global
+        if (_isGlobalDisplayMode) return;
+        
+        // LOGIQUE ORIGINALE CONSERVÉE
         if (infoPanelObject == null || hoveredCard.SpellData == null) return;
 
         infoPanelTitleText.text = hoveredCard.SpellData.DisplayName;
@@ -247,11 +399,16 @@ public class GlobalSpellsUIController : MonoBehaviour
 
     private void OnCardHoverExit()
     {
+        // NOUVEAU : Ignorer les hovers en mode global
+        if (_isGlobalDisplayMode) return;
+        
+        // LOGIQUE ORIGINALE CONSERVÉE
         if (infoPanelObject == null) return;
         if (currentPanelAnimation != null) StopCoroutine(currentPanelAnimation);
         currentPanelAnimation = StartCoroutine(AnimateInfoPanel(false));
     }
 
+    // LOGIQUE ORIGINALE CONSERVÉE
     private IEnumerator AnimateInfoPanel(bool show)
     {
         if (show)
@@ -320,3 +477,4 @@ public class GlobalSpellsUIController : MonoBehaviour
     }
     #endregion
 }
+

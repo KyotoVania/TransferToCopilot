@@ -171,6 +171,15 @@ public partial class @GameControls: IInputActionCollection2, IDisposable
                     ""processors"": """",
                     ""interactions"": """",
                     ""initialStateCheck"": true
+                },
+                {
+                    ""name"": ""TriggerUi"",
+                    ""type"": ""Button"",
+                    ""id"": ""3c7e19f3-c3ec-4c83-801e-922f803d1e47"",
+                    ""expectedControlType"": """",
+                    ""processors"": """",
+                    ""interactions"": """",
+                    ""initialStateCheck"": false
                 }
             ],
             ""bindings"": [
@@ -413,6 +422,28 @@ public partial class @GameControls: IInputActionCollection2, IDisposable
                     ""processors"": """",
                     ""groups"": """",
                     ""action"": ""CameraMove"",
+                    ""isComposite"": false,
+                    ""isPartOfComposite"": false
+                },
+                {
+                    ""name"": """",
+                    ""id"": ""18d44481-dad9-4c91-8e64-3afd3c6028f1"",
+                    ""path"": ""<Keyboard>/rightBracket"",
+                    ""interactions"": """",
+                    ""processors"": """",
+                    ""groups"": """",
+                    ""action"": ""TriggerUi"",
+                    ""isComposite"": false,
+                    ""isPartOfComposite"": false
+                },
+                {
+                    ""name"": """",
+                    ""id"": ""59ef2554-949d-4e26-8118-df0b08313c1c"",
+                    ""path"": ""<Gamepad>/buttonNorth"",
+                    ""interactions"": """",
+                    ""processors"": """",
+                    ""groups"": """",
+                    ""action"": ""TriggerUi"",
                     ""isComposite"": false,
                     ""isPartOfComposite"": false
                 }
@@ -683,6 +714,7 @@ public partial class @GameControls: IInputActionCollection2, IDisposable
         m_Gameplay_CameraZoom = m_Gameplay.FindAction("CameraZoom", throwIfNotFound: true);
         m_Gameplay_CameraMove = m_Gameplay.FindAction("CameraMove", throwIfNotFound: true);
         m_Gameplay_CameraPan = m_Gameplay.FindAction("CameraPan", throwIfNotFound: true);
+        m_Gameplay_TriggerUi = m_Gameplay.FindAction("TriggerUi", throwIfNotFound: true);
         // UI
         m_UI = asset.FindActionMap("UI", throwIfNotFound: true);
         m_UI_Navigate = m_UI.FindAction("Navigate", throwIfNotFound: true);
@@ -780,6 +812,7 @@ public partial class @GameControls: IInputActionCollection2, IDisposable
     private readonly InputAction m_Gameplay_CameraZoom;
     private readonly InputAction m_Gameplay_CameraMove;
     private readonly InputAction m_Gameplay_CameraPan;
+    private readonly InputAction m_Gameplay_TriggerUi;
     /// <summary>
     /// Provides access to input actions defined in input action map "Gameplay".
     /// </summary>
@@ -827,6 +860,10 @@ public partial class @GameControls: IInputActionCollection2, IDisposable
         /// Provides access to the underlying input action "Gameplay/CameraPan".
         /// </summary>
         public InputAction @CameraPan => m_Wrapper.m_Gameplay_CameraPan;
+        /// <summary>
+        /// Provides access to the underlying input action "Gameplay/TriggerUi".
+        /// </summary>
+        public InputAction @TriggerUi => m_Wrapper.m_Gameplay_TriggerUi;
         /// <summary>
         /// Provides access to the underlying input action map instance.
         /// </summary>
@@ -880,6 +917,9 @@ public partial class @GameControls: IInputActionCollection2, IDisposable
             @CameraPan.started += instance.OnCameraPan;
             @CameraPan.performed += instance.OnCameraPan;
             @CameraPan.canceled += instance.OnCameraPan;
+            @TriggerUi.started += instance.OnTriggerUi;
+            @TriggerUi.performed += instance.OnTriggerUi;
+            @TriggerUi.canceled += instance.OnTriggerUi;
         }
 
         /// <summary>
@@ -918,6 +958,9 @@ public partial class @GameControls: IInputActionCollection2, IDisposable
             @CameraPan.started -= instance.OnCameraPan;
             @CameraPan.performed -= instance.OnCameraPan;
             @CameraPan.canceled -= instance.OnCameraPan;
+            @TriggerUi.started -= instance.OnTriggerUi;
+            @TriggerUi.performed -= instance.OnTriggerUi;
+            @TriggerUi.canceled -= instance.OnTriggerUi;
         }
 
         /// <summary>
@@ -1161,6 +1204,13 @@ public partial class @GameControls: IInputActionCollection2, IDisposable
         /// <seealso cref="UnityEngine.InputSystem.InputAction.performed" />
         /// <seealso cref="UnityEngine.InputSystem.InputAction.canceled" />
         void OnCameraPan(InputAction.CallbackContext context);
+        /// <summary>
+        /// Method invoked when associated input action "TriggerUi" is either <see cref="UnityEngine.InputSystem.InputAction.started" />, <see cref="UnityEngine.InputSystem.InputAction.performed" /> or <see cref="UnityEngine.InputSystem.InputAction.canceled" />.
+        /// </summary>
+        /// <seealso cref="UnityEngine.InputSystem.InputAction.started" />
+        /// <seealso cref="UnityEngine.InputSystem.InputAction.performed" />
+        /// <seealso cref="UnityEngine.InputSystem.InputAction.canceled" />
+        void OnTriggerUi(InputAction.CallbackContext context);
     }
     /// <summary>
     /// Interface to implement callback methods for all input action callbacks associated with input actions defined by "UI" which allows adding and removing callbacks.

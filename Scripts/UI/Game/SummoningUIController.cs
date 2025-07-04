@@ -1,5 +1,4 @@
-﻿
-using UnityEngine;
+﻿using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
 using System.Collections;
@@ -12,6 +11,7 @@ using Gameplay;
 /// <summary>
 /// Manages the UI panel for the 4 player units, showing their status,
 /// cost, cooldown, and providing feedback during sequence input.
+/// Supports both mouse hover (individual panels) and gamepad toggle (all panels).
 /// </summary>
 public class SummoningUIController : MonoBehaviour
 {
@@ -31,6 +31,10 @@ public class SummoningUIController : MonoBehaviour
         [Tooltip("Text to display the remaining cooldown time.")]
         public TextMeshProUGUI CooldownTimerText;
         [HideInInspector] public CharacterData_SO CharacterData;
+        
+        // === NOUVEAU : Panneau cloné pour cette carte ===
+        [HideInInspector] public GameObject ClonedInfoPanel;
+        [HideInInspector] public CanvasGroup ClonedPanelCanvasGroup;
     }
 
     [Header("Card References")]
@@ -51,27 +55,34 @@ public class SummoningUIController : MonoBehaviour
     private UnitSpawner _unitSpawner; 
     private SequenceController _sequenceController;
     private MusicManager _musicManager;
+    private InputManager _inputManager;
 
-    // Variables pour l'animation du panneau d'info
+    // Variables pour l'animation du panneau d'info original (LOGIQUE CONSERVÉE)
     private CanvasGroup infoPanelCanvasGroup;
     private Coroutine currentPanelAnimation;
     private Transform originalInfoPanelParent;
     private RectTransform infoPanelRectTransform;
+    
+    // === NOUVEAU : Mode toggle simple ===
+    private bool _isGlobalDisplayMode = false;
 
     #region Unity Lifecycle
     void Awake()
     {
         // Récupérer les instances des managers
         _teamManager = TeamManager.Instance;
-        _unitSpawner = FindFirstObjectByType<UnitSpawner>(); // Initialisé ici
+        _unitSpawner = FindFirstObjectByType<UnitSpawner>();
         _sequenceController = FindFirstObjectByType<SequenceController>();
         _musicManager = MusicManager.Instance;
+        _inputManager = InputManager.Instance;
 
         // Valider les dépendances
         if (_teamManager == null) Debug.LogError("[SummoningUIController] TeamManager.Instance is null!", this);
         if (_unitSpawner == null) Debug.LogError("[SummoningUIController] Could not find UnitSpawner in the scene!", this);
         if (_sequenceController == null) Debug.LogError("[SummoningUIController] Could not find SequenceController in the scene!", this);
+        if (_inputManager == null) Debug.LogError("[SummoningUIController] InputManager.Instance is null!", this);
         
+        // LOGIQUE ORIGINALE CONSERVÉE
         if (infoPanelObject != null)
         {
             originalInfoPanelParent = infoPanelObject.transform.parent;
@@ -88,26 +99,41 @@ public class SummoningUIController : MonoBehaviour
 
     void OnEnable()
     {
-        // S'abonner aux événements
+        // LOGIQUE ORIGINALE CONSERVÉE
         if (_teamManager != null)
         {
             TeamManager.OnActiveTeamChanged += HandleTeamChanged;
-            // Appel initial pour peupler l'UI avec l'équipe actuelle
             HandleTeamChanged(_teamManager.ActiveTeam);
+        }
+        
+        // NOUVEAU : Input pour le toggle
+        if (_inputManager != null)
+        {
+            _inputManager.GameplayActions.TriggerUi.performed += OnTriggerUiPerformed;
         }
     }
 
     void OnDisable()
     {
-        // Se désabonner pour éviter les fuites de mémoire
+        // LOGIQUE ORIGINALE CONSERVÉE
         if (_teamManager != null)
         {
             TeamManager.OnActiveTeamChanged -= HandleTeamChanged;
         }
+        
+        // NOUVEAU : Désabonnement input
+        if (_inputManager != null)
+        {
+            _inputManager.GameplayActions.TriggerUi.performed -= OnTriggerUiPerformed;
+        }
+        
+        // NOUVEAU : Nettoyage des panneaux clonés
+        CleanupAllClonedPanels();
     }
 
     void Update()
     {
+        // LOGIQUE ORIGINALE CONSERVÉE
         UpdateGlowFeedback();
         UpdateCooldownVisuals();
     }
@@ -119,9 +145,121 @@ public class SummoningUIController : MonoBehaviour
         Debug.Log($"[SummoningUIController] Active team changed. New team size: {activeTeam.Count}");
         PopulateSummonCards(activeTeam);
     }
+    
+    // NOUVEAU : Gestion du toggle
+    private void OnTriggerUiPerformed(UnityEngine.InputSystem.InputAction.CallbackContext context)
+    {
+        ToggleGlobalDisplayMode();
+    }
     #endregion
 
-    #region UI Logic
+    #region Global Display Mode - NOUVEAU
+    private void ToggleGlobalDisplayMode()
+    {
+        _isGlobalDisplayMode = !_isGlobalDisplayMode;
+        
+        Debug.Log($"[SummoningUIController] Mode global : {(_isGlobalDisplayMode ? "ON" : "OFF")}");
+        
+        if (_isGlobalDisplayMode)
+        {
+            // Cacher le panneau original s'il est visible
+            if (currentPanelAnimation != null) StopCoroutine(currentPanelAnimation);
+            currentPanelAnimation = StartCoroutine(AnimateInfoPanel(false));
+            
+            // Créer et afficher tous les panneaux clonés
+            ShowAllClonedPanels();
+        }
+        else
+        {
+            // Cacher et détruire tous les panneaux clonés
+            HideAllClonedPanels();
+        }
+    }
+    
+    private void ShowAllClonedPanels()
+    {
+        foreach (var card in summonCards)
+        {
+            if (card.CardRoot.activeSelf && card.CharacterData != null)
+            {
+                CreateAndShowClonedPanel(card);
+            }
+        }
+    }
+    
+    private void HideAllClonedPanels()
+    {
+        foreach (var card in summonCards)
+        {
+            if (card.ClonedInfoPanel != null)
+            {
+                Destroy(card.ClonedInfoPanel);
+                card.ClonedInfoPanel = null;
+            }
+        }
+    }
+    
+    private void CreateAndShowClonedPanel(SummoningCardUI card)
+    {
+        if (infoPanelObject == null || card.CharacterData == null) return;
+        
+        // Créer le clone
+        card.ClonedInfoPanel = Instantiate(infoPanelObject);
+        card.ClonedInfoPanel.name = $"InfoPanel_Clone_{summonCards.IndexOf(card)}";
+        
+        // Setup du clone
+        card.ClonedPanelCanvasGroup = card.ClonedInfoPanel.GetComponent<CanvasGroup>() ?? 
+                                     card.ClonedInfoPanel.AddComponent<CanvasGroup>();
+        
+        // LOGIQUE DE PARENTAGE ORIGINALE CONSERVÉE
+        card.ClonedInfoPanel.transform.SetParent(card.CardRoot.transform);
+        card.ClonedInfoPanel.transform.localScale = Vector3.one; // Ensure correct scale
+        // NOUVEAU : Copier exactement les propriétés du panneau original
+        RectTransform clonedRect = card.ClonedInfoPanel.GetComponent<RectTransform>();
+        if (clonedRect != null && infoPanelRectTransform != null)
+        {
+            // Copier toutes les propriétés importantes du RectTransform
+            clonedRect.sizeDelta = infoPanelRectTransform.sizeDelta;
+            clonedRect.anchorMin = infoPanelRectTransform.anchorMin;
+            clonedRect.anchorMax = infoPanelRectTransform.anchorMax;
+            clonedRect.pivot = infoPanelRectTransform.pivot;
+            clonedRect.anchoredPosition = new Vector2(0, 150f); // Position finale de l'animation hover
+        }
+        
+        // Mettre à jour le contenu
+        UpdateClonedPanelContent(card);
+        
+        // Afficher immédiatement (pas d'animation pour cette première étape)
+        card.ClonedInfoPanel.SetActive(true);
+        card.ClonedPanelCanvasGroup.alpha = 1f;
+    }
+    
+    private void UpdateClonedPanelContent(SummoningCardUI card)
+    {
+        if (card.ClonedInfoPanel == null || card.CharacterData == null) return;
+        
+        // Trouver les composants de texte dans le clone
+        TextMeshProUGUI clonedTitle = card.ClonedInfoPanel.transform.Find("Text_Title")?.GetComponent<TextMeshProUGUI>();
+        TextMeshProUGUI clonedSequence = card.ClonedInfoPanel.transform.Find("Text")?.GetComponent<TextMeshProUGUI>();
+        
+        if (clonedTitle != null) clonedTitle.text = card.CharacterData.DisplayName;
+        if (clonedSequence != null) clonedSequence.text = FormatSequence(card.CharacterData.InvocationSequence);
+    }
+    
+    private void CleanupAllClonedPanels()
+    {
+        foreach (var card in summonCards)
+        {
+            if (card.ClonedInfoPanel != null)
+            {
+                Destroy(card.ClonedInfoPanel);
+                card.ClonedInfoPanel = null;
+            }
+        }
+    }
+    #endregion
+
+    #region UI Logic - LOGIQUE ORIGINALE CONSERVÉE
     private void PopulateSummonCards(List<CharacterData_SO> activeTeam)
     {
         for (int i = 0; i < summonCards.Count; i++)
@@ -143,7 +281,19 @@ public class SummoningUIController : MonoBehaviour
             {
                 summonCards[i].CardRoot.SetActive(false);
                 summonCards[i].CharacterData = null;
+                // Nettoyer le panneau cloné s'il existe
+                if (summonCards[i].ClonedInfoPanel != null)
+                {
+                    Destroy(summonCards[i].ClonedInfoPanel);
+                    summonCards[i].ClonedInfoPanel = null;
+                }
             }
+        }
+        
+        // Si on est en mode global, rafraîchir l'affichage
+        if (_isGlobalDisplayMode)
+        {
+            ShowAllClonedPanels();
         }
     }
 
@@ -225,6 +375,10 @@ public class SummoningUIController : MonoBehaviour
 
     private void OnCardHoverEnter(SummoningCardUI hoveredCard)
     {
+        // NOUVEAU : Ignorer les hovers en mode global
+        if (_isGlobalDisplayMode) return;
+        
+        // LOGIQUE ORIGINALE CONSERVÉE
         if (infoPanelObject == null || hoveredCard.CharacterData == null) return;
 
         infoPanelTitleText.text = hoveredCard.CharacterData.DisplayName;
@@ -238,11 +392,16 @@ public class SummoningUIController : MonoBehaviour
 
     private void OnCardHoverExit()
     {
+        // NOUVEAU : Ignorer les hovers en mode global
+        if (_isGlobalDisplayMode) return;
+        
+        // LOGIQUE ORIGINALE CONSERVÉE
         if (infoPanelObject == null) return;
         if (currentPanelAnimation != null) StopCoroutine(currentPanelAnimation);
         currentPanelAnimation = StartCoroutine(AnimateInfoPanel(false));
     }
 
+    // LOGIQUE ORIGINALE CONSERVÉE
     private IEnumerator AnimateInfoPanel(bool show)
     {
         if (show)
@@ -277,6 +436,7 @@ public class SummoningUIController : MonoBehaviour
         currentPanelAnimation = null;
     }
 
+    // LOGIQUE ORIGINALE CONSERVÉE
     private string FormatSequence(List<InputType> sequence)
     {
         if (sequence == null || sequence.Count == 0) return "N/A";
