@@ -78,7 +78,8 @@ namespace ScriptableObjects
     [Title("Hub & UI")]
     [AssetsOnly]
     public GameObject HubVisualPrefab;
-
+    [AssetsOnly]
+    public GameObject MenuAnimationPrefab;
     [Title("Audio (Wwise)")]
     [InfoBox("Assigner les Events Wwise spécifiques à ce personnage.")]
     public AK.Wwise.Event InvocationSound; // Décommenté - Assigne tes events Wwise ici

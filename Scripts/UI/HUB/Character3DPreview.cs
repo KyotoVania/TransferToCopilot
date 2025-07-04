@@ -39,7 +39,6 @@ public class Character3DPreview : MonoBehaviour, IPointerDownHandler, IPointerUp
         }
     }
 
-    // --- NOUVELLES MÉTHODES DE GESTION DE LA SOURIS ---
 
     public void OnPointerDown(PointerEventData eventData)
     {
@@ -68,6 +67,7 @@ public class Character3DPreview : MonoBehaviour, IPointerDownHandler, IPointerUp
         ClearPreview();
         if (characterPrefab == null) return;
         _currentCharacterInstance = Instantiate(characterPrefab, characterSpawnPoint.position, characterSpawnPoint.rotation, characterSpawnPoint);
+       
         SetLayerRecursively(_currentCharacterInstance, _previewLayer);
     }
     public void ClearPreview()

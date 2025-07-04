@@ -31,7 +31,7 @@ public class CardVisualController : MonoBehaviour, IPointerEnterHandler, IPointe
     void Awake()
     {
         // On vérifie que toutes nos références sont bien là.
-        if (backgroundImage == null || addButton == null || mainButton == null || trashButton == null)
+        if (backgroundImage == null || addButton == null ||  trashButton == null)
         {
             Debug.LogError($"[CardVisualController] Toutes les références (Image et Boutons) doivent être assignées sur {gameObject.name}!", this);
             enabled = false;
@@ -70,7 +70,7 @@ public class CardVisualController : MonoBehaviour, IPointerEnterHandler, IPointe
 
         // Si la souris quitte la carte, on vérifie si l'un de nos boutons est
         // actuellement sélectionné par la manette/clavier.
-        if (currentSelected == addButton.gameObject || currentSelected == mainButton.gameObject || currentSelected == trashButton.gameObject)
+        if (currentSelected == addButton.gameObject || currentSelected == trashButton.gameObject)
         {
             // Si oui, on ne fait rien ! La carte doit rester agrandie.
             return;
