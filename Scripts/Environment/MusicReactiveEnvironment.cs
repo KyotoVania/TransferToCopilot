@@ -424,11 +424,42 @@ public class MusicReactiveEnvironment : Environment
             return;
         }
 
-        // Stop any current animation
-        if (currentAnimation != null)
+        // For bounce animations, only interrupt if we're not in a critical phase
+        if (currentAnimation != null && isAnimating)
         {
+            if (animationType == EnvironmentAnimationType.Bounce)
+            {
+                // For bounce animations, check if we should allow completion
+                // Don't interrupt if we're in a two-beat cycle and still in the first beat
+                if (twoBeatBounce)
+                {
+                    // Let two-beat bounces complete their cycle
+                    if (debugReactions)
+                    {
+                        Debug.Log($"[REACTIVE ENVIRONMENT] {gameObject.name} skipping beat - two-beat bounce in progress");
+                    }
+                    return;
+                }
+                else
+                {
+                    // For one-beat bounces, only interrupt if the animation has been running for a reasonable time
+                    // This prevents rapid fire interruptions
+                    float minAnimationTime = beatDuration * 0.3f; // Allow at least 30% of beat duration
+                    if (Time.time - lastBounceTime < minAnimationTime)
+                    {
+                        if (debugReactions)
+                        {
+                            Debug.Log($"[REACTIVE ENVIRONMENT] {gameObject.name} skipping beat - recent bounce still in progress");
+                        }
+                        return;
+                    }
+                }
+            }
+            
+            // Safe to stop the current animation
             StopCoroutine(currentAnimation);
             isAnimating = false;
+            currentAnimation = null;
         }
 
         // Choose animation based on selected type
@@ -442,6 +473,8 @@ public class MusicReactiveEnvironment : Environment
                 break;
 
             case EnvironmentAnimationType.Bounce:
+                // Update the last bounce time when starting a new bounce
+                lastBounceTime = Time.time;
                 currentAnimation = StartCoroutine(AnimateBounce(beatDuration));
                 break;
         }
@@ -692,9 +725,6 @@ public class MusicReactiveEnvironment : Environment
             originalPosition.z
         );
 
-        // Create an intermediate position for two-beat animation
-        Vector3 holdPos = Vector3.Lerp(originalPosition, peakPos, 0.95f); // Slightly below peak
-
         // Normalize rotation axis
         Vector3 normalizedRotAxis = rotationAxis.normalized;
 
@@ -712,49 +742,59 @@ public class MusicReactiveEnvironment : Environment
             );
         }
 
-        // Add small random offset to the animation timing for less mechanical feel
-        float randomTimeOffset = beatDuration * Random.Range(-animationRandomness * 0.3f, animationRandomness * 0.3f);
-
-        // Get next beat time for animation timing
-        float nextBeatTime = MusicManager.Instance.GetNextBeatTime() + randomTimeOffset;
+        float randomTimeOffset = beatDuration * Random.Range(-animationRandomness * 0.2f, animationRandomness * 0.2f); // Reduced randomness
+        
+        // Get next beat time for animation timing - with better null check
+        float nextBeatTime;
+        if (MusicManager.Instance != null)
+        {
+            nextBeatTime = MusicManager.Instance.GetNextBeatTime() + randomTimeOffset;
+        }
+        else
+        {
+            nextBeatTime = Time.time + beatDuration + randomTimeOffset;
+        }
 
         if (twoBeatBounce)
         {
             // === TWO BEAT CYCLE ===
-
-            // Calculate animation durations with slight randomness
-            float durationRandomFactor = Random.Range(1f - animationRandomness * 0.5f, 1f + animationRandomness * 0.5f);
-
-            // Adjust the rise animation timing to precisely hit the first beat
+            
+            float durationRandomFactor = Random.Range(1f - animationRandomness * 0.3f, 1f + animationRandomness * 0.3f); // Reduced range
             float riseAnimDuration = beatDuration * durationRandomFactor;
             float preBeatRiseDuration = riseAnimDuration * preBeatFraction;
 
-            // Calculate when to start the animation to hit the peak exactly on the first beat
             float animationStartTime = nextBeatTime - preBeatRiseDuration;
-
-            // Wait until it's time to start the animation
             float waitTime = animationStartTime - Time.time;
-            if (waitTime > 0)
+            
+            if (waitTime > 0 && waitTime < beatDuration * 2f) // Don't wait longer than 2 beats
             {
                 yield return new WaitForSeconds(waitTime);
+            }
+
+            if (!isAnimating)
+            {
+                yield break;
             }
 
             // Animation Phase 1: Rise up to the first beat (ground to peak)
             float startTimeRise = Time.time;
             float endTimeRise = nextBeatTime;
+            float maxRiseTime = beatDuration * 1.5f; // Safety limit
 
-            while (Time.time < endTimeRise)
+            while (Time.time < endTimeRise && Time.time - startTimeRise < maxRiseTime && isAnimating)
             {
                 float progress = Mathf.InverseLerp(startTimeRise, endTimeRise, Time.time);
-
-                // Use bounce curve for more cartoon-like movement
                 float easedProgress = bounceCurve.Evaluate(progress);
 
-                // Apply position and rotation
                 transform.localPosition = Vector3.Lerp(originalPosition, peakPos, easedProgress);
                 transform.localRotation = Quaternion.Slerp(originalRotation, peakRot, easedProgress);
 
                 yield return null;
+            }
+
+            if (!isAnimating)
+            {
+                yield break;
             }
 
             // Ensure we reach the exact peak position at the beat
@@ -762,24 +802,28 @@ public class MusicReactiveEnvironment : Environment
             transform.localRotation = peakRot;
 
             // Hold near the peak until the next beat
-            float secondBeatTime = MusicManager.Instance.GetNextBeatTime();
+            float secondBeatTime;
+            if (MusicManager.Instance != null)
+            {
+                secondBeatTime = MusicManager.Instance.GetNextBeatTime();
+            }
+            else
+            {
+                secondBeatTime = nextBeatTime + beatDuration;
+            }
+            
             float timeToNextBeat = secondBeatTime - Time.time;
 
-            // If we have more than a small fraction of a beat to wait, hold in the air
-            if (timeToNextBeat > beatDuration * 0.1f)
+            if (timeToNextBeat > 0 && timeToNextBeat < beatDuration * 1.5f && isAnimating) // Safety limits
             {
-                // Hold phase - maintain height but apply slight bobbing/hovering effect
                 float holdStartTime = Time.time;
-                float holdEndTime = secondBeatTime - (beatDuration * 0.1f); // Start falling slightly before beat
+                float holdEndTime = secondBeatTime - (beatDuration * 0.1f);
 
-                while (Time.time < holdEndTime)
+                while (Time.time < holdEndTime && isAnimating)
                 {
                     float holdProgress = Mathf.InverseLerp(holdStartTime, holdEndTime, Time.time);
-
-                    // Add slight hovering effect while in the air
                     float hoverOffset = Mathf.Sin(holdProgress * Mathf.PI * 2) * 0.05f * randomizedHeight;
 
-                    // Apply subtle hovering motion
                     transform.localPosition = new Vector3(
                         peakPos.x,
                         peakPos.y + hoverOffset,
@@ -789,16 +833,21 @@ public class MusicReactiveEnvironment : Environment
                     yield return null;
                 }
 
-                // Start the fall to precisely hit the second beat
+                if (!isAnimating)
+                {
+                    yield break;
+                }
+
+                // Fall phase to the second beat
                 float fallStartTime = Time.time;
                 float fallEndTime = secondBeatTime;
+                float maxFallTime = beatDuration; // Safety limit
 
-                while (Time.time < fallEndTime)
+                while (Time.time < fallEndTime && Time.time - fallStartTime < maxFallTime && isAnimating)
                 {
                     float fallProgress = Mathf.InverseLerp(fallStartTime, fallEndTime, Time.time);
                     float easedFallProgress = bounceCurve.Evaluate(fallProgress);
 
-                    // Fall down and rotate back to original orientation
                     transform.localPosition = Vector3.Lerp(peakPos, originalPosition, easedFallProgress);
                     transform.localRotation = Quaternion.Slerp(peakRot, originalRotation, easedFallProgress);
 
@@ -806,80 +855,87 @@ public class MusicReactiveEnvironment : Environment
                 }
             }
 
-            // Ensure we're at ground level at the second beat
+            if (!isAnimating)
+            {
+                yield break;
+            }
+
+            // Ensure we're at ground level
             transform.localPosition = originalPosition;
             transform.localRotation = originalRotation;
 
-            // Add squash effect on the second beat
-            if (squashOnLand)
+            if (squashOnLand && isAnimating)
             {
-                // Squash duration
                 float squashDuration = beatDuration * 0.2f;
-                float startSquash = Time.time; // Should be right on the beat
+                float startSquash = Time.time;
                 float endSquash = startSquash + squashDuration;
 
-                // Squash on impact
-                while (Time.time < endSquash)
+                while (Time.time < endSquash && isAnimating)
                 {
                     float progress = Mathf.InverseLerp(startSquash, endSquash, Time.time);
-
-                    // Ease in quickly, then ease out more slowly for a cartoon effect
+                    
                     float squashProgress;
                     if (progress < 0.3f)
                     {
-                        squashProgress = progress / 0.3f; // Fast ease in
+                        squashProgress = progress / 0.3f;
                     }
                     else
                     {
-                        squashProgress = 1f - ((progress - 0.3f) / 0.7f); // Slower ease out
+                        squashProgress = 1f - ((progress - 0.3f) / 0.7f);
                     }
 
-                    // Apply squashed scale
                     transform.localScale = Vector3.Lerp(originalScale, squashedScale, squashProgress);
-
                     yield return null;
                 }
 
                 // Ensure we end at the original scale
-                transform.localScale = originalScale;
+                if (isAnimating)
+                {
+                    transform.localScale = originalScale;
+                }
             }
         }
         else
         {
             // === ONE BEAT CYCLE ===
-
-            // Calculate animation durations with slight randomness
-            float durationRandomFactor = Random.Range(1f - animationRandomness * 0.5f, 1f + animationRandomness * 0.5f);
+            
+            float durationRandomFactor = Random.Range(1f - animationRandomness * 0.3f, 1f + animationRandomness * 0.3f);
             float totalAnimDuration = beatDuration * animationDuration * durationRandomFactor;
             float preBeatDuration = totalAnimDuration * preBeatFraction;
             float postBeatDuration = totalAnimDuration - preBeatDuration;
 
-            // Calculate when to start the animation to hit the peak exactly on the beat
             float animationStartTime = nextBeatTime - preBeatDuration;
-
-            // Wait until it's time to start the animation
             float waitTime = animationStartTime - Time.time;
-            if (waitTime > 0)
+            
+            if (waitTime > 0 && waitTime < beatDuration) // Don't wait longer than 1 beat
             {
                 yield return new WaitForSeconds(waitTime);
+            }
+
+            if (!isAnimating)
+            {
+                yield break;
             }
 
             // Animation Phase 1: Rise up to the beat (ground to peak)
             float startTimePhase1 = Time.time;
             float endTimePhase1 = nextBeatTime;
+            float maxPhase1Time = beatDuration; // Safety limit
 
-            while (Time.time < endTimePhase1)
+            while (Time.time < endTimePhase1 && Time.time - startTimePhase1 < maxPhase1Time && isAnimating)
             {
                 float progress = Mathf.InverseLerp(startTimePhase1, endTimePhase1, Time.time);
-
-                // Use bounce curve for more cartoon-like movement
                 float easedProgress = bounceCurve.Evaluate(progress);
 
-                // Apply position, rotation and scale
                 transform.localPosition = Vector3.Lerp(originalPosition, peakPos, easedProgress);
                 transform.localRotation = Quaternion.Slerp(originalRotation, peakRot, easedProgress);
 
                 yield return null;
+            }
+
+            if (!isAnimating)
+            {
+                yield break;
             }
 
             // Ensure we reach the exact peak position and rotation at the beat
@@ -888,62 +944,62 @@ public class MusicReactiveEnvironment : Environment
 
             // Animation Phase 2: Fall back down (peak to ground)
             float startTimePhase2 = Time.time;
-            float endTimePhase2 = startTimePhase2 + postBeatDuration * 0.8f; // Slightly quicker fall for cartoon effect
+            float endTimePhase2 = startTimePhase2 + postBeatDuration * 0.8f;
 
-            while (Time.time < endTimePhase2)
+            while (Time.time < endTimePhase2 && isAnimating)
             {
                 float progress = Mathf.InverseLerp(startTimePhase2, endTimePhase2, Time.time);
-
-                // Use a slightly modified curve for the fall
                 float easedProgress = bounceCurve.Evaluate(1f - progress); // Inverse for the way down
 
-                // Apply position and rotation
                 transform.localPosition = Vector3.Lerp(peakPos, originalPosition, easedProgress);
                 transform.localRotation = Quaternion.Slerp(peakRot, originalRotation, easedProgress);
 
                 yield return null;
             }
 
+            if (!isAnimating)
+            {
+                yield break;
+            }
+
             // Ensure we reach the ground
             transform.localPosition = originalPosition;
             transform.localRotation = originalRotation;
 
-            // Add squash effect if enabled
-            if (squashOnLand)
+            if (squashOnLand && isAnimating)
             {
-                // Squash duration - brief
                 float squashDuration = postBeatDuration * 0.2f;
                 float startSquash = Time.time;
                 float endSquash = startSquash + squashDuration;
 
-                // Squash on impact
-                while (Time.time < endSquash)
+                while (Time.time < endSquash && isAnimating)
                 {
                     float progress = Mathf.InverseLerp(startSquash, endSquash, Time.time);
-
-                    // Ease in quickly, then ease out more slowly
+                    
                     float squashProgress;
                     if (progress < 0.3f)
                     {
-                        squashProgress = progress / 0.3f; // Fast ease in
+                        squashProgress = progress / 0.3f;
                     }
                     else
                     {
-                        squashProgress = 1f - ((progress - 0.3f) / 0.7f); // Slower ease out
+                        squashProgress = 1f - ((progress - 0.3f) / 0.7f);
                     }
 
-                    // Apply squashed scale
                     transform.localScale = Vector3.Lerp(originalScale, squashedScale, squashProgress);
-
                     yield return null;
                 }
 
                 // Ensure we end at the original scale
-                transform.localScale = originalScale;
+                if (isAnimating)
+                {
+                    transform.localScale = originalScale;
+                }
             }
         }
 
         isAnimating = false;
+        currentAnimation = null;
     }
 
     protected virtual IEnumerator AnimateTileReactiveBounce(float duration, float tileMovementAmount)
@@ -1338,3 +1394,4 @@ public class MusicReactiveEnvironment : Environment
     }
 #endif
 }
+

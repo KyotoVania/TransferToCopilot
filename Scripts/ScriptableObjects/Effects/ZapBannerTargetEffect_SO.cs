@@ -9,6 +9,9 @@
         [Tooltip("The visual effect to spawn at the target")]
         public GameObject zapVFX;
         
+        [Tooltip("Vertical offset for the VFX spawn position relative to the building")]
+        public float vfxYOffset = 1f;
+        
         [Tooltip("Amount of damage to deal to the target building")]
         public int damageAmount = 25;
         
@@ -49,8 +52,8 @@
             // Spawn VFX at target position
             if (zapVFX != null)
             {
-                // Spawn effect slightly above the building
-                Vector3 spawnPosition = targetBuilding.transform.position + new Vector3(0, 5f, 0);
+                // Spawn effect at the building's position with configurable offset
+                Vector3 spawnPosition = targetBuilding.transform.position + new Vector3(0, vfxYOffset, 0);
                 GameObject vfxInstance = Object.Instantiate(zapVFX, spawnPosition, Quaternion.identity);
                 
                 // Destroy VFX after 3 seconds

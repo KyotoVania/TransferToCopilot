@@ -20,6 +20,8 @@ public class NeutralBuilding : Building
     [SerializeField] private GameObject captureInProgressVFXPrefab;
     [SerializeField] private GameObject captureCompletedVFXPrefab; // Prefab for visual effect when capture is completed
     [SerializeField] private float captureCompletedVFXDuration = 3f; // Duration in seconds before the VFX is destroyed
+    [Tooltip("Vertical offset for the capture completed VFX spawn position relative to the building")]
+    [SerializeField] private float captureVFXYOffset = 2f;
     [SerializeField] private AudioClip captureProgressSound;
     [SerializeField] private AudioClip captureCompleteSound;
 
@@ -230,7 +232,7 @@ public class NeutralBuilding : Building
         // --- AJOUT : Gestion de l'effet visuel de capture complétée ---
         if (captureCompletedVFXPrefab != null)
         {
-            GameObject completedVFXInstance = Instantiate(captureCompletedVFXPrefab, transform.position, Quaternion.identity);
+            GameObject completedVFXInstance = Instantiate(captureCompletedVFXPrefab, transform.position + Vector3.up * captureVFXYOffset, Quaternion.identity);
             Destroy(completedVFXInstance, captureCompletedVFXDuration);
         }
     }
