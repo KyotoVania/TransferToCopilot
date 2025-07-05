@@ -135,11 +135,6 @@ public class FeverDisplayUI : MonoBehaviour
             // 2. On envoie la commande pour l'effacer (effacer la couleur et la profondeur) 
             //    avec une couleur totalement transparente.
             GL.Clear(true, true, Color.clear);
-            // Note: GL.Clear efface la texture active, donc ici vfxRenderTexture.
-            if (uiVfxCamera != null)
-            {
-                uiVfxCamera.Render();
-            }
             Debug.Log("[FeverDisplayUI] RenderTexture nettoyée.");
             // 3. On relâche la texture pour que les opérations de rendu normales puissent reprendre.
             RenderTexture.active = null;
