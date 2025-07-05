@@ -20,6 +20,8 @@ public class SummoningUIController : MonoBehaviour
     {
         [Tooltip("The root GameObject for this card.")]
         public GameObject CardRoot;
+        [Tooltip("Le conteneur qui parenta le visuel du personnage (icône statique ou préfab animé).")]
+        public Transform characterVisualsContainer;
         [Tooltip("Image component for the character's icon.")]
         public Image CharacterIcon;
         [Tooltip("Text for the character's gold cost.")]
@@ -32,7 +34,6 @@ public class SummoningUIController : MonoBehaviour
         public TextMeshProUGUI CooldownTimerText;
         [HideInInspector] public CharacterData_SO CharacterData;
         
-        // === NOUVEAU : Panneau cloné pour cette carte ===
         [HideInInspector] public GameObject ClonedInfoPanel;
         [HideInInspector] public CanvasGroup ClonedPanelCanvasGroup;
     }
@@ -57,13 +58,11 @@ public class SummoningUIController : MonoBehaviour
     private MusicManager _musicManager;
     private InputManager _inputManager;
 
-    // Variables pour l'animation du panneau d'info original (LOGIQUE CONSERVÉE)
     private CanvasGroup infoPanelCanvasGroup;
     private Coroutine currentPanelAnimation;
     private Transform originalInfoPanelParent;
     private RectTransform infoPanelRectTransform;
     
-    // === NOUVEAU : Mode toggle simple ===
     private bool _isGlobalDisplayMode = false;
 
     #region Unity Lifecycle
@@ -82,7 +81,6 @@ public class SummoningUIController : MonoBehaviour
         if (_sequenceController == null) Debug.LogError("[SummoningUIController] Could not find SequenceController in the scene!", this);
         if (_inputManager == null) Debug.LogError("[SummoningUIController] InputManager.Instance is null!", this);
         
-        // LOGIQUE ORIGINALE CONSERVÉE
         if (infoPanelObject != null)
         {
             originalInfoPanelParent = infoPanelObject.transform.parent;
@@ -99,14 +97,12 @@ public class SummoningUIController : MonoBehaviour
 
     void OnEnable()
     {
-        // LOGIQUE ORIGINALE CONSERVÉE
         if (_teamManager != null)
         {
             TeamManager.OnActiveTeamChanged += HandleTeamChanged;
             HandleTeamChanged(_teamManager.ActiveTeam);
         }
         
-        // NOUVEAU : Input pour le toggle
         if (_inputManager != null)
         {
             _inputManager.GameplayActions.TriggerUi.performed += OnTriggerUiPerformed;
@@ -115,25 +111,21 @@ public class SummoningUIController : MonoBehaviour
 
     void OnDisable()
     {
-        // LOGIQUE ORIGINALE CONSERVÉE
         if (_teamManager != null)
         {
             TeamManager.OnActiveTeamChanged -= HandleTeamChanged;
         }
         
-        // NOUVEAU : Désabonnement input
         if (_inputManager != null)
         {
             _inputManager.GameplayActions.TriggerUi.performed -= OnTriggerUiPerformed;
         }
         
-        // NOUVEAU : Nettoyage des panneaux clonés
         CleanupAllClonedPanels();
     }
 
     void Update()
     {
-        // LOGIQUE ORIGINALE CONSERVÉE
         UpdateGlowFeedback();
         UpdateCooldownVisuals();
     }
@@ -146,7 +138,6 @@ public class SummoningUIController : MonoBehaviour
         PopulateSummonCards(activeTeam);
     }
     
-    // NOUVEAU : Gestion du toggle
     private void OnTriggerUiPerformed(UnityEngine.InputSystem.InputAction.CallbackContext context)
     {
         ToggleGlobalDisplayMode();
@@ -211,10 +202,8 @@ public class SummoningUIController : MonoBehaviour
         card.ClonedPanelCanvasGroup = card.ClonedInfoPanel.GetComponent<CanvasGroup>() ?? 
                                      card.ClonedInfoPanel.AddComponent<CanvasGroup>();
         
-        // LOGIQUE DE PARENTAGE ORIGINALE CONSERVÉE
         card.ClonedInfoPanel.transform.SetParent(card.CardRoot.transform);
         card.ClonedInfoPanel.transform.localScale = Vector3.one; // Ensure correct scale
-        // NOUVEAU : Copier exactement les propriétés du panneau original
         RectTransform clonedRect = card.ClonedInfoPanel.GetComponent<RectTransform>();
         if (clonedRect != null && infoPanelRectTransform != null)
         {
@@ -259,38 +248,64 @@ public class SummoningUIController : MonoBehaviour
     }
     #endregion
 
-    #region UI Logic - LOGIQUE ORIGINALE CONSERVÉE
-    private void PopulateSummonCards(List<CharacterData_SO> activeTeam)
+    #region UI Logic
+	private void PopulateSummonCards(List<CharacterData_SO> activeTeam)
     {
         for (int i = 0; i < summonCards.Count; i++)
         {
-            Debug.Log($"[SummoningUIController] Populating card {i + 1}/{summonCards.Count}");
+            SummoningCardUI card = summonCards[i];
             if (i < activeTeam.Count && activeTeam[i] != null)
             {
                 CharacterData_SO data = activeTeam[i];
-                SummoningCardUI card = summonCards[i];
-
                 card.CharacterData = data;
                 card.CardRoot.SetActive(true);
-                card.CharacterIcon.sprite = data.Icon;
                 card.CostText.text = data.GoldCost.ToString();
+                
+
+                // 1. Nettoyer le conteneur des anciens visuels
+                foreach (Transform child in card.characterVisualsContainer)
+                {
+                    Destroy(child.gameObject);
+                }
+
+                // 2. Vérifier si un préfab d'animation est disponible
+                if (data.MenuAnimationPrefab != null)
+                {
+                    // 2a. Instancier le préfab d'animation
+                    GameObject animInstance = Instantiate(data.MenuAnimationPrefab, card.characterVisualsContainer);
+                    
+                    // Réinitialiser la transformation locale pour un affichage correct
+                    animInstance.transform.localPosition = Vector3.zero;
+                    animInstance.transform.localRotation = Quaternion.identity;
+					animInstance.transform.localScale = Vector3.one * 0.5f;
+
+
+                    // Désactiver l'icône statique pour ne pas qu'elle s'affiche derrière
+                    card.CharacterIcon.enabled = false;
+                    Debug.Log($"[SummoningUIController] Card {i + 1}: Prefab d'animation '{data.MenuAnimationPrefab.name}' instancié pour {data.DisplayName}.");
+                }
+                else
+                {
+                    // 2b. Fallback : Utiliser l'icône statique
+                    card.CharacterIcon.enabled = true;
+                    card.CharacterIcon.sprite = data.Icon;
+                    Debug.Log($"[SummoningUIController] Card {i + 1}: Utilisation de l'icône statique pour {data.DisplayName} (pas de préfab d'animation).");
+                }
+
                 AddHoverEventsToCard(card);
-                Debug.Log($"[SummoningUIController] Card {i + 1} populated with {data.DisplayName}");
             }
             else
             {
-                summonCards[i].CardRoot.SetActive(false);
-                summonCards[i].CharacterData = null;
-                // Nettoyer le panneau cloné s'il existe
-                if (summonCards[i].ClonedInfoPanel != null)
+                card.CardRoot.SetActive(false);
+                card.CharacterData = null;
+                if (card.ClonedInfoPanel != null)
                 {
-                    Destroy(summonCards[i].ClonedInfoPanel);
-                    summonCards[i].ClonedInfoPanel = null;
+                    Destroy(card.ClonedInfoPanel);
+                    card.ClonedInfoPanel = null;
                 }
             }
         }
         
-        // Si on est en mode global, rafraîchir l'affichage
         if (_isGlobalDisplayMode)
         {
             ShowAllClonedPanels();
@@ -375,10 +390,8 @@ public class SummoningUIController : MonoBehaviour
 
     private void OnCardHoverEnter(SummoningCardUI hoveredCard)
     {
-        // NOUVEAU : Ignorer les hovers en mode global
         if (_isGlobalDisplayMode) return;
         
-        // LOGIQUE ORIGINALE CONSERVÉE
         if (infoPanelObject == null || hoveredCard.CharacterData == null) return;
 
         infoPanelTitleText.text = hoveredCard.CharacterData.DisplayName;
@@ -392,16 +405,13 @@ public class SummoningUIController : MonoBehaviour
 
     private void OnCardHoverExit()
     {
-        // NOUVEAU : Ignorer les hovers en mode global
         if (_isGlobalDisplayMode) return;
         
-        // LOGIQUE ORIGINALE CONSERVÉE
         if (infoPanelObject == null) return;
         if (currentPanelAnimation != null) StopCoroutine(currentPanelAnimation);
         currentPanelAnimation = StartCoroutine(AnimateInfoPanel(false));
     }
 
-    // LOGIQUE ORIGINALE CONSERVÉE
     private IEnumerator AnimateInfoPanel(bool show)
     {
         if (show)
@@ -436,7 +446,6 @@ public class SummoningUIController : MonoBehaviour
         currentPanelAnimation = null;
     }
 
-    // LOGIQUE ORIGINALE CONSERVÉE
     private string FormatSequence(List<InputType> sequence)
     {
         if (sequence == null || sequence.Count == 0) return "N/A";
