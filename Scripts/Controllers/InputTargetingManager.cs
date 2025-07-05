@@ -268,7 +268,21 @@ public class InputTargetingManager : MonoBehaviour
     
     private void UpdateGamepadTarget()
     {
-        if (targetableBuildings.Count == 0) return;
+        // Clean up the list first - remove any destroyed buildings
+        CleanupDestroyedBuildings();
+        
+        if (targetableBuildings.Count == 0) 
+        {
+            // No buildings left, exit targeting mode
+            ExitTargetingMode();
+            return;
+        }
+        
+        // Ensure current index is valid after cleanup
+        if (currentTargetIndex >= targetableBuildings.Count)
+        {
+            currentTargetIndex = 0;
+        }
         
         Building targetBuilding = targetableBuildings[currentTargetIndex];
         UpdateHoveredBuilding(targetBuilding);
@@ -281,10 +295,25 @@ public class InputTargetingManager : MonoBehaviour
         }
     }
 
+    /// <summary>
+    /// Removes destroyed buildings from the targetable buildings list
+    /// </summary>
+    private void CleanupDestroyedBuildings()
+    {
+        // Remove null references (destroyed GameObjects)
+        int originalCount = targetableBuildings.Count;
+        targetableBuildings.RemoveAll(building => building == null || !building.IsTargetable);
+        
+        if (originalCount != targetableBuildings.Count && debugLogs)
+        {
+            Debug.Log($"[InputTargetingManager] Cleaned up {originalCount - targetableBuildings.Count} destroyed buildings. Remaining: {targetableBuildings.Count}");
+        }
+    }
+
     private void ScanForTargetableBuildings()
     {
         targetableBuildings = FindObjectsOfType<Building>()
-            .Where(b => b.IsTargetable)
+            .Where(b => b != null && b.IsTargetable) // Added null check for destroyed buildings
             .OrderBy(b => b.transform.position.x)
             .ThenBy(b => b.transform.position.z)
             .ToList();

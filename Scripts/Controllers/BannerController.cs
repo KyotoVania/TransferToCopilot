@@ -79,6 +79,34 @@ public class BannerController : MonoBehaviour
         }
     }
 
+    private void Start()
+    {
+        // Initialize banner on ally base after a short delay to ensure all buildings are loaded
+        StartCoroutine(InitializeBannerOnAllyBase());
+    }
+
+    /// <summary>
+    /// Automatically places the banner on the player's ally building at game start
+    /// </summary>
+    private System.Collections.IEnumerator InitializeBannerOnAllyBase()
+    {
+        // Wait a bit for all buildings to be initialized
+        yield return new WaitForSeconds(0.5f);
+        
+        // Find the first ally building (PlayerBuilding)
+        PlayerBuilding allyBase = FindFirstObjectByType<PlayerBuilding>();
+        
+        if (allyBase != null && allyBase.Team == TeamType.Player)
+        {
+            if (debugLogs) Debug.Log($"[BannerController] Auto-placing banner on ally base: {allyBase.name}");
+            PlaceBannerOnBuilding(allyBase);
+        }
+        else
+        {
+            if (debugLogs) Debug.LogWarning("[BannerController] No ally base found for initial banner placement.");
+        }
+    }
+
     private void OnDisable()
     {
         // Se désabonner pour éviter les erreurs
@@ -386,3 +414,4 @@ public class BannerController : MonoBehaviour
     
     #endregion
 }
+
