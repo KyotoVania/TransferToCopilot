@@ -1,66 +1,50 @@
-﻿using UnityEngine;
+﻿// Fichier : Assets/Scripts/TileAnimationManager.cs (COMPLET ET CORRIGÉ)
+using UnityEngine;
 using System.Collections.Generic;
-using UnityEngine.Jobs;
-using Unity.Collections;
-using Unity.Burst;
-using Unity.Mathematics;
-using Unity.Jobs;
 
 /// <summary>
-/// Gestionnaire centralisé pour toutes les animations de tuiles
-/// Remplace les coroutines individuelles par un système batch performant
+/// Gestionnaire centralisé pour toutes les animations de tuiles.
+/// Version finale et corrigée : interface simplifiée, supporte position et scale,
+/// et inclut les méthodes de gestion nécessaires.
 /// </summary>
 public class TileAnimationManager : MonoBehaviour
 {
-    // Singleton pour accès global
     public static TileAnimationManager Instance { get; private set; }
-    
-    // Structure légère pour stocker l'état d'animation d'une tuile
-    [System.Serializable]
+
     public struct TileAnimationState
     {
+        // Références
         public Transform transform;
-        public Vector3 startPosition;
-        public Vector3 targetPosition;
-        public Vector3 startScale;
-        public Vector3 targetScale;
+        public System.Action onCompleteCallback;
+
+        // Paramètres de l'animation
         public float startTime;
         public float duration;
-        public AnimationType animationType;
-        public float curveProgress; // Pré-calculé pour éviter Evaluate() répété
+
+        // Mouvement de position
+        public Vector3 startPosition;
+        public Vector3 targetPosition;
+        public AnimationCurve movementCurve;
+
+        // Mouvement de scale
+        public Vector3 startScale;
+        public Vector3 targetScale;
+        public AnimationCurve scaleCurve;
+
+        // Animation de type "Shake"
+        public bool isShakeAnimation;
+        public float shakeIntensity;
+
         public bool isActive;
-        
-        // Paramètres spécifiques selon le type d'animation
-        public float bounceHeight;
-        public float phase; // Pour les animations multi-phases
     }
-    
-    public enum AnimationType
-    {
-        GroundBounce,
-        WaterWave,
-        MountainShake,
-        EnvironmentBounce
-    }
-    
-    // Pool d'animations actives
-    private List<TileAnimationState> activeAnimations = new List<TileAnimationState>(300);
-    private Queue<int> freeIndices = new Queue<int>(300);
-    
-    // Cache pour AnimationCurve.Evaluate()
-    private Dictionary<string, float[]> curveCache = new Dictionary<string, float[]>();
-    private const int CURVE_CACHE_RESOLUTION = 100; // Points d'échantillonnage
-    
-    // Paramètres de performance
-    [Header("Performance Settings")]
-    [SerializeField] private int maxConcurrentAnimations = 500;
-    [SerializeField] private bool useJobSystem = true;
-    [SerializeField] private bool enableBatching = true;
-    
-    // Stats de débogage
+
+    private List<TileAnimationState> activeAnimations = new List<TileAnimationState>(500);
+    private Queue<int> freeIndices = new Queue<int>(500);
     private int currentActiveAnimations = 0;
-    private float lastUpdateTime = 0f;
-    
+
+    // Le cache de courbe que votre code utilise
+    private Dictionary<string, AnimationCurve> curveCache = new Dictionary<string, AnimationCurve>();
+
     void Awake()
     {
         if (Instance != null && Instance != this)
@@ -69,317 +53,162 @@ public class TileAnimationManager : MonoBehaviour
             return;
         }
         Instance = this;
-        
-        // Pré-allouer la capacité
-        for (int i = 0; i < maxConcurrentAnimations; i++)
+
+        // Pré-allouer la capacité de la liste et de la file
+        for (int i = 0; i < 500; i++)
         {
             activeAnimations.Add(new TileAnimationState());
             freeIndices.Enqueue(i);
         }
     }
-    
-    void Update()
-    {
-        if (currentActiveAnimations == 0) return;
-        
-        float currentTime = Time.time;
-        float deltaTime = Time.deltaTime;
-        
-        // Mise à jour batch de toutes les animations
-        if (useJobSystem && currentActiveAnimations > 50)
-        {
-            UpdateAnimationsWithJobs(currentTime);
-        }
-        else
-        {
-            UpdateAnimationsSimple(currentTime);
-        }
-        
-        lastUpdateTime = currentTime;
-    }
-    
+
     /// <summary>
-    /// Ajoute une nouvelle animation de tuile au système
+    /// La méthode UNIQUE et flexible pour demander TOUS types d'animations.
     /// </summary>
-    public bool AddTileAnimation(Transform tileTransform, Vector3 targetPos, float duration, 
-                                AnimationType type, AnimationCurve curve = null)
+    public bool RequestAnimation(
+        Transform tileTransform,
+        float duration,
+        System.Action onComplete,
+        // Paramètres pour le mouvement
+        Vector3? targetPosition = null,
+        AnimationCurve moveCurve = null,
+        // Paramètres pour le scale
+        Vector3? targetScale = null,
+        AnimationCurve scaleCurve = null,
+        // Paramètres pour le shake
+        bool isShake = false,
+        float shakeIntensity = 0f)
     {
-        if (freeIndices.Count == 0) 
+        if (freeIndices.Count == 0)
         {
             Debug.LogWarning("[TileAnimationManager] Limite d'animations atteinte!");
             return false;
         }
-        
+
         int index = freeIndices.Dequeue();
-        
+
         var animState = new TileAnimationState
         {
             transform = tileTransform,
-            startPosition = tileTransform.position,
-            targetPosition = targetPos,
-            startScale = tileTransform.localScale,
-            targetScale = tileTransform.localScale, // Par défaut, pas de changement
+            onCompleteCallback = onComplete,
             startTime = Time.time,
             duration = duration,
-            animationType = type,
-            isActive = true,
-            phase = 0
-        };
-        
-        activeAnimations[index] = animState;
-        currentActiveAnimations++;
-        
-        return true;
-    }
-    
-    /// <summary>
-    /// Version optimisée pour les animations de type Ground avec bounce
-    /// Accepte n'importe quel Transform au lieu d'un type spécifique de tuile
-    /// </summary>
-    public bool AddGroundTileAnimation(Transform tileTransform, Vector3 targetPos, 
-                                      float duration, float bounceHeight)
-    {
-        if (freeIndices.Count == 0) return false;
-        
-        int index = freeIndices.Dequeue();
-        
-        var animState = new TileAnimationState
-        {
-            transform = tileTransform,
+
+            // Position (utilise la position actuelle si la cible est nulle)
             startPosition = tileTransform.position,
-            targetPosition = targetPos,
+            targetPosition = targetPosition ?? tileTransform.position,
+            movementCurve = moveCurve,
+
+            // Scale (utilise le scale actuel si la cible est nulle)
             startScale = tileTransform.localScale,
-            targetScale = tileTransform.localScale,
-            startTime = Time.time,
-            duration = duration,
-            animationType = AnimationType.GroundBounce,
-            bounceHeight = bounceHeight,
-            isActive = true,
-            phase = 0 // 0: montée, 1: descente, 2: bounce
+            targetScale = targetScale ?? tileTransform.localScale,
+            scaleCurve = scaleCurve,
+
+            // Shake
+            isShakeAnimation = isShake,
+            shakeIntensity = shakeIntensity,
+
+            isActive = true
         };
-        
+
         activeAnimations[index] = animState;
         currentActiveAnimations++;
-        
         return true;
     }
-    
-    /// <summary>
-    /// Mise à jour simple sans Job System (pour peu d'animations)
-    /// </summary>
-    private void UpdateAnimationsSimple(float currentTime)
+
+    void Update()
     {
+        if (currentActiveAnimations == 0) return;
+
+        float currentTime = Time.time;
         for (int i = 0; i < activeAnimations.Count; i++)
         {
             if (!activeAnimations[i].isActive) continue;
-            
+
+            // Il est plus sûr de travailler sur une copie
             var anim = activeAnimations[i];
-            float elapsed = currentTime - anim.startTime;
-            float progress = Mathf.Clamp01(elapsed / anim.duration);
-            
-            // Appliquer l'animation selon le type
-            switch (anim.animationType)
+            float progress = Mathf.Clamp01((currentTime - anim.startTime) / anim.duration);
+
+            if (anim.isShakeAnimation)
             {
-                case AnimationType.GroundBounce:
-                    UpdateGroundBounceAnimation(ref anim, progress);
-                    break;
-                    
-                case AnimationType.WaterWave:
-                    UpdateWaterWaveAnimation(ref anim, progress);
-                    break;
-                    
-                case AnimationType.MountainShake:
-                    UpdateMountainShakeAnimation(ref anim, progress);
-                    break;
+                // Logique de Shake
+                float currentIntensity = Mathf.Lerp(anim.shakeIntensity, 0f, progress);
+                float shakeX = (Mathf.PerlinNoise(currentTime * 20f, 0f) * 2f - 1f) * currentIntensity;
+                float shakeZ = (Mathf.PerlinNoise(0f, currentTime * 20f) * 2f - 1f) * currentIntensity;
+                anim.transform.position = anim.startPosition + new Vector3(shakeX, 0, shakeZ);
             }
-            
-            // Vérifier si l'animation est terminée
+            else
+            {
+                // Logique de Position
+                if (anim.movementCurve != null)
+                {
+                    float curveValue = anim.movementCurve.Evaluate(progress);
+                    anim.transform.position = Vector3.LerpUnclamped(anim.startPosition, anim.targetPosition, curveValue);
+                }
+
+                // Logique de Scale
+                if (anim.scaleCurve != null && anim.targetScale != anim.startScale)
+                {
+                    float scaleValue = anim.scaleCurve.Evaluate(progress);
+                    anim.transform.localScale = Vector3.LerpUnclamped(anim.startScale, anim.targetScale, scaleValue);
+                }
+            }
+
             if (progress >= 1f)
             {
                 CompleteAnimation(i);
             }
             else
             {
-                activeAnimations[i] = anim; // Remettre à jour la structure
+                // Remettre la copie modifiée dans la liste (important car c'est une struct)
+                activeAnimations[i] = anim;
             }
         }
     }
-    
-    /// <summary>
-    /// Animation optimisée pour les tuiles Ground avec bounce
-    /// </summary>
-    private void UpdateGroundBounceAnimation(ref TileAnimationState anim, float progress)
-    {
-        // Phase 0-0.8 : Movement principal
-        // Phase 0.8-1.0 : Bounce
-        
-        if (progress < 0.8f)
-        {
-            // Movement principal avec courbe d'ease
-            float moveProgress = progress / 0.8f;
-            float easedProgress = EaseInOutCubic(moveProgress);
-            
-            anim.transform.position = Vector3.Lerp(
-                anim.startPosition, 
-                anim.targetPosition, 
-                easedProgress
-            );
-        }
-        else
-        {
-            // Phase de bounce
-            float bounceProgress = (progress - 0.8f) / 0.2f;
-            float bounceEase = Mathf.Sin(bounceProgress * Mathf.PI);
-            
-            Vector3 bounceOffset = Vector3.up * (anim.bounceHeight * bounceEase);
-            anim.transform.position = anim.targetPosition + bounceOffset;
-        }
-    }
-    
-    /// <summary>
-    /// Animation optimisée pour les tuiles Water
-    /// </summary>
-    private void UpdateWaterWaveAnimation(ref TileAnimationState anim, float progress)
-    {
-        // Utiliser une courbe sinusoïdale pour un mouvement fluide
-        float sineProgress = Mathf.Sin(progress * Mathf.PI * 0.5f);
-        
-        anim.transform.position = Vector3.Lerp(
-            anim.startPosition,
-            anim.targetPosition,
-            sineProgress
-        );
-        
-        // Scale animation simultanée
-        if (anim.targetScale != anim.startScale)
-        {
-            anim.transform.localScale = Vector3.Lerp(
-                anim.startScale,
-                anim.targetScale,
-                sineProgress
-            );
-        }
-    }
-    
-    /// <summary>
-    /// Animation de shake pour les montagnes
-    /// </summary>
-    private void UpdateMountainShakeAnimation(ref TileAnimationState anim, float progress)
-    {
-        // Shake aléatoire qui diminue avec le temps
-        float shakeIntensity = (1f - progress) * 0.02f;
-        
-        Vector3 shakeOffset = new Vector3(
-            Mathf.PerlinNoise(Time.time * 10f, 0f) * shakeIntensity,
-            0f,
-            Mathf.PerlinNoise(0f, Time.time * 10f) * shakeIntensity
-        );
-        
-        anim.transform.position = anim.startPosition + shakeOffset;
-    }
-    
-    /// <summary>
-    /// Termine une animation et libère son slot
-    /// </summary>
+
     private void CompleteAnimation(int index)
     {
         var anim = activeAnimations[index];
-        
-        // S'assurer que la position finale est exacte
-        anim.transform.position = anim.targetPosition;
-        if (anim.targetScale != anim.startScale)
-        {
-            anim.transform.localScale = anim.targetScale;
-        }
-        
-        // Marquer comme inactive et recycler l'index
+        if (!anim.isActive) return; // Sécurité pour éviter double complétion
+
+        // Assurer l'état final
+        anim.transform.position = anim.isShakeAnimation ? anim.startPosition : anim.targetPosition;
+        anim.transform.localScale = anim.targetScale;
+
+        // Le callback fiable
+        anim.onCompleteCallback?.Invoke();
+
+        // Recycler l'animation
         anim.isActive = false;
-        activeAnimations[index] = anim;
+        activeAnimations[index] = anim; // Mettre à jour la structure dans la liste
         freeIndices.Enqueue(index);
         currentActiveAnimations--;
     }
-    
+
     /// <summary>
-    /// Fonction d'easing optimisée (remplace AnimationCurve.Evaluate)
-    /// </summary>
-    private float EaseInOutCubic(float t)
-    {
-        // Formule mathématique directe, beaucoup plus rapide qu'AnimationCurve
-        if (t < 0.5f)
-            return 4f * t * t * t;
-        else
-            return 1f - Mathf.Pow(-2f * t + 2f, 3f) / 2f;
-    }
-    
-    /// <summary>
-    /// Pré-calcule les valeurs d'une AnimationCurve pour éviter Evaluate()
-    /// </summary>
-    public void CacheAnimationCurve(string curveName, AnimationCurve curve)
-    {
-        if (curveCache.ContainsKey(curveName)) return;
-        
-        float[] values = new float[CURVE_CACHE_RESOLUTION];
-        for (int i = 0; i < CURVE_CACHE_RESOLUTION; i++)
-        {
-            float t = i / (float)(CURVE_CACHE_RESOLUTION - 1);
-            values[i] = curve.Evaluate(t);
-        }
-        
-        curveCache[curveName] = values;
-    }
-    
-    /// <summary>
-    /// Récupère une valeur depuis le cache de courbe
-    /// </summary>
-    private float GetCachedCurveValue(string curveName, float t)
-    {
-        if (!curveCache.ContainsKey(curveName))
-            return EaseInOutCubic(t); // Fallback
-        
-        float[] values = curveCache[curveName];
-        int index = Mathf.FloorToInt(t * (CURVE_CACHE_RESOLUTION - 1));
-        
-        if (index >= CURVE_CACHE_RESOLUTION - 1)
-            return values[CURVE_CACHE_RESOLUTION - 1];
-            
-        // Interpolation linéaire entre deux points
-        float remainder = (t * (CURVE_CACHE_RESOLUTION - 1)) - index;
-        return Mathf.Lerp(values[index], values[index + 1], remainder);
-    }
-    
-    // TODO: Implémenter UpdateAnimationsWithJobs pour utiliser le Job System
-    // (Nécessite plus de refactoring pour être thread-safe)
-    private void UpdateAnimationsWithJobs(float currentTime)
-    {
-        // Pour l'instant, utiliser la version simple
-        UpdateAnimationsSimple(currentTime);
-    }
-    
-    /// <summary>
-    /// Arrête toutes les animations d'une tuile spécifique
+    /// Arrête proprement toutes les animations pour une tuile donnée.
+    /// Méthode requise pour corriger l'erreur de compilation.
     /// </summary>
     public void StopTileAnimations(Transform tileTransform)
     {
+        if (tileTransform == null) return;
         for (int i = 0; i < activeAnimations.Count; i++)
         {
-            if (activeAnimations[i].isActive && 
-                activeAnimations[i].transform == tileTransform)
+            if (activeAnimations[i].isActive && activeAnimations[i].transform == tileTransform)
             {
+                // On appelle CompleteAnimation qui s'occupe de tout le nettoyage.
                 CompleteAnimation(i);
             }
         }
     }
-    
+
     /// <summary>
-    /// Obtient le nombre d'animations actives (pour debug)
+    /// Met en cache une courbe pour une utilisation future (si nécessaire).
+    /// Méthode requise pour corriger l'erreur de compilation.
     /// </summary>
-    public int GetActiveAnimationCount()
+    public void CacheAnimationCurve(string curveName, AnimationCurve curve)
     {
-        return currentActiveAnimations;
-    }
-    
-    void OnDestroy()
-    {
-        if (Instance == this) Instance = null;
+        if (curve == null || string.IsNullOrEmpty(curveName)) return;
+        curveCache[curveName] = curve;
     }
 }

@@ -4,10 +4,6 @@ using Sirenix.OdinInspector;
 using Game.Observers;
 using ScriptableObjects;
 
-/// <summary>
-/// Version optimisée de MusicReactiveTile qui utilise le TileAnimationManager
-/// au lieu de coroutines individuelles
-/// </summary>
 public class MusicReactiveTile_Optimized : Tile, IComboObserver
 {
     #region Profile & State Reactivity
@@ -46,7 +42,6 @@ public class MusicReactiveTile_Optimized : Tile, IComboObserver
     private string currentMusicStateKey = "Exploration";
 
     #region Private Variables
-    // CHANGEMENT MAJEUR : Plus de Coroutine !
     private bool isAnimating = false;
     private float currentMovementDuration;
     private bool isReactiveStateInitialized = false;
@@ -56,18 +51,17 @@ public class MusicReactiveTile_Optimized : Tile, IComboObserver
     private float currentDynamicReactionProbability;
     private int lastComboThresholdReached = 0;
     private Vector3 basePositionForAnimation;
-    
-    // NOUVEAU : Flag pour éviter les animations multiples
-    private bool animationQueued = false;
+    private Vector3 baseScaleForAnimation;
     #endregion
 
     #region Initialization Methods
     protected override void Start()
     {
         base.Start();
-        
+
         basePositionForAnimation = transform.position;
-        
+        baseScaleForAnimation = transform.localScale;
+
         if (reactionProfile == null)
         {
             disableRhythmReactions = true;
@@ -77,12 +71,12 @@ public class MusicReactiveTile_Optimized : Tile, IComboObserver
         if (reactionProfile != null)
         {
             currentDynamicReactionProbability = reactionProfile.reactionProbability;
-            
-            // NOUVEAU : Pré-cacher les courbes d'animation si le manager existe
+
+            // CORRIGÉ : L'appel à CacheAnimationCurve existe maintenant
             if (TileAnimationManager.Instance != null && reactionProfile.movementCurve != null)
             {
                 TileAnimationManager.Instance.CacheAnimationCurve(
-                    $"TileProfile_{reactionProfile.name}", 
+                    $"TileProfile_{reactionProfile.name}",
                     reactionProfile.movementCurve
                 );
             }
@@ -105,7 +99,7 @@ public class MusicReactiveTile_Optimized : Tile, IComboObserver
         {
             waterSequenceNumber = Mathf.Clamp(waterSequenceNumber, 0, Mathf.Max(0, waterSequenceTotal - 1));
             CreateSequenceNumberText();
-            if(reactionProfile != null) beatCounterForWaterWaves = reactionProfile.waterBeatsBetweenWaves;
+            if (reactionProfile != null) beatCounterForWaterWaves = reactionProfile.waterBeatsBetweenWaves;
         }
 
         if (Application.isPlaying)
@@ -117,92 +111,54 @@ public class MusicReactiveTile_Optimized : Tile, IComboObserver
     }
     #endregion
 
-    #region Beat Handling - Version Optimisée
+    #region Beat Handling - Version Finale avec Manager Unifié
     private void HandleBeat(float beatDuration)
     {
-        if (disableRhythmReactions || !isReactiveStateInitialized || reactionProfile == null)
+        if (disableRhythmReactions || !isReactiveStateInitialized || reactionProfile == null || isAnimating)
         {
             return;
         }
 
-        // NOUVEAU : Vérifier si une animation est déjà en cours via le manager
-        if (animationQueued || isAnimating)
-        {
-            return; // Éviter les animations multiples
-        }
-
         switch (tileType)
         {
-            case TileType.Water: 
-                HandleWaterTileBeat_Optimized(beatDuration); 
+            case TileType.Water:
+                HandleWaterTileBeat_Optimized(beatDuration);
                 break;
-            case TileType.Ground: 
-                HandleGroundTileBeat_Optimized(beatDuration); 
+            case TileType.Ground:
+                HandleGroundTileBeat_Optimized(beatDuration);
                 break;
-            case TileType.Mountain: 
-                HandleMountainTileBeat_Optimized(beatDuration); 
+            case TileType.Mountain:
+                HandleMountainTileBeat_Optimized(beatDuration);
                 break;
         }
     }
 
-    /// <summary>
-    /// Version optimisée de HandleGroundTileBeat qui utilise TileAnimationManager
-    /// </summary>
     private void HandleGroundTileBeat_Optimized(float beatDuration)
     {
-        if (reactionProfile == null || TileAnimationManager.Instance == null) return;
-        
-        // Vérifier la probabilité
         if (!reactionProfile.alwaysReact && Random.value > currentDynamicReactionProbability) return;
-        
-        // Si une animation est déjà en cours, arrêter
-        if (isAnimating)
-        {
-            TileAnimationManager.Instance.StopTileAnimations(transform);
-            isAnimating = false;
-        }
-        
-        // Calculer la durée du mouvement
+
         RandomizeMovementDuration(beatDuration, reactionProfile);
-        
-        // Calculer la position cible
-        float currentOffset = transform.position.y - basePositionForAnimation.y;
         float intensity = GetCurrentIntensityFactor();
-        float targetOffset = (currentOffset >= 0f) ?
+        float targetOffset = (transform.position.y >= basePositionForAnimation.y) ?
             Random.Range(reactionProfile.downMin * intensity, reactionProfile.downMax * intensity) :
             Random.Range(reactionProfile.upMin * intensity, reactionProfile.upMax * intensity);
-        
+
         Vector3 targetPosition = basePositionForAnimation + Vector3.up * targetOffset;
-        
-        // NOUVEAU : Calculer la hauteur de rebond
-        float traveledDistance = Mathf.Abs(targetPosition.y - transform.position.y);
-        float bounceHeight = reactionProfile.bouncePercentage * traveledDistance;
-        
-        // NOUVEAU : Ajouter l'animation au manager centralisé
-        // On passe le transform au lieu de 'this' pour éviter les problèmes de typage
-        bool added = TileAnimationManager.Instance.AddGroundTileAnimation(
-            transform,
-            targetPosition,
-            currentMovementDuration + reactionProfile.bounceDuration,
-            bounceHeight
+        float totalDuration = currentMovementDuration + reactionProfile.bounceDuration;
+
+        isAnimating = true;
+        TileAnimationManager.Instance.RequestAnimation(
+            this.transform,
+            totalDuration,
+            OnAnimationComplete,
+            targetPosition: targetPosition,
+            moveCurve: reactionProfile.movementCurve
         );
-        
-        if (added)
-        {
-            isAnimating = true;
-            animationQueued = true;
-            
-            // Planifier la fin de l'animation
-            Invoke(nameof(OnAnimationComplete), currentMovementDuration + reactionProfile.bounceDuration);
-        }
     }
 
-    /// <summary>
-    /// Version optimisée pour les tuiles Water
-    /// </summary>
     private void HandleWaterTileBeat_Optimized(float beatDuration)
     {
-        if (reactionProfile == null || TileAnimationManager.Instance == null) return;
+        if (reactionProfile == null) return;
         
         beatCounterForWaterWaves++;
         if (beatCounterForWaterWaves >= reactionProfile.waterBeatsBetweenWaves)
@@ -210,113 +166,77 @@ public class MusicReactiveTile_Optimized : Tile, IComboObserver
             beatCounterForWaterWaves = 0;
             activeWaveSequences.Add(0);
         }
-        
+
         for (int i = activeWaveSequences.Count - 1; i >= 0; i--)
         {
             activeWaveSequences[i]++;
-            if (activeWaveSequences[i] > this.waterSequenceTotal) 
-            { 
-                activeWaveSequences.RemoveAt(i); 
-                continue; 
+            if (activeWaveSequences[i] > this.waterSequenceTotal)
+            {
+                activeWaveSequences.RemoveAt(i);
+                continue;
             }
-            
+
             if (activeWaveSequences[i] - 1 == this.waterSequenceNumber)
             {
                 if (!reactionProfile.alwaysReact && Random.value > currentDynamicReactionProbability) continue;
-                
-                // Arrêter l'animation en cours si elle existe
-                if (isAnimating)
-                {
-                    TileAnimationManager.Instance.StopTileAnimations(transform);
-                }
-                
-                // Préparer les paramètres d'animation
+
                 float intensityFactor = GetCurrentIntensityFactor();
                 float currentWaterMoveHeight = reactionProfile.waterMoveHeight * intensityFactor;
                 Vector3 targetPos = basePositionForAnimation + Vector3.up * currentWaterMoveHeight;
-                
-                // NOUVEAU : Utiliser le type d'animation Water
-                bool added = TileAnimationManager.Instance.AddTileAnimation(
-                    transform,
-                    targetPos,
-                    beatDuration * reactionProfile.waterAnimationDurationMultiplier,
-                    TileAnimationManager.AnimationType.WaterWave,
-                    reactionProfile.movementCurve
+                Vector3 targetScale = baseScaleForAnimation * reactionProfile.waterScaleFactor * intensityFactor;
+                float animDuration = beatDuration * reactionProfile.waterAnimationDurationMultiplier;
+
+                isAnimating = true;
+                TileAnimationManager.Instance.RequestAnimation(
+                    this.transform,
+                    animDuration,
+                    OnAnimationComplete,
+                    targetPosition: targetPos,
+                    moveCurve: reactionProfile.movementCurve,
+                    targetScale: targetScale,
+                    // Note: Utilise la même courbe pour le scale. Créez-en une autre dans le SO si besoin.
+                    scaleCurve: reactionProfile.movementCurve
                 );
-                
-                if (added)
-                {
-                    isAnimating = true;
-                    animationQueued = true;
-                    
-                    // TODO: Gérer le scale séparément ou l'inclure dans TileAnimationManager
-                    float duration = beatDuration * reactionProfile.waterAnimationDurationMultiplier;
-                    Invoke(nameof(OnAnimationComplete), duration);
-                }
-                
                 break;
             }
         }
     }
 
-    /// <summary>
-    /// Version optimisée pour les montagnes
-    /// </summary>
     private void HandleMountainTileBeat_Optimized(float beatDuration)
     {
-        if (reactionProfile == null || TileAnimationManager.Instance == null) return;
-        
         if (!reactionProfile.alwaysReact && Random.value > currentDynamicReactionProbability) return;
-        
-        if (isAnimating)
-        {
-            TileAnimationManager.Instance.StopTileAnimations(transform);
-        }
-        
-        float shakeDurationMultiplier = reactionProfile.groundAnimBeatMultiplier * 0.7f;
-        float shakeDuration = beatDuration * shakeDurationMultiplier;
-        
-        // NOUVEAU : Ajouter comme animation de type Mountain Shake
-        bool added = TileAnimationManager.Instance.AddTileAnimation(
-            transform,
-            transform.position, // La position cible est la même (le shake est géré différemment)
+
+        float shakeDuration = beatDuration * (reactionProfile.groundAnimBeatMultiplier * 0.7f);
+        float shakeIntensity = reactionProfile.mountainReactionStrength * GetCurrentIntensityFactor() * 0.02f; // Ajuster l'échelle ici
+
+        isAnimating = true;
+        TileAnimationManager.Instance.RequestAnimation(
+            this.transform,
             shakeDuration,
-            TileAnimationManager.AnimationType.MountainShake,
-            null
+            OnAnimationComplete,
+            isShake: true,
+            shakeIntensity: shakeIntensity
         );
-        
-        if (added)
-        {
-            isAnimating = true;
-            animationQueued = true;
-            Invoke(nameof(OnAnimationComplete), shakeDuration);
-        }
     }
 
     /// <summary>
-    /// Callback quand une animation est terminée
+    /// Callback fiable appelé par le TileAnimationManager.
     /// </summary>
-    private void OnAnimationComplete()
+    public void OnAnimationComplete()
     {
         isAnimating = false;
-        animationQueued = false;
-        
-        // S'assurer que la tuile est revenue à sa position de base pour certains types
-        if (tileType == TileType.Water || tileType == TileType.Mountain)
-        {
-            transform.position = basePositionForAnimation;
-        }
+        // La position/scale de fin est déjà gérée par le Manager.
+        // On peut ajouter d'autres logiques ici si nécessaire.
     }
     #endregion
 
-    #region Utility Methods (Inchangés ou légèrement modifiés)
+    #region Utility Methods
     private void RandomizeMovementDuration(float beatDuration, TileReactionProfile_SO profile)
     {
-        if (profile == null) return;
         float baseAnimDuration = beatDuration * profile.groundAnimBeatMultiplier;
         currentMovementDuration = Mathf.Clamp(
-            baseAnimDuration + Random.Range(-profile.durationVariation, profile.durationVariation), 
-            0.1f, 
+            baseAnimDuration + Random.Range(-profile.durationVariation, profile.durationVariation),
+            0.1f,
             beatDuration * 0.95f
         );
     }
@@ -332,20 +252,18 @@ public class MusicReactiveTile_Optimized : Tile, IComboObserver
             default: return 1.0f;
         }
     }
-
+    
     public void InitializeReactiveVisualState()
     {
         if (Application.isPlaying)
         {
-            // Arrêter toute animation en cours
+            // CORRIGÉ : L'appel à StopTileAnimations existe maintenant
             if (isAnimating && TileAnimationManager.Instance != null)
             {
                 TileAnimationManager.Instance.StopTileAnimations(transform);
             }
-            
             isAnimating = false;
-            animationQueued = false;
-            
+
             if (disableRhythmReactions || reactionProfile == null)
             {
                 transform.position = basePositionForAnimation;
@@ -359,41 +277,62 @@ public class MusicReactiveTile_Optimized : Tile, IComboObserver
             {
                 transform.position = basePositionForAnimation;
             }
+            transform.localScale = baseScaleForAnimation;
         }
     }
 
     protected override void OnDestroy()
     {
         base.OnDestroy();
-        
-        // NOUVEAU : S'assurer d'arrêter toute animation en cours
+
+        // CORRIGÉ : L'appel à StopTileAnimations existe maintenant
         if (isAnimating && TileAnimationManager.Instance != null)
         {
             TileAnimationManager.Instance.StopTileAnimations(transform);
         }
-        
-        // Nettoyer les invokes
+
         CancelInvoke();
-        
-        if (!disableRhythmReactions)
+
+        if (MusicManager.Instance != null)
         {
-            if (MusicManager.Instance != null)
-            {
-                MusicManager.Instance.OnBeat -= HandleBeat;
-                MusicManager.Instance.OnMusicStateChanged -= HandleMusicStateChange;
-            }
-            if (reactionProfile != null && ComboController.Instance != null && 
-                tileType == TileType.Ground && reactionProfile.reactToCombo)
-            {
-                ComboController.Instance.RemoveObserver(this);
-            }
+            MusicManager.Instance.OnBeat -= HandleBeat;
+            MusicManager.Instance.OnMusicStateChanged -= HandleMusicStateChange;
+        }
+        if (ComboController.Instance != null && reactionProfile != null && reactionProfile.reactToCombo)
+        {
+            ComboController.Instance.RemoveObserver(this);
         }
     }
     #endregion
+    
+    private void CreateSequenceNumberText()
+    {
+        sequenceNumberText = GetComponentInChildren<TMPro.TextMeshPro>();
+        if (sequenceNumberText == null)
+        {
+            GameObject textObject = new GameObject("SequenceNumberText");
+            textObject.transform.SetParent(transform);
+            RectTransform rect = textObject.AddComponent<RectTransform>();
+            rect.localPosition = new Vector3(0, 0.05f, 0);
+            rect.localRotation = Quaternion.Euler(90, 0, 0);
+            rect.localScale = new Vector3(0.05f, 0.05f, 0.05f);
+            rect.sizeDelta = new Vector2(100, 20);
 
-    // Les autres méthodes restent identiques...
+            sequenceNumberText = textObject.AddComponent<TMPro.TextMeshPro>();
+            sequenceNumberText.alignment = TMPro.TextAlignmentOptions.Center;
+            sequenceNumberText.fontSize = 10;
+            sequenceNumberText.color = Color.white;
+            // CORRIGÉ : L'avertissement CS0618 est résolu ici
+            sequenceNumberText.textWrappingMode = TMPro.TextWrappingModes.NoWrap;
+        }
+        sequenceNumberText.text = this.waterSequenceNumber.ToString();
+        sequenceNumberText.gameObject.SetActive(true);
+    }
+    
+    // --- Le reste de votre script (Validation, Combo, Éditeur, etc.) reste ici ---
+    // --- Il n'a pas besoin d'être modifié. ---
     #region Unchanged Methods
-    private void ValidateProfileAssignment() 
+    private void ValidateProfileAssignment()
     {
         if (reactionProfile == null) return;
         if (reactionProfile.applicableTileType == TileReactionProfile_SO.ProfileApplicability.Generic) return;
@@ -430,29 +369,6 @@ public class MusicReactiveTile_Optimized : Tile, IComboObserver
     {
         if (disableRhythmReactions) return;
         if (enableMusicStateReactions) currentMusicStateKey = newStateKey;
-    }
-
-    private void CreateSequenceNumberText()
-    {
-        sequenceNumberText = GetComponentInChildren<TMPro.TextMeshPro>();
-        if (sequenceNumberText == null)
-        {
-            GameObject textObject = new GameObject("SequenceNumberText");
-            textObject.transform.SetParent(transform);
-            RectTransform rect = textObject.AddComponent<RectTransform>();
-            rect.localPosition = new Vector3(0, 0.05f, 0);
-            rect.localRotation = Quaternion.Euler(90, 0, 0);
-            rect.localScale = new Vector3(0.05f, 0.05f, 0.05f);
-            rect.sizeDelta = new Vector2(100, 20);
-
-            sequenceNumberText = textObject.AddComponent<TMPro.TextMeshPro>();
-            sequenceNumberText.alignment = TMPro.TextAlignmentOptions.Center;
-            sequenceNumberText.fontSize = 10;
-            sequenceNumberText.color = Color.white;
-            sequenceNumberText.enableWordWrapping = false;
-        }
-        sequenceNumberText.text = this.waterSequenceNumber.ToString();
-        sequenceNumberText.gameObject.SetActive(true);
     }
 
     protected override void UpdateTileAppearance()
@@ -553,3 +469,4 @@ public class MusicReactiveTile_Optimized : Tile, IComboObserver
     }
 #endif
 }
+
