@@ -57,7 +57,7 @@ public class MusicManager : MonoBehaviour
     private string currentMusicState;
     private uint playingID_MusicEvent = AkUnitySoundEngine.AK_INVALID_PLAYING_ID;
     private float currentBeatDuration = 0.5f;
-    private int beatCount = 0;
+    public int PublicBeatCount { get; private set; } = 0;
     private bool musicPlaying = false;
     private float lastBeatTime;
     private bool beatOccurredThisFrame = false; // Flag interne pour LastBeatWasProcessed
@@ -164,7 +164,7 @@ public class MusicManager : MonoBehaviour
                 {
                     currentBeatDuration = musicInfo.segmentInfo_fBeatDuration;
                     lastBeatTime = Time.time;
-                    beatCount++;
+                    PublicBeatCount++;
                     
                     // Déclenchement de l'événement statique avec la durée du beat
                     OnBeat?.Invoke(currentBeatDuration);

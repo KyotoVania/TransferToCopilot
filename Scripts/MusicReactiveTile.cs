@@ -48,7 +48,6 @@ public class MusicReactiveTile : Tile, IComboObserver
     private bool isAnimating = false;
     private float currentMovementDuration;
     private bool isReactiveStateInitialized = false;
-    private Material tileMaterial;
     private List<int> activeWaveSequences = new List<int>();
     private int beatCounterForWaterWaves = 0;
     private TMPro.TextMeshPro sequenceNumberText;
@@ -80,8 +79,6 @@ public class MusicReactiveTile : Tile, IComboObserver
              currentDynamicReactionProbability = reactionProfile.reactionProbability;
         }
 
-        MeshRenderer renderer = GetComponent<MeshRenderer>();
-        if (renderer != null) tileMaterial = renderer.material; // Utiliser .material pour obtenir une instance si des changements par tuile sont prévus
 
         if (!disableRhythmReactions && reactionProfile != null)
         {

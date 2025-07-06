@@ -1,13 +1,13 @@
 using UnityEngine;
-using UnityEngine.UI;
 using TMPro;
 using System.Collections;
 using System.Collections.Generic;
 using System;
 using System.Linq;
 using ScriptableObjects;
-using UnityEngine.InputSystem;
+using UnityEngine.InputSystem; // Ajout important pour le nouveau système d'input
 
+// Ces classes sérialisées restent identiques
 [System.Serializable]
 public class InputSoundVariants
 {
@@ -26,6 +26,7 @@ public class InputSoundVariantsKey
 
 public class SequenceController : MonoBehaviour
 {
+    // --- Variables de Séquence et de Timing (inchangées) ---
     private List<CharacterData_SO> availablePlayerCharactersInTeam = new List<CharacterData_SO>();
     private List<GlobalSpellData_SO> availableGlobalSpells = new List<GlobalSpellData_SO>();
 
@@ -33,11 +34,11 @@ public class SequenceController : MonoBehaviour
     public IReadOnlyList<KeyCode> CurrentSequence => currentSequence.AsReadOnly();
 
     private int perfectCount = 0;
-    
+
     [Tooltip("Tolérance en % de la durée du beat pour un input 'Perfect'. Ex: 0.2 = 20% de la durée du beat.")]
     [Range(0, 1)]
     public float perfectTolerancePercent = 0.2f;
-    
+
     [Tooltip("Tolérance en % de la durée du beat pour un input 'Good'. Ex: 0.4 = 40% de la durée du beat.")]
     [Range(0, 1)]
     public float goodTolerancePercent = 0.4f;
@@ -45,10 +46,16 @@ public class SequenceController : MonoBehaviour
     private bool _hasInputForCurrentBeat = false;
     private bool isSequenceActive = false;
     private float lastBeatTime;
-    
-    private float _currentBeatDuration = 1f; // Initialisé à 1 seconde par défaut
+    private float _currentBeatDuration = 1f;
+    private bool isResponding = false;
 
-    // --- Événements ---
+    // --- Dépendances et Événements (inchangés) ---
+    private MusicManager musicManager;
+    public InputSoundVariants inputSounds;
+    public InputSoundVariantsKey inputSoundsKey;
+    public AK.Wwise.Event playSwitchContainerEvent;
+    [SerializeField] private TextMeshProUGUI sequenceDisplay;
+
     public static event Action<string, Color> OnSequenceKeyPressed;
     public static event Action OnSequenceDisplayCleared;
     public static event Action<CharacterData_SO, int> OnCharacterInvocationSequenceComplete;
@@ -56,15 +63,7 @@ public class SequenceController : MonoBehaviour
     public static event Action OnSequenceSuccess;
     public static event Action OnSequenceFail;
 
-    private bool isResponding = false;
-    
-    private MusicManager musicManager;
-
-    public InputSoundVariants inputSounds;
-    public InputSoundVariantsKey inputSoundsKey;
-    public AK.Wwise.Event playSwitchContainerEvent;
-    
-    [SerializeField] private TextMeshProUGUI sequenceDisplay;
+    #region Initialisation et Cycle de Vie
 
     private void Awake()
     {
@@ -72,12 +71,12 @@ public class SequenceController : MonoBehaviour
         availableGlobalSpells = new List<GlobalSpellData_SO>();
     }
 
+    // --- MISE À JOUR MAJEURE : Abonnement au nouveau Input System ---
     private void OnEnable()
     {
+        // On s'abonne directement aux actions du InputManager
         if (InputManager.Instance != null)
         {
-            // On s'abonne directement aux actions exposées par le manager.
-            // La syntaxe est un peu plus longue mais beaucoup plus claire.
             InputManager.Instance.GameplayActions.RhythmInput_Left.performed += OnRhythmInput_Left;
             InputManager.Instance.GameplayActions.RhythmInput_Down.performed += OnRhythmInput_Down;
             InputManager.Instance.GameplayActions.RhythmInput_Right.performed += OnRhythmInput_Right;
@@ -88,6 +87,7 @@ public class SequenceController : MonoBehaviour
         }
     }
 
+    // --- MISE À JOUR MAJEURE : Se désabonner proprement ---
     private void OnDisable()
     {
         if (MusicManager.Instance != null)
@@ -104,14 +104,15 @@ public class SequenceController : MonoBehaviour
 
     private void Start()
     {
-        musicManager = MusicManager.Instance; // Utilisation du Singleton pour plus de robustesse
+        // Utilisation du singleton pour plus de robustesse
+        musicManager = MusicManager.Instance;
         if (musicManager == null)
         {
             Debug.LogError("No MusicManager found in the scene!");
         }
         OnSequenceDisplayCleared?.Invoke();
     }
-    
+
     public void InitializeWithPlayerTeamAndSpells(List<CharacterData_SO> activeTeam, List<GlobalSpellData_SO> globalSpells)
     {
         availablePlayerCharactersInTeam = activeTeam ?? new List<CharacterData_SO>();
@@ -119,12 +120,18 @@ public class SequenceController : MonoBehaviour
         Debug.Log($"[SequenceController] Initialized with {availablePlayerCharactersInTeam.Count} character(s) in team and {availableGlobalSpells.Count} global spell(s).");
     }
 
+    // SUPPRIMÉ : La méthode Update() n'est plus utilisée pour les inputs.
 
+    #endregion
+
+    #region Gestion des Inputs
+
+    // --- NOUVEAU : Méthodes de rappel pour le nouveau Input System ---
     private void OnRhythmInput_Left(InputAction.CallbackContext context)
     {
         ProcessInput(KeyCode.X);
     }
-    
+
     private void OnRhythmInput_Down(InputAction.CallbackContext context)
     {
         ProcessInput(KeyCode.C);
@@ -134,25 +141,21 @@ public class SequenceController : MonoBehaviour
     {
         ProcessInput(KeyCode.V);
     }
-    private AK.Wwise.Switch GetKeySwitch(KeyCode key)
-    {
-        if (key == KeyCode.X) return inputSoundsKey.XSwitch;
-        if (key == KeyCode.C) return inputSoundsKey.CSwitch;
-        if (key == KeyCode.V) return inputSoundsKey.VSwitch;
-        Debug.LogWarning("[SequenceController] No Wwise key switch assigned for this key input!");
-        return null;
-    }
-    
+
+    // --- AMÉLIORATION : ProcessInput intègre maintenant la logique audio Wwise ---
     private void ProcessInput(KeyCode key)
     {
-         if (isResponding) return;
+        if (isResponding) return;
 
+        // Vérification de robustesse
         if (musicManager == null) {
              SetSwitchAndPlay(inputSounds.failedSwitch, "Failed (No MusicManager)", playSwitchContainerEvent, GetKeySwitch(key));
              OnSequenceFail?.Invoke();
              ResetSequence();
              return;
         }
+
+        // Logique anti-spam
         if (_hasInputForCurrentBeat)
         {
             Debug.Log("[SequenceController] Input registered before next beat window. Combo Reset!");
@@ -162,13 +165,13 @@ public class SequenceController : MonoBehaviour
             return;
         }
 
+        // Calcul du timing (inchangé, mais maintenant utilisé pour le son)
         float currentTime = Time.time;
         float timeSinceLastBeat = Mathf.Abs(currentTime - lastBeatTime);
         float timeUntilNextBeat = musicManager.GetTimeUntilNextBeat();
         float timeToClosestBeat = Mathf.Min(timeSinceLastBeat, timeUntilNextBeat);
 
         AK.Wwise.Switch keySwitch = GetKeySwitch(key);
-
         float perfectToleranceInSeconds = _currentBeatDuration * perfectTolerancePercent;
         float goodToleranceInSeconds = _currentBeatDuration * goodTolerancePercent;
 
@@ -177,21 +180,21 @@ public class SequenceController : MonoBehaviour
             isSequenceActive = true;
             _hasInputForCurrentBeat = true;
             perfectCount++;
-            SetSwitchAndPlay(inputSounds.perfectSwitch, "Perfect", playSwitchContainerEvent, keySwitch);
+            SetSwitchAndPlay(inputSounds.perfectSwitch, "Perfect", playSwitchContainerEvent, keySwitch); // Appel audio
             currentSequence.Add(key);
-            OnSequenceKeyPressed?.Invoke(key.ToString(), Color.green);
+            OnSequenceKeyPressed?.Invoke(key.ToString(), Color.green); // Feedback visuel
         }
         else if (timeToClosestBeat <= goodToleranceInSeconds)
         {
             isSequenceActive = true;
             _hasInputForCurrentBeat = true;
-            SetSwitchAndPlay(inputSounds.goodSwitch, "Good", playSwitchContainerEvent, keySwitch);
+            SetSwitchAndPlay(inputSounds.goodSwitch, "Good", playSwitchContainerEvent, keySwitch); // Appel audio
             currentSequence.Add(key);
-            OnSequenceKeyPressed?.Invoke(key.ToString(), Color.yellow);
+            OnSequenceKeyPressed?.Invoke(key.ToString(), Color.yellow); // Feedback visuel
         }
         else
         {
-            SetSwitchAndPlay(inputSounds.failedSwitch, "Failed (Off-beat)", playSwitchContainerEvent, keySwitch);
+            SetSwitchAndPlay(inputSounds.failedSwitch, "Failed (Off-beat)", playSwitchContainerEvent, keySwitch); // Appel audio
             OnSequenceFail?.Invoke();
             ResetSequence();
             return;
@@ -200,57 +203,58 @@ public class SequenceController : MonoBehaviour
         ValidateSequence();
     }
 
+    #endregion
+
+    #region Logique de Séquence et Audio (avec améliorations)
 
     private void ValidateSequence()
     {
-        if (currentSequence.Count < 4)
-        {
-            return;
-        }
+        // La longueur de la séquence peut varier, donc on vérifie après chaque touche
+        // si une séquence valide est complétée.
+        bool sequenceMatched = false;
 
         foreach (CharacterData_SO characterData in availablePlayerCharactersInTeam)
         {
-            if (characterData == null)
-            {
-                Debug.LogWarning("[SequenceController] CharacterData_SO is null in availablePlayerCharactersInTeam.");
-                continue;
-            }
-            
-            if (characterData.InvocationSequence != null &&
+            if (characterData?.InvocationSequence != null &&
                 CompareKeySequence(currentSequence, characterData.InvocationSequence.Select(input => ConvertInputTypeToKeyCode(input)).ToList()))
             {
                 Debug.Log($"[SequenceController] Character Invocation Sequence Matched: {characterData.DisplayName}");
-                StartCoroutine(HandleSuccessfulSequence(() => {
-                    OnCharacterInvocationSequenceComplete?.Invoke(characterData, perfectCount);
-                }, currentSequence.Count));
-                return;
+                StartCoroutine(HandleSuccessfulSequence(() => OnCharacterInvocationSequenceComplete?.Invoke(characterData, perfectCount), currentSequence.Count));
+                sequenceMatched = true;
+                break; // Sortir de la boucle dès qu'une correspondance est trouvée
             }
         }
 
-        foreach (GlobalSpellData_SO spellData in availableGlobalSpells)
+        if (!sequenceMatched)
         {
-            if (spellData.SpellSequence != null &&
-                CompareKeySequence(currentSequence, spellData.SpellSequence.Select(input => ConvertInputTypeToKeyCode(input)).ToList()))
+            foreach (GlobalSpellData_SO spellData in availableGlobalSpells)
             {
-                Debug.Log($"[SequenceController] Global Spell Sequence Matched: {spellData.DisplayName}");
-                StartCoroutine(HandleSuccessfulSequence(() => {
-                    OnGlobalSpellSequenceComplete?.Invoke(spellData, perfectCount);
-                }, currentSequence.Count));
-                return;
+                if (spellData?.SpellSequence != null &&
+                    CompareKeySequence(currentSequence, spellData.SpellSequence.Select(input => ConvertInputTypeToKeyCode(input)).ToList()))
+                {
+                    Debug.Log($"[SequenceController] Global Spell Sequence Matched: {spellData.DisplayName}");
+                    StartCoroutine(HandleSuccessfulSequence(() => OnGlobalSpellSequenceComplete?.Invoke(spellData, perfectCount), currentSequence.Count));
+                    sequenceMatched = true;
+                    break;
+                }
             }
         }
 
-        Debug.LogWarning($"[SequenceController] Sequence of 4 inputs completed but did not match any known character invocation or global spell: {string.Join("-", currentSequence)}");
-        OnSequenceFail?.Invoke();
-        ResetSequence();
+        // Si la séquence atteint 4 et ne correspond à rien, c'est un échec.
+        if (!sequenceMatched && currentSequence.Count >= 4)
+        {
+            Debug.LogWarning($"[SequenceController] Sequence of 4+ inputs did not match any known sequence: {string.Join("-", currentSequence)}");
+            OnSequenceFail?.Invoke();
+            ResetSequence();
+        }
     }
 
-   
     private bool CompareKeySequence(List<KeyCode> inputSequence, List<KeyCode> targetSequence)
     {
+        // Cette comparaison simple fonctionne pour les séquences de même longueur.
         return inputSequence.SequenceEqual(targetSequence);
     }
-    
+
     private KeyCode ConvertInputTypeToKeyCode(InputType inputType)
     {
         switch (inputType)
@@ -258,25 +262,23 @@ public class SequenceController : MonoBehaviour
             case InputType.X: return KeyCode.X;
             case InputType.C: return KeyCode.C;
             case InputType.V: return KeyCode.V;
-            default:
-                Debug.LogError($"[SequenceController] InputType inconnu: {inputType}");
-                return KeyCode.None;
+            default: return KeyCode.None;
         }
     }
-    
+
     private IEnumerator HandleSuccessfulSequence(Action specificEventCallback, int sequenceLength)
     {
         isResponding = true;
         OnSequenceSuccess?.Invoke();
         specificEventCallback?.Invoke();
-        
+
         float responseDuration = musicManager != null ? musicManager.GetBeatDuration() * sequenceLength : 0.5f;
         yield return new WaitForSeconds(Mathf.Max(responseDuration, 0.1f));
 
         isResponding = false;
         ResetSequence();
     }
-    
+
     private void ResetSequence()
     {
         isSequenceActive = false;
@@ -290,15 +292,17 @@ public class SequenceController : MonoBehaviour
         lastBeatTime = Time.time;
         _hasInputForCurrentBeat = false;
         _currentBeatDuration = beatDuration;
-
-        if (isSequenceActive && currentSequence.Count > 0 && !_hasInputForCurrentBeat)
-        {
-            // Cette condition est un peu complexe. Il faut décider si "sauter" un beat doit reset.
-            // La logique actuelle avec la vérification anti-spam gère déjà le reset si on joue trop tôt.
-            // Laissons la logique de "saut de beat" pour une itération future si nécessaire.
-        }
     }
 
+    private AK.Wwise.Switch GetKeySwitch(KeyCode key)
+    {
+        if (key == KeyCode.X) return inputSoundsKey.XSwitch;
+        if (key == KeyCode.C) return inputSoundsKey.CSwitch;
+        if (key == KeyCode.V) return inputSoundsKey.VSwitch;
+        return null;
+    }
+
+    // --- AMÉLIORATION : Logique audio complète et robuste ---
     private void SetSwitchAndPlay(AK.Wwise.Switch switchState, string switchName, AK.Wwise.Event playEvent, AK.Wwise.Switch keySwitch)
     {
         if (switchState != null && switchState.IsValid() && keySwitch != null && keySwitch.IsValid())
@@ -308,18 +312,15 @@ public class SequenceController : MonoBehaviour
             if (playEvent != null && playEvent.IsValid())
             {
                 playEvent.Post(gameObject);
-            } else if (playEvent == null) {
-                Debug.LogWarning($"[SequenceController] Wwise playEvent is null for SetSwitchAndPlay (Switch: {switchName}).");
-            } else if (!playEvent.IsValid()) {
-                Debug.LogWarning($"[SequenceController] Wwise playEvent '{playEvent.Name}' is not valid for SetSwitchAndPlay (Switch: {switchName}).");
             }
         }
         else
         {
-            if (switchState == null) Debug.LogWarning($"[SequenceController] Wwise timing switch '{switchName}' not assigned.");
-            else if (!switchState.IsValid()) Debug.LogWarning($"[SequenceController] Wwise timing switch '{switchState.Name}' (for {switchName}) is not valid.");
-            if (keySwitch == null) Debug.LogWarning($"[SequenceController] Wwise key switch for the pressed key not assigned.");
-            else if (!keySwitch.IsValid()) Debug.LogWarning($"[SequenceController] Wwise key switch '{keySwitch.Name}' is not valid.");
+            // Logs de débogage pour aider à configurer Wwise dans Unity
+            if (switchState == null) Debug.LogWarning($"[SequenceController] Wwise timing switch '{switchName}' not assigned in Inspector.");
+            if (keySwitch == null) Debug.LogWarning($"[SequenceController] Wwise key switch for the pressed key not assigned in Inspector.");
         }
     }
+
+    #endregion
 }

@@ -1,15 +1,16 @@
 using UnityEngine;
+using System.Collections;
 using System.Collections.Generic;
 using Game.Observers;
 
 /// <summary>
-/// Point central de la gestion de la bannière.
-/// Gère l'état logique (quelle tuile est sélectionnée) et visuel (affichage des prefabs).
-/// S'abonne à InputTargetingManager pour réagir aux intentions du joueur.
-/// Ce script intègre désormais les responsabilités de l'ancien MouseManager liées à l'affichage.
+/// Point central de la gestion de la bannière, fusionnant la logique d'input et le placement visuel.
+/// Peut placer la bannière sur un Bâtiment (via InputTargetingManager) ou sur une Unité (via un appel externe).
+/// Utilise des objets persistants pour les visuels pour de meilleures performances.
 /// </summary>
 public class BannerController : MonoBehaviour
 {
+    // --- Singleton Pattern ---
     public static bool Exists => instance != null;
     private static BannerController instance;
     public static BannerController Instance
@@ -33,17 +34,18 @@ public class BannerController : MonoBehaviour
     public Vector2Int CurrentBannerPosition { get; private set; }
     public bool HasActiveBanner { get; private set; }
     public Building CurrentBuilding { get; private set; }
+    public Unit CurrentTargetedUnit { get; private set; }
     private Tile _currentTile;
 
     [Header("Visuals & Prefabs")]
     [SerializeField] private GameObject bannerPrefab;
     [SerializeField] private GameObject previewBannerPrefab;
-    
+
     [Header("Debugging")]
     [SerializeField] private bool debugLogs = true;
     [SerializeField] private bool debugVisuals = true;
-    [SerializeField] private Color previewDebugColor = Color.blue;
-    [SerializeField] private Color bannerDebugColor = Color.red;
+    [SerializeField] private Color previewDebugColor = new Color(0, 0, 1, 0.5f);
+    [SerializeField] private Color bannerDebugColor = new Color(1, 0, 0, 0.5f);
 
     // --- Objets persistants pour les visuels ---
     private GameObject persistentBanner;
@@ -53,6 +55,8 @@ public class BannerController : MonoBehaviour
 
     private readonly List<IBannerObserver> observers = new List<IBannerObserver>();
 
+    #region Unity Lifecycle
+
     private void Awake()
     {
         if (instance != null && instance != this)
@@ -61,18 +65,17 @@ public class BannerController : MonoBehaviour
             return;
         }
         instance = this;
-        
+
         InitializePersistentPrefabs();
         if (debugVisuals) CreateDebugVisuals();
     }
 
     private void OnEnable()
     {
-        // S'abonner aux événements du Manager d'Input
         InputTargetingManager.OnBuildingHovered += HandleBuildingHovered;
         InputTargetingManager.OnHoverEnded += HandleHoverEnded;
         InputTargetingManager.OnBuildingSelected += HandleBuildingSelected;
-        
+
         if (MusicManager.Instance != null)
         {
             MusicManager.Instance.OnBeat += HandleBeat;
@@ -81,35 +84,11 @@ public class BannerController : MonoBehaviour
 
     private void Start()
     {
-        // Initialize banner on ally base after a short delay to ensure all buildings are loaded
         StartCoroutine(InitializeBannerOnAllyBase());
-    }
-
-    /// <summary>
-    /// Automatically places the banner on the player's ally building at game start
-    /// </summary>
-    private System.Collections.IEnumerator InitializeBannerOnAllyBase()
-    {
-        // Wait a bit for all buildings to be initialized
-        yield return new WaitForSeconds(0.5f);
-        
-        // Find the first ally building (PlayerBuilding)
-        PlayerBuilding allyBase = FindFirstObjectByType<PlayerBuilding>();
-        
-        if (allyBase != null && allyBase.Team == TeamType.Player)
-        {
-            if (debugLogs) Debug.Log($"[BannerController] Auto-placing banner on ally base: {allyBase.name}");
-            PlaceBannerOnBuilding(allyBase);
-        }
-        else
-        {
-            if (debugLogs) Debug.LogWarning("[BannerController] No ally base found for initial banner placement.");
-        }
     }
 
     private void OnDisable()
     {
-        // Se désabonner pour éviter les erreurs
         InputTargetingManager.OnBuildingHovered -= HandleBuildingHovered;
         InputTargetingManager.OnHoverEnded -= HandleHoverEnded;
         InputTargetingManager.OnBuildingSelected -= HandleBuildingSelected;
@@ -118,51 +97,46 @@ public class BannerController : MonoBehaviour
         {
             MusicManager.Instance.OnBeat -= HandleBeat;
         }
-        
-        // Cacher les visuels si le controller est désactivé
-        HideBanner(persistentPreviewBanner);
-        HideBanner(persistentBanner);
+
+        // Sécurité : s'assurer de se désabonner si une unité était ciblée
+        if (CurrentTargetedUnit != null)
+        {
+            CurrentTargetedUnit.OnUnitDestroyed -= HandleTargetedUnitDestroyed;
+        }
+
+        HideVisual(persistentPreviewBanner, true);
+        HideVisual(persistentBanner, false);
     }
-    
+
     private void OnDestroy()
     {
         if (persistentPreviewBanner != null) Destroy(persistentPreviewBanner);
         if (persistentBanner != null) Destroy(persistentBanner);
         if (debugPreviewSphere != null) Destroy(debugPreviewSphere);
         if (debugBannerSphere != null) Destroy(debugBannerSphere);
-        
+
         if (instance == this) instance = null;
     }
 
+    #endregion
+
     #region Event Handlers
 
-    /// <summary>
-    /// Réagit au survol d'un bâtiment pour afficher la prévisualisation.
-    /// </summary>
     private void HandleBuildingHovered(Building building)
     {
         if (building == null) return;
-        
-        if (debugLogs) Debug.Log($"[BannerController] Hover detected on {building.name}. Showing preview.");
         float topY = GetTopOfBuilding(building);
-        ShowBanner(persistentPreviewBanner, building.transform.position, topY, true);
+        ShowVisualAtPosition(persistentPreviewBanner, building.transform.position, topY, true);
     }
 
-    /// <summary>
-    /// Réagit à la fin du survol pour cacher la prévisualisation.
-    /// </summary>
     private void HandleHoverEnded()
     {
-        if (debugLogs) Debug.Log($"[BannerController] Hover ended. Hiding preview.");
-        HideBanner(persistentPreviewBanner);
+        HideVisual(persistentPreviewBanner, true);
     }
 
-    /// <summary>
-    /// Réagit à la sélection d'un bâtiment (clic ou bouton manette).
-    /// </summary>
     private void HandleBuildingSelected(Building building)
     {
-        HideBanner(persistentPreviewBanner); // Cacher la prévisualisation dans tous les cas
+        HideVisual(persistentPreviewBanner, true); // Cacher la prévisualisation dans tous les cas
 
         if (building != null)
         {
@@ -172,7 +146,7 @@ public class BannerController : MonoBehaviour
                 if(debugLogs) Debug.Log($"[BannerController] Same building selected. Clearing banner.");
                 ClearBanner();
             }
-            else // Sinon, on essaie de la placer.
+            else // Sinon, on la place.
             {
                 if(debugLogs) Debug.Log($"[BannerController] New building selected ({building.name}). Placing banner.");
                 PlaceBannerOnBuilding(building);
@@ -187,91 +161,148 @@ public class BannerController : MonoBehaviour
             }
         }
     }
-    
+
+    /// <summary>
+    /// Gère la notification périodique aux observateurs. Si une unité est suivie, met à jour la position.
+    /// </summary>
+    private void HandleBeat(float beatDuration)
+    {
+        if (!HasActiveBanner) return;
+
+        Vector2Int positionToNotify;
+
+        if (CurrentTargetedUnit != null)
+        {
+            Tile unitTile = CurrentTargetedUnit.GetOccupiedTile();
+            if (unitTile != null)
+            {
+                positionToNotify = new Vector2Int(unitTile.column, unitTile.row);
+                CurrentBannerPosition = positionToNotify; // Mettre à jour la position logique
+            }
+            else // L'unité n'est plus sur une tuile valide
+            {
+                ClearBanner();
+                return;
+            }
+        }
+        else if (_currentTile != null) // Cas d'un bâtiment
+        {
+            positionToNotify = new Vector2Int(_currentTile.column, _currentTile.row);
+        }
+        else // Ni unité, ni bâtiment, état incohérent
+        {
+            ClearBanner();
+            return;
+        }
+
+        NotifyObservers(positionToNotify.x, positionToNotify.y);
+    }
+
+    /// <summary>
+    /// Se déclenche lorsque l'unité actuellement ciblée est détruite.
+    /// </summary>
+    private void HandleTargetedUnitDestroyed()
+    {
+        if (debugLogs) Debug.Log($"[BannerController] Targeted unit was destroyed. Clearing banner.");
+        ClearBanner();
+    }
+
     #endregion
-    
+
     #region Banner Logic
 
+    /// <summary>
+    /// Place la bannière sur un Bâtiment. C'est la méthode principale pour le ciblage via input.
+    /// </summary>
     public bool PlaceBannerOnBuilding(Building building)
     {
         if (building == null) return false;
         Tile occupiedTile = building.GetOccupiedTile();
-        if (occupiedTile == null) return false;
+        if (occupiedTile == null || !building.IsTargetable) return false;
 
-        Building previousBuildingWithBanner = CurrentBuilding;
-        bool placementSuccess = PlaceBanner(occupiedTile);
+        ClearBanner(); // Efface l'état précédent (unité ou autre bâtiment)
 
-        if (placementSuccess)
-        {
-            // Gérer l'outline : enlever l'ancien, mettre le nouveau en "Selected"
-            if (previousBuildingWithBanner != null && previousBuildingWithBanner != building)
-            {
-                previousBuildingWithBanner.GetComponent<BuildingSelectionFeedback>()?.SetOutlineState(OutlineState.Default);
-            }
-            building.GetComponent<BuildingSelectionFeedback>()?.SetOutlineState(OutlineState.Selected);
-            
-            // --- C'EST ICI LA CORRECTION MAJEURE ---
-            // On affiche le visuel de la bannière principale après que la logique soit validée.
-            float topY = GetTopOfBuilding(building);
-            ShowBanner(persistentBanner, building.transform.position, topY, false);
-        }
-        
-        return placementSuccess;
-    }
-
-    private bool PlaceBanner(Tile tile)
-    {
-        if (tile.currentBuilding == null || !tile.currentBuilding.IsTargetable) return false;
-
-        CurrentBuilding = tile.currentBuilding;
-        _currentTile = tile;
-        CurrentBannerPosition = new Vector2Int(tile.column, tile.row);
+        CurrentBuilding = building;
+        _currentTile = occupiedTile;
+        CurrentBannerPosition = new Vector2Int(occupiedTile.column, occupiedTile.row);
         HasActiveBanner = true;
 
-        if(debugLogs) Debug.Log($"[BannerController] Banner logic placed on Tile({tile.column}, {tile.row}). Notifying observers.");
-        NotifyObservers(tile.column, tile.row);
+        building.GetComponent<BuildingSelectionFeedback>()?.SetOutlineState(OutlineState.Selected);
+
+        float topY = GetTopOfBuilding(building);
+        ShowVisualAtPosition(persistentBanner, building.transform.position, topY, false);
+
+        if(debugLogs) Debug.Log($"[BannerController] Banner placed on Building {building.name}. Notifying observers.");
+        NotifyObservers(occupiedTile.column, occupiedTile.row);
+        return true;
+    }
+
+    /// <summary>
+    /// Place la bannière sur une Unité. Méthode à appeler depuis un autre script.
+    /// </summary>
+    public bool PlaceBannerOnUnit(Unit unit)
+    {
+        if (unit == null) return false;
+
+        ClearBanner(); // Efface l'état précédent
+
+        CurrentTargetedUnit = unit;
+        HasActiveBanner = true;
+
+        // S'abonner à la destruction de l'unité pour nettoyer la bannière
+        CurrentTargetedUnit.OnUnitDestroyed += HandleTargetedUnitDestroyed;
+
+        ShowAndAttachVisualToUnit(persistentBanner, unit, false);
+
+        Tile unitTile = unit.GetOccupiedTile();
+        if (unitTile != null)
+        {
+            CurrentBannerPosition = new Vector2Int(unitTile.column, unitTile.row);
+            if(debugLogs) Debug.Log($"[BannerController] Banner placed on Unit {unit.name}. Notifying observers.");
+            NotifyObservers(unitTile.column, unitTile.row);
+        }
         return true;
     }
 
     public void ClearBanner()
     {
-        if (HasActiveBanner)
-        {
-            if (CurrentBuilding != null)
-            {
-                CurrentBuilding.GetComponent<BuildingSelectionFeedback>()?.SetOutlineState(OutlineState.Default);
-            }
+        if (!HasActiveBanner) return;
 
-            HasActiveBanner = false;
-            CurrentBannerPosition = Vector2Int.zero;
-            CurrentBuilding = null;
-            _currentTile = null;
-            
-            // Cacher le visuel et notifier que la bannière est retirée (avec des coordonnées invalides ou null)
-            HideBanner(persistentBanner);
-            NotifyObservers(-1, -1); // ou une autre convention pour "removed"
-            if(debugLogs) Debug.Log($"[BannerController] Banner cleared.");
+        if (CurrentBuilding != null)
+        {
+            CurrentBuilding.GetComponent<BuildingSelectionFeedback>()?.SetOutlineState(OutlineState.Default);
         }
+        if (CurrentTargetedUnit != null)
+        {
+            CurrentTargetedUnit.OnUnitDestroyed -= HandleTargetedUnitDestroyed;
+        }
+
+        HasActiveBanner = false;
+        CurrentBannerPosition = Vector2Int.zero;
+        CurrentBuilding = null;
+        CurrentTargetedUnit = null;
+        _currentTile = null;
+
+        HideVisual(persistentBanner, false);
+        NotifyObservers(-1, -1); // Notification de retrait
+        if(debugLogs) Debug.Log($"[BannerController] Banner cleared.");
     }
-    
+
     #endregion
-    
-    #region Visuals Management (from MouseManager)
-    
+
+    #region Visuals Management
+
     private void InitializePersistentPrefabs()
     {
-        if (bannerPrefab == null) Debug.LogError("[BannerController] Banner Prefab is not assigned!");
-        if (previewBannerPrefab == null) Debug.LogWarning("[BannerController] Preview Banner Prefab is not assigned! Using normal banner as fallback.");
-
-        if (persistentBanner == null && bannerPrefab != null)
+        if (bannerPrefab != null)
         {
             persistentBanner = Instantiate(bannerPrefab);
             persistentBanner.name = "Persistent_Banner_Visual";
             persistentBanner.SetActive(false);
         }
-        
+
         GameObject prefabToUseForPreview = previewBannerPrefab != null ? previewBannerPrefab : bannerPrefab;
-        if (persistentPreviewBanner == null && prefabToUseForPreview != null)
+        if (prefabToUseForPreview != null)
         {
             persistentPreviewBanner = Instantiate(prefabToUseForPreview);
             persistentPreviewBanner.name = "Persistent_Preview_Visual";
@@ -279,48 +310,45 @@ public class BannerController : MonoBehaviour
         }
     }
 
-    private void ShowBanner(GameObject banner, Vector3 buildingWorldPosition, float buildingTopY, bool isPreview)
+    private void ShowVisualAtPosition(GameObject visual, Vector3 worldPosition, float topY, bool isPreview)
     {
-        if (banner == null) return;
-        
-        banner.SetActive(false);
+        if (visual == null) return;
 
-        BannerMovement bannerMovement = banner.GetComponent<BannerMovement>();
+        visual.transform.SetParent(null); // S'assurer qu'il n'est plus attaché à une unité
+
+        BannerMovement bannerMovement = visual.GetComponent<BannerMovement>();
         float heightOffset = bannerMovement != null ? bannerMovement.FinalHeightOffset : 1.0f;
-        Vector3 bannerPosition = new Vector3(buildingWorldPosition.x, buildingTopY + heightOffset, buildingWorldPosition.z);
+        Vector3 bannerPosition = new Vector3(worldPosition.x, topY + heightOffset, worldPosition.z);
 
-        if (bannerMovement != null)
-        {
-            banner.transform.position = bannerPosition;
-            banner.SetActive(true);
-            bannerMovement.UpdatePosition(bannerPosition);
-        }
-        else
-        {
-            banner.transform.position = bannerPosition;
-            banner.SetActive(true);
-        }
-        
-        if (debugVisuals)
-        {
-            GameObject sphere = isPreview ? debugPreviewSphere : debugBannerSphere;
-            if (sphere != null)
-            {
-                sphere.transform.position = bannerPosition;
-                sphere.SetActive(true);
-            }
-        }
+        visual.transform.position = bannerPosition;
+        visual.SetActive(true);
+        bannerMovement?.UpdatePosition(bannerPosition);
+
+        UpdateDebugVisual(isPreview, bannerPosition, true);
     }
 
-    private void HideBanner(GameObject bannerInstance)
+    private void ShowAndAttachVisualToUnit(GameObject visual, Unit unit, bool isPreview)
     {
-        if (bannerInstance != null) bannerInstance.SetActive(false);
-        
-        if (debugVisuals)
+        if (visual == null || unit == null) return;
+
+        visual.transform.SetParent(unit.transform, false); // Attacher à l'unité
+        visual.transform.localPosition = Vector3.zero; // Réinitialiser la position locale
+        visual.SetActive(true);
+
+        BannerMovement bannerMovement = visual.GetComponent<BannerMovement>();
+        bannerMovement?.AttachToUnit(unit); // Laisser le script de mouvement gérer l'offset
+
+        UpdateDebugVisual(isPreview, visual.transform.position, true);
+    }
+
+    private void HideVisual(GameObject visualInstance, bool isPreview)
+    {
+        if (visualInstance != null)
         {
-            if (bannerInstance == persistentPreviewBanner && debugPreviewSphere != null) debugPreviewSphere.SetActive(false);
-            else if (bannerInstance == persistentBanner && debugBannerSphere != null) debugBannerSphere.SetActive(false);
+            visualInstance.SetActive(false);
+            visualInstance.transform.SetParent(null); // Détacher pour éviter les problèmes
         }
+        UpdateDebugVisual(isPreview, Vector3.zero, false);
     }
 
     private float GetTopOfBuilding(Building building)
@@ -329,41 +357,55 @@ public class BannerController : MonoBehaviour
         Bounds combinedBounds = new Bounds(building.transform.position, Vector3.zero);
         Renderer[] renderers = building.GetComponentsInChildren<Renderer>();
         bool hasBounds = false;
-
         foreach (Renderer renderer in renderers)
         {
             if (renderer is ParticleSystemRenderer || renderer is TrailRenderer) continue;
-            if (!hasBounds)
-            {
-                combinedBounds = renderer.bounds;
-                hasBounds = true;
-            }
-            else
-            {
-                combinedBounds.Encapsulate(renderer.bounds);
-            }
+            if (!hasBounds) { combinedBounds = renderer.bounds; hasBounds = true; }
+            else { combinedBounds.Encapsulate(renderer.bounds); }
         }
-        
-        // Fallback si aucun renderer n'est trouvé
-        if (!hasBounds)
-        {
-            Collider[] colliders = building.GetComponentsInChildren<Collider>();
-            foreach (Collider collider in colliders)
-            {
-                 if (!hasBounds)
-                {
-                    combinedBounds = collider.bounds;
-                    hasBounds = true;
-                }
-                else
-                {
-                    combinedBounds.Encapsulate(collider.bounds);
-                }
-            }
-        }
-        
+        if (!hasBounds) return building.transform.position.y + 2f; // Fallback
         return hasBounds ? combinedBounds.max.y : building.transform.position.y;
     }
+
+    #endregion
+
+    #region Observer Pattern & Helpers
+
+    private System.Collections.IEnumerator InitializeBannerOnAllyBase()
+    {
+        yield return new WaitForSeconds(0.5f);
+        PlayerBuilding allyBase = FindFirstObjectByType<PlayerBuilding>();
+        if (allyBase != null)
+        {
+            if (debugLogs) Debug.Log($"[BannerController] Auto-placing banner on ally base: {allyBase.name}");
+            PlaceBannerOnBuilding(allyBase);
+        }
+    }
+
+    public void AddObserver(IBannerObserver observer)
+    {
+        if (observer != null && !observers.Contains(observer))
+        {
+            observers.Add(observer);
+        }
+    }
+
+    public void RemoveObserver(IBannerObserver observer)
+    {
+        if (observer != null) observers.Remove(observer);
+    }
+
+    private void NotifyObservers(int column, int row)
+    {
+        foreach (var observer in new List<IBannerObserver>(observers))
+        {
+            observer?.OnBannerPlaced(column, row);
+        }
+    }
+
+    #endregion
+
+    #region Debugging
 
     private void CreateDebugVisuals()
     {
@@ -381,37 +423,17 @@ public class BannerController : MonoBehaviour
         Destroy(debugBannerSphere.GetComponent<Collider>());
         debugBannerSphere.SetActive(false);
     }
-    
-    #endregion
-    
-    #region Observer Pattern
 
-    private void HandleBeat(float beatDuration)
+    private void UpdateDebugVisual(bool isPreview, Vector3 position, bool shouldShow)
     {
-        if (HasActiveBanner)
+        if (!debugVisuals) return;
+        GameObject sphere = isPreview ? debugPreviewSphere : debugBannerSphere;
+        if (sphere != null)
         {
-            NotifyObservers(CurrentBannerPosition.x, CurrentBannerPosition.y);
+            sphere.transform.position = position;
+            sphere.SetActive(shouldShow);
         }
     }
-    
-    public void AddObserver(IBannerObserver observer)
-    {
-        if (!observers.Contains(observer)) observers.Add(observer);
-    }
 
-    public void RemoveObserver(IBannerObserver observer)
-    {
-        if (observers.Contains(observer)) observers.Remove(observer);
-    }
-
-    private void NotifyObservers(int column, int row)
-    {
-        foreach (var observer in new List<IBannerObserver>(observers))
-        {
-            observer?.OnBannerPlaced(column, row);
-        }
-    }
-    
     #endregion
 }
-

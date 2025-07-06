@@ -1,9 +1,16 @@
+// Contenu à mettre dans votre fichier : Scripts2/User Interface/SequenceFlagDisplay.cs
+
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
+using System; // NOUVEAU : Ajouté pour pouvoir utiliser 'Action'
 
 public class SequenceFlagDisplay : MonoBehaviour
 {
+    // NOUVEAU : L'événement qui va notifier le BeatVisualizer.
+    // Il enverra la couleur du timing (vert, jaune ou rouge).
+    public static event Action<Color> OnFlagStateChanged;
+
     [Header("X Flag Sprites")]
     [Tooltip("Sprite for a perfect timing flag when key X is pressed.")]
     public Sprite perfectXFlagSprite;
@@ -34,26 +41,36 @@ public class SequenceFlagDisplay : MonoBehaviour
     private void OnEnable()
     {
         SequenceController.OnSequenceKeyPressed += SpawnFlag;
+        // MODIFIÉ : On s'assure d'écouter les bons événements pour effacer les drapeaux
+        SequenceController.OnSequenceFail += ClearFlags;
+        SequenceController.OnSequenceSuccess += ClearFlags;
         SequenceController.OnSequenceDisplayCleared += ClearFlags;
     }
 
     private void OnDisable()
     {
         SequenceController.OnSequenceKeyPressed -= SpawnFlag;
+        SequenceController.OnSequenceFail -= ClearFlags;
+        SequenceController.OnSequenceSuccess -= ClearFlags;
         SequenceController.OnSequenceDisplayCleared -= ClearFlags;
     }
 
     /// <summary>
     /// Spawns a flag based on the key pressed and its timing color.
-    /// Expected keys are "X", "C" and "V". TimingColor is green for perfect and yellow for good.
     /// </summary>
-    /// <param name="key">The key pressed (e.g., "X", "C", or "V").</param>
-    /// <param name="timingColor">Timing color (green for perfect, yellow for good).</param>
     private void SpawnFlag(string key, Color timingColor)
     {
+        // Si le coup est raté (rouge), on ne crée pas de drapeau.
+        // On notifie juste le BeatVisualizer de l'échec.
+        if (timingColor == Color.red)
+        {
+            OnFlagStateChanged?.Invoke(Color.red);
+            return;
+        }
+
         Sprite selectedSprite = null;
 
-        // Determine which sprite to use based on key and timing.
+        // Détermine quel sprite utiliser (logique originale conservée).
         if (key.Equals("X", System.StringComparison.OrdinalIgnoreCase))
         {
             selectedSprite = (timingColor == Color.green) ? perfectXFlagSprite : goodXFlagSprite;
@@ -68,8 +85,8 @@ public class SequenceFlagDisplay : MonoBehaviour
         }
         else
         {
-            Debug.LogWarning($"Received an unknown key '{key}'. Defaulting to good X flag.");
-            selectedSprite = goodXFlagSprite;
+            Debug.LogWarning($"Received an unknown key '{key}'.");
+            return; // On ne fait rien pour une touche inconnue
         }
 
         if (selectedSprite == null)
@@ -78,33 +95,26 @@ public class SequenceFlagDisplay : MonoBehaviour
             return;
         }
 
-        // Create a new GameObject for the flag.
+        // Crée un nouvel objet pour le drapeau (logique originale conservée).
         GameObject flagObject = new GameObject("Flag_" + key);
         flagObject.transform.SetParent(transform, false);
 
-        // Add an Image component and assign the selected sprite.
         Image flagImage = flagObject.AddComponent<Image>();
         flagImage.sprite = selectedSprite;
 
-        // Set the flag's size.
         RectTransform flagRect = flagObject.GetComponent<RectTransform>();
         if (flagRect != null)
         {
             flagRect.sizeDelta = flagSize;
-            // Position the flag horizontally based on the number of spawned flags.
             float posX = spawnedFlags.Count * flagSpacing;
             flagRect.anchoredPosition = new Vector2(posX, 0);
-            Debug.Log($"Spawning flag for key {key} at anchored position: ({posX}, 0) with size {flagSize}");
-        }
-        else
-        {
-            flagObject.transform.localScale = Vector3.one;
-            flagObject.transform.localPosition = new Vector3(spawnedFlags.Count * flagSpacing, 0, 0);
         }
 
-        // Optionally, to keep flags behind other UI elements, set the flag as first sibling.
         flagObject.transform.SetAsFirstSibling();
         spawnedFlags.Add(flagObject);
+
+        // NOUVEAU : On déclenche l'événement pour notifier le BeatVisualizer.
+        OnFlagStateChanged?.Invoke(timingColor);
     }
 
     /// <summary>
@@ -117,5 +127,9 @@ public class SequenceFlagDisplay : MonoBehaviour
             Destroy(flag);
         }
         spawnedFlags.Clear();
+
+        // NOUVEAU : On notifie aussi le BeatVisualizer quand on efface les drapeaux,
+        // pour qu'il puisse considérer cela comme un échec.
+        OnFlagStateChanged?.Invoke(Color.red);
     }
 }

@@ -348,6 +348,28 @@ public class HexGridManager : MonoBehaviour
         return bestCandidate;
     }
 
+    public Tile GetNeighborAwayFromTarget(int startCol, int startRow, int targetCol, int targetRow)
+    {
+        Tile startTile = GetTileAt(startCol, startRow);
+        if (startTile == null) return null;
+
+        Tile farthestNeighbor = null;
+        float maxDistSq = -1;
+
+        foreach (var neighbor in startTile.Neighbors)
+        {
+            if (neighbor == null) continue;
+
+            float distSq = (new Vector2(neighbor.column, neighbor.row) - new Vector2(targetCol, targetRow)).sqrMagnitude;
+            if (distSq > maxDistSq)
+            {
+                maxDistSq = distSq;
+                farthestNeighbor = neighbor;
+            }
+        }
+        return farthestNeighbor;
+    }
+
     // ConvertOffsetToCube_OddQ et HexDistance devraient fonctionner correctement avec des coordonnées logiques négatives
     // car les maths sous-jacentes des coordonnées cubiques le permettent.
     private Vector3Int ConvertOffsetToCube_OddQ(int col, int row)

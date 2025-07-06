@@ -3,6 +3,7 @@ using Unity.Behavior;
 using Unity.Behavior.GraphFramework;
 using System;
 using Unity.Properties;
+using Vector2Int = UnityEngine.Vector2Int;
 
 [Serializable]
 [GeneratePropertyBag]
@@ -14,151 +15,110 @@ using Unity.Properties;
 )]
 public partial class InitializeObjectiveFromBannerNode : Unity.Behavior.Action
 {
-    // Input Blackboard variables
-    private const string BB_BANNER_TARGET_POSITION = "BannerTargetPosition";
-    private const string BB_HAS_BANNER_TARGET = "HasBannerTarget";
+    // --- Clés des variables du Blackboard ---
     private const string BB_SELF_UNIT = "SelfUnit";
-    
-    // Output Blackboard variables
     private const string BB_HAS_INITIAL_OBJECTIVE_SET = "HasInitialObjectiveSet";
     private const string BB_INITIAL_TARGET_BUILDING = "InitialTargetBuilding";
+    private const string BB_INTERACTION_TARGET_UNIT = "InteractionTargetUnit";
     private const string BB_IS_IN_DEFENSIVE_MODE = "IsInDefensiveMode";
-    private const string BB_IS_OBJECTIVE_COMPLETED = "IsObjectiveCompleted";
+    private const string BB_FINAL_DESTINATION_POSITION = "FinalDestinationPosition";
 
-    // Cached Blackboard variables
-    private BlackboardVariable<Vector2Int> bbBannerTargetPosition;
-    private BlackboardVariable<bool> bbHasBannerTarget;
+    // --- Cache des variables du Blackboard ---
     private BlackboardVariable<Unit> bbSelfUnit;
     private BlackboardVariable<bool> bbHasInitialObjectiveSet;
     private BlackboardVariable<Building> bbInitialTargetBuilding;
+    private BlackboardVariable<Unit> bbInteractionTargetUnit;
     private BlackboardVariable<bool> bbIsInDefensiveMode;
-    private BlackboardVariable<bool> bbIsObjectiveCompleted;
-    
+    private BlackboardVariable<Vector2Int> bbFinalDestinationPosition;
+
     private bool blackboardVariablesCached = false;
     private BehaviorGraphAgent agent;
-    private AllyUnit selfUnit;
 
     protected override Status OnStart()
     {
         if (GameObject != null) agent = GameObject.GetComponent<BehaviorGraphAgent>();
-        
+
         if (!CacheBlackboardVariables())
         {
-            Debug.LogError("[InitializeObjectiveFromBannerNode] Failed to cache blackboard variables.", GameObject);
+            Debug.LogError("[InitializeObjectiveFromBannerNode] Échec du cache des variables Blackboard.", GameObject);
             return Status.Failure;
         }
 
-        selfUnit = bbSelfUnit?.Value as AllyUnit;
-        if (selfUnit == null)
+        var selfUnit = bbSelfUnit?.Value;
+        if (selfUnit == null) return Status.Failure;
+
+        if (!BannerController.Exists || !BannerController.Instance.HasActiveBanner)
         {
-            Debug.LogError("[InitializeObjectiveFromBannerNode] SelfUnit is null or not an AllyUnit.", GameObject);
+            Debug.LogWarning($"[{selfUnit.name}] Ne trouve pas de bannière active pour initialiser l'objectif.");
             return Status.Failure;
         }
 
-        // Vérifier si l'objectif est déjà initialisé (sécurité)
-        bool hasObjective = bbHasInitialObjectiveSet?.Value ?? false;
-        if (hasObjective)
+        // Réinitialiser les anciennes cibles pour éviter les conflits
+        bbInitialTargetBuilding.Value = null;
+        bbInteractionTargetUnit.Value = null;
+
+        // Priorité 1: Tenter de cibler une UNITÉ (le boss)
+        Unit targetedUnit = BannerController.Instance.CurrentTargetedUnit;
+        if (targetedUnit != null)
         {
-            Debug.LogWarning("[InitializeObjectiveFromBannerNode] Objective already set, skipping initialization.", GameObject);
-            return Status.Success;
+            Tile unitTile = targetedUnit.GetOccupiedTile();
+            if (unitTile != null)
+            {
+                Debug.Log($"[IA - {selfUnit.name}] Objectif initialisé sur UNITÉ : '{targetedUnit.name}' à la position ({unitTile.column}, {unitTile.row})");
+
+                bbInteractionTargetUnit.Value = targetedUnit;
+                bbFinalDestinationPosition.Value = new Vector2Int(unitTile.column, unitTile.row);
+                bbIsInDefensiveMode.Value = false; // L'attaque d'une unité est toujours offensive
+                bbHasInitialObjectiveSet.Value = true;
+
+                return Status.Success;
+            }
         }
 
-        // Récupérer la position de la bannière
-        bool hasBanner = bbHasBannerTarget?.Value ?? false;
-        if (!hasBanner)
+        // Priorité 2: Tenter de cibler un BÂTIMENT
+        Building targetedBuilding = BannerController.Instance.CurrentBuilding;
+        if (targetedBuilding != null)
         {
-            Debug.LogError("[InitializeObjectiveFromBannerNode] No banner target available for initialization.", GameObject);
-            return Status.Failure;
+            Tile buildingTile = targetedBuilding.GetOccupiedTile();
+            if(buildingTile != null)
+            {
+                Debug.Log($"[IA - {selfUnit.name}] Objectif initialisé sur BÂTIMENT : '{targetedBuilding.name}' à la position ({buildingTile.column}, {buildingTile.row})");
+
+                bbInitialTargetBuilding.Value = targetedBuilding;
+                bbFinalDestinationPosition.Value = new Vector2Int(buildingTile.column, buildingTile.row);
+                bbIsInDefensiveMode.Value = (targetedBuilding.Team == TeamType.Player); // Le mode défensif s'active si le bâtiment est allié
+                bbHasInitialObjectiveSet.Value = true;
+
+                return Status.Success;
+            }
         }
 
-        Vector2Int bannerPos = bbBannerTargetPosition?.Value ?? new Vector2Int(-1, -1);
-        if (bannerPos.x == -1 || bannerPos.y == -1)
-        {
-            Debug.LogError("[InitializeObjectiveFromBannerNode] Invalid banner position.", GameObject);
-            return Status.Failure;
-        }
-
-        // Trouver le bâtiment à la position de la bannière
-        Building buildingAtBanner = selfUnit.FindBuildingAtPosition(bannerPos);
-        if (buildingAtBanner == null)
-        {
-            Debug.LogError($"[InitializeObjectiveFromBannerNode] No building found at banner position ({bannerPos.x}, {bannerPos.y}).", GameObject);
-            return Status.Failure;
-        }
-
-        // Définir l'objectif et le mode selon le type de bâtiment
-        bool isDefensiveMode = (buildingAtBanner.Team == TeamType.Player);
-        
-        // Écrire sur le Blackboard
-        if (bbInitialTargetBuilding != null) bbInitialTargetBuilding.Value = buildingAtBanner;
-        if (bbIsInDefensiveMode != null) bbIsInDefensiveMode.Value = isDefensiveMode;
-        if (bbIsObjectiveCompleted != null) bbIsObjectiveCompleted.Value = false;
-        if (bbHasInitialObjectiveSet != null) bbHasInitialObjectiveSet.Value = true;
-
-        Debug.Log($"[InitializeObjectiveFromBannerNode] Objective initialized: Building='{buildingAtBanner.name}', Mode={( isDefensiveMode ? "Defensive" : "Offensive")}", GameObject);
-        
-        return Status.Success;
+        Debug.LogError("[InitializeObjectiveFromBannerNode] La bannière est active mais aucune cible valide (Unité ou Bâtiment) n'a été trouvée.", GameObject);
+        return Status.Failure;
     }
 
     protected override Status OnUpdate()
     {
-        return Status.Success; // Action instantanée
+        // Ce noeud n'a besoin que d'un tick pour s'exécuter.
+        return Status.Success;
     }
 
     private bool CacheBlackboardVariables()
     {
         if (blackboardVariablesCached) return true;
-
-        if (agent == null || agent.BlackboardReference == null)
-        {
-            Debug.LogError("[InitializeObjectiveFromBannerNode] Agent or BlackboardReference missing.", GameObject);
-            return false;
-        }
+        if (agent == null || agent.BlackboardReference == null) return false;
 
         var blackboard = agent.BlackboardReference;
         bool success = true;
 
-        // Input variables
-        if (!blackboard.GetVariable(BB_BANNER_TARGET_POSITION, out bbBannerTargetPosition))
+        if (!blackboard.GetVariable(BB_SELF_UNIT, out bbSelfUnit)) success = false;
+        if (!blackboard.GetVariable(BB_HAS_INITIAL_OBJECTIVE_SET, out bbHasInitialObjectiveSet)) success = false;
+        if (!blackboard.GetVariable(BB_INITIAL_TARGET_BUILDING, out bbInitialTargetBuilding)) success = false;
+        if (!blackboard.GetVariable(BB_IS_IN_DEFENSIVE_MODE, out bbIsInDefensiveMode)) success = false;
+        if (!blackboard.GetVariable(BB_INTERACTION_TARGET_UNIT, out bbInteractionTargetUnit)) success = false;
+        if (!blackboard.GetVariable(BB_FINAL_DESTINATION_POSITION, out bbFinalDestinationPosition))
         {
-            Debug.LogWarning($"[InitializeObjectiveFromBannerNode] '{BB_BANNER_TARGET_POSITION}' not found.", GameObject);
-            success = false;
-        }
-        
-        if (!blackboard.GetVariable(BB_HAS_BANNER_TARGET, out bbHasBannerTarget))
-        {
-            Debug.LogWarning($"[InitializeObjectiveFromBannerNode] '{BB_HAS_BANNER_TARGET}' not found.", GameObject);
-            success = false;
-        }
-        
-        if (!blackboard.GetVariable(BB_SELF_UNIT, out bbSelfUnit))
-        {
-            Debug.LogError($"[InitializeObjectiveFromBannerNode] '{BB_SELF_UNIT}' not found.", GameObject);
-            success = false;
-        }
-
-        // Output variables
-        if (!blackboard.GetVariable(BB_HAS_INITIAL_OBJECTIVE_SET, out bbHasInitialObjectiveSet))
-        {
-            Debug.LogError($"[InitializeObjectiveFromBannerNode] '{BB_HAS_INITIAL_OBJECTIVE_SET}' not found.", GameObject);
-            success = false;
-        }
-        
-        if (!blackboard.GetVariable(BB_INITIAL_TARGET_BUILDING, out bbInitialTargetBuilding))
-        {
-            Debug.LogError($"[InitializeObjectiveFromBannerNode] '{BB_INITIAL_TARGET_BUILDING}' not found.", GameObject);
-            success = false;
-        }
-        
-        if (!blackboard.GetVariable(BB_IS_IN_DEFENSIVE_MODE, out bbIsInDefensiveMode))
-        {
-            Debug.LogError($"[InitializeObjectiveFromBannerNode] '{BB_IS_IN_DEFENSIVE_MODE}' not found.", GameObject);
-            success = false;
-        }
-        
-        if (!blackboard.GetVariable(BB_IS_OBJECTIVE_COMPLETED, out bbIsObjectiveCompleted))
-        {
-            Debug.LogError($"[InitializeObjectiveFromBannerNode] '{BB_IS_OBJECTIVE_COMPLETED}' not found.", GameObject);
+            Debug.LogError($"[InitializeObjectiveFromBannerNode] La variable Blackboard '{BB_FINAL_DESTINATION_POSITION}' est introuvable.", GameObject);
             success = false;
         }
 
@@ -168,14 +128,8 @@ public partial class InitializeObjectiveFromBannerNode : Unity.Behavior.Action
 
     protected override void OnEnd()
     {
+        // Nettoyage pour la prochaine utilisation
         blackboardVariablesCached = false;
-        bbBannerTargetPosition = null;
-        bbHasBannerTarget = null;
-        bbSelfUnit = null;
-        bbHasInitialObjectiveSet = null;
-        bbInitialTargetBuilding = null;
-        bbIsInDefensiveMode = null;
-        bbIsObjectiveCompleted = null;
-        selfUnit = null;
+        agent = null;
     }
 }

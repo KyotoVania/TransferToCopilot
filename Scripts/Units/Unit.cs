@@ -6,6 +6,7 @@ using System.Linq;
 using ScriptableObjects;
 using System;
 using Random = UnityEngine.Random;
+
 public enum UnitState
 {
     Idle,
@@ -16,6 +17,13 @@ public enum UnitState
 
 public abstract class Unit : MonoBehaviour, ITileReservationObserver
 {
+    // --- FEATURE DU FICHIER 1 : Événement de destruction ---
+    /// <summary>
+    /// Événement déclenché juste avant la destruction de l'unité.
+    /// La bannière ou d'autres systèmes peuvent s'y abonner.
+    /// </summary>
+    public event Action OnUnitDestroyed;
+
     protected abstract Vector2Int? TargetPosition { get; }
 
     public struct LastDamageEvent
@@ -29,7 +37,7 @@ public abstract class Unit : MonoBehaviour, ITileReservationObserver
     [Header("State & Core Mechanics")]
     public bool IsMoving;
     protected Tile occupiedTile;
-    [SerializeField] private float yOffset = 0f;
+    [SerializeField] protected float yOffset = 0f; // Gardé 'protected' pour la flexibilité des classes enfants
     public bool isAttached = false;
     public int Level;
 
@@ -47,14 +55,16 @@ public abstract class Unit : MonoBehaviour, ITileReservationObserver
     private bool _canReceiveFeverBuffs = false;
     public bool IsFeverActive { get; private set; } = false;
 
-	[Header("Fever Aura VFX")]
+    // --- FEATURE DU FICHIER 2 : VFX pour le mode Fever ---
+    [Header("Fever Aura VFX")]
     [Tooltip("Prefab de l'aura Fever à instancier sous l'unité quand le mode Fever est actif.")]
     [SerializeField] private GameObject feverAuraPrefab;
     private GameObject _activeFeverAuraInstance;
 
-	public StatSheet_SO CharacterStatSheets;
-    public int Health { get; protected set;}
-    
+
+    public StatSheet_SO CharacterStatSheets;
+    public int Health { get; protected set; }
+
     public virtual int Attack => CurrentStats != null ? CurrentStats.Attack : 0;
     public virtual int Defense => CurrentStats != null ? CurrentStats.Defense : 0;
     public virtual int AttackRange => CurrentStats != null ? CurrentStats.AttackRange : 0;
@@ -93,12 +103,12 @@ public abstract class Unit : MonoBehaviour, ITileReservationObserver
     public static event UnitAttackedBuildingHandler OnUnitAttackedBuilding;
 
 
-	/// <summary>
+    /// <summary>
     /// Déclenché lorsqu'une unité est tuée par une autre.
     /// Param 1: Attaquant, Param 2: Victime.
     /// </summary>
     public static event Action<Unit, Unit> OnUnitKilled;
-    
+
 [Header("Animation")]
     [SerializeField] protected Animator animator;
     [SerializeField] protected bool useAnimations = true;
@@ -117,10 +127,21 @@ public abstract class Unit : MonoBehaviour, ITileReservationObserver
     protected bool isInteractingWithBuilding = false;
     protected NeutralBuilding buildingBeingCaptured = null;
     protected int beatsSpentCapturing = 0;
-    
+
     protected List<ActiveBuff> activeBuffs = new List<ActiveBuff>();
 
     public Tile GetOccupiedTile() => occupiedTile;
+
+    // --- FEATURE DU FICHIER 1 : Gestion des tuiles multiples ---
+    public virtual List<Tile> GetOccupiedTiles()
+    {
+        // Pour une unité de base, on retourne une liste contenant uniquement sa tuile principale.
+        if (occupiedTile != null)
+        {
+            return new List<Tile> { occupiedTile };
+        }
+        return new List<Tile>(); // Retourne une liste vide si l'unité n'est sur aucune tuile.
+    }
 
     protected List<Tile> GetTilesInAttackRange()
     {
@@ -130,7 +151,6 @@ public abstract class Unit : MonoBehaviour, ITileReservationObserver
 
     protected virtual IEnumerator Start()
     {
-  
         if (animator == null) { animator = GetComponent<Animator>(); }
         if (useAnimations && animator == null)
         {
@@ -150,6 +170,8 @@ public abstract class Unit : MonoBehaviour, ITileReservationObserver
         else if (debugUnitCombat) Debug.Log($"[{name}] No attack system assigned. This unit cannot attack.");
 
         SetState(UnitState.Idle);
+
+        // --- LOGIQUE FUSIONNÉE : Abonnement au système de Fever amélioré ---
         if (FeverManager.Instance != null)
         {
             // Si le mode Fever est déjà à son niveau maximum lors de l'apparition de l'unité,
@@ -158,10 +180,11 @@ public abstract class Unit : MonoBehaviour, ITileReservationObserver
             {
                 ApplyFeverEffects();
             }
-            
+
             // On s'abonne aux changements de niveau pour les futurs paliers ou la fin du mode Fever.
             FeverManager.Instance.OnFeverLevelChanged += HandleFeverLevelChanged;
         }
+
         yield return StartCoroutine(AttachToNearestTile());
 
         if (TileReservationController.Instance != null)
@@ -200,13 +223,9 @@ public abstract class Unit : MonoBehaviour, ITileReservationObserver
         return CharacterStatSheets?.Type ?? UnitType.Null;
     }
 #if UNITY_EDITOR
-    /// <summary>
-    /// Affiche un bouton dans l'inspecteur pour logger les statistiques actuelles de l'unité.
-    /// Ce bouton n'est visible que lorsque le jeu est en mode Play ou en Pause.
-    /// </summary>
     [Button("Log Current Stats", ButtonSizes.Medium), GUIColor(0.4f, 0.8f, 1f)]
-    [PropertyOrder(-10)] // Place le bouton en haut de l'inspecteur
-    [ShowIf("Application.isPlaying")] // N'affiche le bouton qu'en mode Play/Pause
+    [PropertyOrder(-10)]
+    [ShowIf("@UnityEngine.Application.isPlaying")] // Version robuste de la condition
     private void LogCurrentStatsForInspector()
     {
         if (this.CurrentStats == null)
@@ -214,13 +233,12 @@ public abstract class Unit : MonoBehaviour, ITileReservationObserver
             Debug.Log($"<color=orange>[{name}] CurrentStats est null. Les stats n'ont pas encore été calculées ou assignées.</color>");
             return;
         }
-
-        // On utilise la méthode LogStats qui existe déjà sur l'objet RuntimeStats
         Debug.Log($"--- Stats Log for <color=cyan>{name}</color> (Level {this.Level}) HP: {this.Health} at frame {Time.frameCount} ---");
         this.CurrentStats.LogStats();
     }
 #endif
 
+    // --- FEATURE DU FICHIER 2 : Logique du mode Fever améliorée ---
     private void HandleFeverLevelChanged(int newFeverLevel)
     {
         // Si le mode Fever s'active (n'importe quel niveau > 0) ET que cette unité n'a pas encore ses buffs
@@ -370,7 +388,6 @@ public abstract class Unit : MonoBehaviour, ITileReservationObserver
         if (currentState == UnitState.Capturing) { HandleCaptureOnBeat(); }
     }
 
-    // --- Les autres méthodes (HandleMovementOnBeat, HandleAttackOnBeat, etc.) restent inchangées car elles ne dépendent pas directement du manager ---
     #region Unchanged Methods
     protected virtual void HandleMovementOnBeat()
     {
@@ -571,58 +588,56 @@ public abstract class Unit : MonoBehaviour, ITileReservationObserver
         }
     }
 
-        public IEnumerator PerformAttackCoroutine(Unit target)
+    public IEnumerator PerformAttackCoroutine(Unit target)
+    {
+        if (AttackSystem == null || target == null || target.Health <= 0)
         {
-            if (AttackSystem == null || target == null || target.Health <= 0)
-            {
-                if (debugUnitCombat) Debug.LogWarning($"[{name}] PerformAttackCoroutine: Conditions non remplies (AttackSystem null, cible nulle ou cible morte). Cible: {(target?.name ?? "NULL")}, Cible PV: {target?.Health ?? -1}");
-                _isAttacking = false;
-                SetState(UnitState.Idle);
-                yield break;
-            }
-
-            _isAttacking = true;
-            SetState(UnitState.Attacking);
-            FaceUnitTarget(target);
-
-            if (useAnimations && animator != null)
-            {
-                if (debugUnitCombat) Debug.Log($"[{name} ({Time.frameCount})] PerformAttackCoroutine: Déclenchement de l'animation d'attaque (ID: {AttackTriggerId}) pour la cible {target.name}.", this);
-                animator.SetTrigger(AttackTriggerId);
-            }
-            else
-            {
-                if (useAnimations && animator == null && debugUnitCombat) Debug.LogWarning($"[{name}] PerformAttackCoroutine: Animator non assigné mais useAnimations est true.", this);
-            }
-
-            int calculatedDamage = Mathf.Max(1, Attack - target.Defense);
-            float attackerAnimationDuration = 0.5f;
-
-            if (AttackSystem != null)
-            {
-                 if (debugUnitCombat) Debug.Log($"[{name}] PerformAttackCoroutine: Appel de AttackSystem.PerformAttack sur {target.name} avec {calculatedDamage} dégâts potentiels et une durée d'animation de {attackerAnimationDuration}s.", this);
-                yield return StartCoroutine(
-                    AttackSystem.PerformAttack(
-                        transform,
-                        target.transform,
-                        calculatedDamage,
-                        attackerAnimationDuration
-                    )
-                );
-            }
-            if (target == null)
-            {
-                // Si la cible a été détruite pendant l'animation, on arrête la coroutine ici
-                // pour éviter la MissingReferenceException.
-                if (debugUnitCombat) Debug.Log($"[{name}] PerformAttackCoroutine: La cible a été détruite pendant l'animation. L'attaque est annulée.", this);
-                _isAttacking = false;
-                SetState(UnitState.Idle);
-                yield break; // On quitte la coroutine proprement.
-            }
-            if (debugUnitCombat) Debug.Log($"[{name}] PerformAttackCoroutine: Action d'attaque (lancement/coup) terminée pour {target.name}. _isAttacking sera mis à false.", this);
+            if (debugUnitCombat) Debug.LogWarning($"[{name}] PerformAttackCoroutine: Conditions non remplies (AttackSystem null, cible nulle ou cible morte). Cible: {(target?.name ?? "NULL")}, Cible PV: {target?.Health ?? -1}");
             _isAttacking = false;
             SetState(UnitState.Idle);
+            yield break;
         }
+
+        _isAttacking = true;
+        SetState(UnitState.Attacking);
+        FaceUnitTarget(target);
+
+        if (useAnimations && animator != null)
+        {
+            if (debugUnitCombat) Debug.Log($"[{name} ({Time.frameCount})] PerformAttackCoroutine: Déclenchement de l'animation d'attaque (ID: {AttackTriggerId}) pour la cible {target.name}.", this);
+            animator.SetTrigger(AttackTriggerId);
+        }
+        else
+        {
+            if (useAnimations && animator == null && debugUnitCombat) Debug.LogWarning($"[{name}] PerformAttackCoroutine: Animator non assigné mais useAnimations est true.", this);
+        }
+
+        int calculatedDamage = Mathf.Max(1, Attack - target.Defense);
+        float attackerAnimationDuration = 0.5f;
+
+        if (AttackSystem != null)
+        {
+             if (debugUnitCombat) Debug.Log($"[{name}] PerformAttackCoroutine: Appel de AttackSystem.PerformAttack sur {target.name} avec {calculatedDamage} dégâts potentiels et une durée d'animation de {attackerAnimationDuration}s.", this);
+            yield return StartCoroutine(
+                AttackSystem.PerformAttack(
+                    transform,
+                    target.transform,
+                    calculatedDamage,
+                    attackerAnimationDuration
+                )
+            );
+        }
+        if (target == null)
+        {
+            if (debugUnitCombat) Debug.Log($"[{name}] PerformAttackCoroutine: La cible a été détruite pendant l'animation. L'attaque est annulée.", this);
+            _isAttacking = false;
+            SetState(UnitState.Idle);
+            yield break;
+        }
+        if (debugUnitCombat) Debug.Log($"[{name}] PerformAttackCoroutine: Action d'attaque (lancement/coup) terminée pour {target.name}. _isAttacking sera mis à false.", this);
+        _isAttacking = false;
+        SetState(UnitState.Idle);
+    }
 
     public IEnumerator PerformAttackBuildingCoroutine(Building target)
     {
@@ -727,36 +742,23 @@ public abstract class Unit : MonoBehaviour, ITileReservationObserver
         if (attacker != null)
         {
             OnUnitAttacked?.Invoke(attacker, this, damage);
-
-            // 1. Calculer un multiplicateur basé sur la différence de niveau
             float levelDifference = attacker.Level - this.Level;
-            // Ex: +10% de dégâts par niveau d'avantage, -10% par niveau de désavantage
             float damageMultiplier = 1.0f + (levelDifference * 0.1f);
-            // On s'assure que même une unité de très bas niveau inflige au moins 10% de ses dégâts.
-            damageMultiplier = Mathf.Max(0.1f, damageMultiplier); 
-
-            // 2. Appliquer le multiplicateur aux dégâts bruts de l'attaquant
+            damageMultiplier = Mathf.Max(0.1f, damageMultiplier);
             int modifiedDamage = Mathf.RoundToInt(damage * damageMultiplier);
-
-            // 3. Appliquer la défense et s'assurer qu'au moins 1 dégât est infligé
             int actualDamage = Mathf.Max(1, modifiedDamage - this.Defense);
-        
             Health -= actualDamage;
-			LastAttackerInfo = new LastDamageEvent { Attacker = attacker, Time = Time.time };
-
-
-            if (debugUnitCombat) 
+            LastAttackerInfo = new LastDamageEvent { Attacker = attacker, Time = Time.time };
+            if (debugUnitCombat)
             {
-                // On remplace "Stats?.Health" par "CurrentStats.MaxHealth" pour l'affichage.
                 Debug.Log($"[{name}] Attaquant Lvl {attacker.Level} vs Défenseur Lvl {this.Level}. " +
                           $"Multiplicateur: {damageMultiplier:F2}. Dégâts modifiés: {modifiedDamage}. " +
                           $"Dégâts finaux après défense ({this.Defense}): {actualDamage}. " +
                           $"PV restants: {Health}/{CurrentStats.MaxHealth}");
             }
         }
-        else 
+        else
         {
-            // Comportement si pas d'attaquant (dégâts environnementaux, etc.)
             int actualDamage = Mathf.Max(1, damage - this.Defense);
             Health -= actualDamage;
             if (debugUnitCombat) Debug.Log($"[{name}] a subi {actualDamage} dégâts environnementaux. PV restants: {Health}/{CurrentStats.MaxHealth}");
@@ -764,31 +766,34 @@ public abstract class Unit : MonoBehaviour, ITileReservationObserver
 
         if (Health <= 0)
         {
-			if (attacker != null)
+          if (attacker != null)
             {
                 OnUnitKilled?.Invoke(attacker, this);
-            }            
-			Die();
-			
+            }
+          Die();
         }
     }
 
+    // --- FEATURE DU FICHIER 1 : Méthode Die() modifiée ---
     protected virtual void Die()
     {
         if (debugUnitCombat) Debug.Log($"[{name}] Died.");
+
+        // Déclenche l'événement pour notifier les observateurs (comme la bannière) avant toute autre chose
+        OnUnitDestroyed?.Invoke();
+
         StopAllCoroutines();
         if (TileReservationController.Instance != null && occupiedTile != null)
         {
             TileReservationController.Instance.ReleaseTileReservation(new Vector2Int(occupiedTile.column, occupiedTile.row), this);
         }
         if (occupiedTile != null) occupiedTile.RemoveUnit();
-       
+
         if (useAnimations && animator != null)
         {
             SetState(UnitState.Idle);
             _isAttacking = false;
             Destroy(gameObject);
-
         }
         else Destroy(gameObject);
     }
@@ -1191,9 +1196,10 @@ public abstract class Unit : MonoBehaviour, ITileReservationObserver
             Debug.Log($"[{name}] Buff expiré/retiré: {buff.Stat}. Att actuelle: {Attack}, Def actuelle: {Defense}");
         }
     }
-    
+
     public virtual void OnDestroy()
     {
+        // --- LOGIQUE FUSIONNÉE : Nettoyage complet ---
         if (FeverManager.Instance != null)
         {
             FeverManager.Instance.OnFeverLevelChanged -= HandleFeverLevelChanged;
@@ -1229,7 +1235,7 @@ public abstract class Unit : MonoBehaviour, ITileReservationObserver
         }
         _reservedTile = null;
         occupiedTile = null;
-        
+
         foreach (var buff in activeBuffs)
         {
             if (buff.ExpiryCoroutine != null)
@@ -1275,18 +1281,12 @@ public abstract class Unit : MonoBehaviour, ITileReservationObserver
             return;
         }
 
-        // --- Logique d'initialisation refondue ---
         this.CharacterStatSheets = characterStatsReceived;
-        // 1. Récupérer les données de progression (niveau, équipement)
-        // TODO: Remplacer par la vraie logique de récupération d'équipement si nécessaire.
-
-        // 2. Appel au calculateur centralisé. C'est LA ligne la plus importante.
         this.CurrentStats = StatsCalculator.GetFinalStats(this.CharacterStatSheets, this.Level);
-
-        // 3. Initialiser la vie actuelle de l'unité avec la vie max calculée.
         this.Health = this.CurrentStats.MaxHealth;
     }
-	public virtual void InitializeFromCharacterData(CharacterData_SO characterData)
+
+    public virtual void InitializeFromCharacterData(CharacterData_SO characterData)
     {
         if (characterData == null)
         {
@@ -1294,12 +1294,10 @@ public abstract class Unit : MonoBehaviour, ITileReservationObserver
             return;
         }
 
-        // --- Logique d'initialisation refondue ---
         this.CharacterStatSheets = characterData.Stats;
         _feverBuffs = characterData.feverBuffs;
         _canReceiveFeverBuffs = true;
-        Debug.Log($"[{name}] InitializeFromCharacterData: init with character data, the buffs are: {string.Join(", ", _feverBuffs)}");
-        // 1. Récupérer les données de progression (niveau, équipement)
+
         int level = 1;
         List<EquipmentData_SO> equipment = new List<EquipmentData_SO>();
 
@@ -1322,9 +1320,7 @@ public abstract class Unit : MonoBehaviour, ITileReservationObserver
             }
         }
 
-        // 2. Appel au calculateur centralisé
         this.baseStats = StatsCalculator.GetFinalStats(characterData, level, equipment);
-        Debug.Log($"[{name}] InitializeFromCharacterData: Base stats initialized: {baseStats}");
         this.CurrentStats = new RuntimeStats
         {
             MaxHealth = baseStats.MaxHealth,
@@ -1335,16 +1331,13 @@ public abstract class Unit : MonoBehaviour, ITileReservationObserver
             MovementDelay = baseStats.MovementDelay,
             DetectionRange = baseStats.DetectionRange
         };
-        
 
-		if (this is AllyUnit allyUnit)
-		{
-    		allyUnit.MomentumGainOnObjectiveComplete = characterData.MomentumGainOnObjectiveComplete;
-		}
+       if (this is AllyUnit allyUnit)
+       {
+           allyUnit.MomentumGainOnObjectiveComplete = characterData.MomentumGainOnObjectiveComplete;
+       }
 
-        // 3. Initialiser la vie actuelle de l'unité avec la vie max calculée
         this.Health = this.CurrentStats.MaxHealth;
     }
     #endregion
 }
-

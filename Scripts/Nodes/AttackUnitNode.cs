@@ -15,24 +15,23 @@ using Unity.Properties;
 )]
 public class AttackUnitNode : Unity.Behavior.Action
 {
-    // --- NOMS DES VARIABLES BLACKBOARD ---
     private const string SELF_UNIT_VAR = "SelfUnit";
     private const string TARGET_UNIT_VAR = "InteractionTargetUnit";
     private const string IS_ATTACKING_VAR = "IsAttacking";
 
-    // --- CACHE DES VARIABLES ---
     private BlackboardVariable<Unit> bbSelfUnit;
     private BlackboardVariable<Unit> bbTargetUnit;
     private BlackboardVariable<bool> bbIsAttackingBlackboard;
 
-    // --- NOUVELLES VARIABLES POUR GÉRER LE CYCLE D'ATTAQUE ---
     private Unit selfUnitInstance = null;
     private Unit currentTargetUnitForThisNode = null;
     private Coroutine nodeManagedAttackCycleCoroutine = null;
+
+    // --- NEW: STATE TRACKING ---
     private bool isWaitingForAttackDelay = false;
     private int currentAttackBeatCounter = 0;
     private bool hasSubscribedToBeatForAttackDelay = false;
-    // --- FIN DES NOUVELLES VARIABLES ---
+    private Vector3 startingPosition; // We'll store the unit's position here.
 
     protected override Status OnStart()
     {
@@ -51,6 +50,9 @@ public class AttackUnitNode : Unity.Behavior.Action
             return Status.Failure;
         }
 
+        // --- NEW: Record starting position ---
+        startingPosition = selfUnitInstance.transform.position;
+
         currentTargetUnitForThisNode = bbTargetUnit?.Value;
         if (currentTargetUnitForThisNode == null || currentTargetUnitForThisNode.Health <= 0)
         {
@@ -58,16 +60,9 @@ public class AttackUnitNode : Unity.Behavior.Action
             return Status.Success;
         }
 
-        if (!selfUnitInstance.IsUnitInRange(currentTargetUnitForThisNode))
-        {
-            SetIsAttackingBlackboardVar(false);
-            return Status.Failure;
-        }
-
         SetIsAttackingBlackboardVar(true);
         isWaitingForAttackDelay = false;
         return Status.Running;
-
     }
 
     protected override Status OnUpdate()
@@ -77,10 +72,15 @@ public class AttackUnitNode : Unity.Behavior.Action
         {
             return Status.Success;
         }
-        if (!selfUnitInstance.IsUnitInRange(currentTargetUnitForThisNode))
+
+        // --- THE FIX ---
+        // On every update, check if the unit has been moved from its starting attack position.
+        if (selfUnitInstance.transform.position != startingPosition)
         {
+            // The unit was moved (knocked back)! Stop attacking immediately.
             return Status.Failure;
         }
+        // --- END OF FIX ---
 
         if (isWaitingForAttackDelay)
         {
@@ -97,12 +97,6 @@ public class AttackUnitNode : Unity.Behavior.Action
 
     private IEnumerator PerformSingleAttackCycle()
     {
-        if (currentTargetUnitForThisNode == null || currentTargetUnitForThisNode.Health <= 0 || !selfUnitInstance.IsUnitInRange(currentTargetUnitForThisNode))
-        {
-            nodeManagedAttackCycleCoroutine = null;
-            yield break;
-        }
-
         yield return selfUnitInstance.StartCoroutine(selfUnitInstance.PerformAttackCoroutine(currentTargetUnitForThisNode));
 
         if (currentTargetUnitForThisNode == null || currentTargetUnitForThisNode.Health <= 0)
@@ -133,10 +127,8 @@ public class AttackUnitNode : Unity.Behavior.Action
         ResetNodeInternalState();
     }
 
-    // --- Méthodes pour la gestion du délai ---
+    // --- Helper methods for beat delay, blackboard, and state reset remain the same ---
 
-    // --- CORRECTION APPLIQUÉE ICI ---
-    // La méthode accepte maintenant un paramètre float pour correspondre à la signature de l'événement MusicManager.OnBeat.
     private void HandleAttackBeatDelay(float beatDuration)
     {
         if (!isWaitingForAttackDelay)
@@ -170,8 +162,6 @@ public class AttackUnitNode : Unity.Behavior.Action
             hasSubscribedToBeatForAttackDelay = false;
         }
     }
-
-    // --- Méthodes utilitaires ---
 
     private void ResetNodeInternalState()
     {

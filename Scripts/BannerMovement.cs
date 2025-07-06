@@ -3,47 +3,93 @@ using System.Collections;
 
 public class BannerMovement : MonoBehaviour
 {
+    // --- FEATURE FUSIONNÉE: Garde la référence à l'unité attachée ---
+    private Unit attachedUnit;
+
     [Header("Movement Settings")]
-    [Tooltip("Hauteur finale de la bannière au-dessus du point de référence du bâtiment.")]
-    [SerializeField] private float finalHeightOffset = 1f;
+    [Tooltip("Hauteur finale de la bannière au-dessus de son point de référence.")]
+    [SerializeField] private float finalHeightOffset = 4f;
 
     [Header("Rhythmic Movement")]
-    [Tooltip("Activer le balancement rythmique.")]
     [SerializeField] private bool enableRhythmicMovement = true;
-    [Tooltip("Amplitude du balancement en position (unités du monde) si useRotationSway est faux.")]
     [SerializeField] private float swayAmount = 0.1f;
-    [Tooltip("Vitesse à laquelle l'animation de balancement progresse entre les battements.")]
     [SerializeField] private float swayTransitionSpeed = 2.0f;
 
     [Header("Sway Type")]
-    [Tooltip("Utiliser un balancement en rotation plutôt qu'en position.")]
     [SerializeField] private bool useRotationSway = true;
-    [Tooltip("Angle maximal du balancement en degrés si useRotationSway est vrai.")]
     [SerializeField] private float rotationSwayAmount = 10f;
-    [Tooltip("Hauteur de la bannière (pour le calcul du pivot si useRotationSway est vrai).")]
-    [SerializeField] private float bannerHeight = 1.0f;
-    [Tooltip("Décalage du pivot pour la rotation (0 = base, 0.5 = centre, 1 = sommet).")]
+    [SerializeField] private float bannerHeight = 2.0f;
     [SerializeField] [Range(0f, 1f)] private float pivotOffsetRatio = 0f;
 
     [Header("Camera Facing")]
     [SerializeField] private bool shouldFaceCamera = true;
 
-    // État interne
+    // --- État Interne (fusionné) ---
+    private Camera mainCamera;
     private Vector3 baseWorldPosition;
     private Quaternion baseWorldRotation;
-
-    private Camera mainCamera;
-
-    private float currentSwayTargetOffset;
-    private float currentSwayActualOffset;
-
-    private float currentSwayTargetRotation;
-    private float currentSwayActualRotation;
-
-    private bool isInitialized = false;
+    private float currentSwayTarget;
+    private float currentSwayActual;
     private int swayDirection = 1;
+    private bool isInitialized = false;
 
+    // --- Propriété publique pour l'accès externe ---
     public float FinalHeightOffset => finalHeightOffset;
+
+    #region Public Setup Methods
+
+    /// <summary>
+    /// FEATURE DU FICHIER 1: Attache la bannière à une unité en mouvement.
+    /// </summary>
+    public void AttachToUnit(Unit unit)
+    {
+        if (unit == null)
+        {
+            Destroy(gameObject);
+            return;
+        }
+
+        // Si on était attaché à une autre unité, on se désabonne d'abord
+        if (attachedUnit != null)
+        {
+            attachedUnit.OnUnitDestroyed -= HandleAttachedUnitDeath;
+        }
+
+        this.attachedUnit = unit;
+        transform.SetParent(unit.transform, false); // 'false' pour réinitialiser la position/rotation locale
+
+        // S'abonner à la mort de la nouvelle unité
+        unit.OnUnitDestroyed += HandleAttachedUnitDeath;
+
+        // Initialiser la position et la rotation
+        InitializeTransform(unit.transform.position + new Vector3(0, finalHeightOffset, 0));
+    }
+
+    /// <summary>
+    /// FEATURE DU FICHIER 2: Place la bannière à une position fixe dans le monde.
+    /// </summary>
+    public void PlaceAtWorldPosition(Vector3 worldPosition)
+    {
+        // Si on était attaché à une unité, on se détache et on se désabonne
+        if (attachedUnit != null)
+        {
+            attachedUnit.OnUnitDestroyed -= HandleAttachedUnitDeath;
+            attachedUnit = null;
+            transform.SetParent(null);
+        }
+
+        InitializeTransform(worldPosition);
+    }
+
+    // Alias pour la compatibilité avec le BannerController existant
+    public void UpdatePosition(Vector3 newBaseWorldPosition)
+    {
+        PlaceAtWorldPosition(newBaseWorldPosition);
+    }
+
+    #endregion
+
+    #region Unity Lifecycle & Callbacks
 
     void Awake()
     {
@@ -52,55 +98,78 @@ public class BannerMovement : MonoBehaviour
         {
             Debug.LogError("[BannerMovement] Caméra principale non trouvée !", this);
             enabled = false;
-            return;
         }
     }
 
     void OnEnable()
     {
-        // --- CORRECTION : Utilisation de l'instance pour s'abonner ---
         if (MusicManager.Instance != null)
         {
             MusicManager.Instance.OnBeat += OnBeat;
         }
-        else
-        {
-            Debug.LogWarning("[BannerMovement] MusicManager.Instance non trouvé lors de OnEnable. Le balancement rythmique pourrait ne pas fonctionner.", this);
-        }
 
-        currentSwayTargetOffset = 0;
-        currentSwayActualOffset = 0;
-        currentSwayTargetRotation = 0;
-        currentSwayActualRotation = 0;
+        // Réinitialiser l'état du balancement
+        currentSwayTarget = 0;
+        currentSwayActual = 0;
         swayDirection = 1;
-
-        if (!isInitialized && baseWorldPosition != Vector3.zero)
-        {
-            InitializeTransform();
-        }
     }
 
     void OnDisable()
     {
-        // --- CORRECTION : Utilisation de l'instance pour se désabonner ---
         if (MusicManager.Instance != null)
         {
             MusicManager.Instance.OnBeat -= OnBeat;
         }
-    }
-
-    public void UpdatePosition(Vector3 newBaseWorldPosition)
-    {
-        baseWorldPosition = newBaseWorldPosition;
-        if (isActiveAndEnabled)
+        // Sécurité pour se désabonner si l'objet est désactivé
+        if (attachedUnit != null)
         {
-            InitializeTransform();
+            attachedUnit.OnUnitDestroyed -= HandleAttachedUnitDeath;
         }
     }
 
-    private void InitializeTransform()
+    // LateUpdate est meilleur pour les suivis de position pour éviter les saccades
+    void LateUpdate()
     {
-        transform.position = baseWorldPosition;
+        // FEATURE FUSIONNÉE: Met à jour la position de base si attaché à une unité
+        if (attachedUnit != null)
+        {
+            // La position de base pour le balancement est mise à jour en permanence
+            baseWorldPosition = attachedUnit.transform.position + new Vector3(0, finalHeightOffset, 0);
+        }
+
+        if (!isInitialized) return;
+
+        if (enableRhythmicMovement)
+        {
+            ApplySwaying();
+        }
+    }
+
+    private void OnBeat(float beatDuration)
+    {
+        if (!enableRhythmicMovement || !isInitialized) return;
+
+        swayDirection *= -1; // Inverser la direction du balancement
+        currentSwayTarget = useRotationSway ? (rotationSwayAmount * swayDirection) : (swayAmount * swayDirection);
+    }
+
+    private void HandleAttachedUnitDeath()
+    {
+        if (this == null) return;
+        transform.SetParent(null);
+        // On peut ajouter un petit effet avant de détruire
+        Destroy(gameObject, 0.2f);
+    }
+
+    #endregion
+
+    #region Private Logic
+
+    private void InitializeTransform(Vector3 initialPosition)
+    {
+        baseWorldPosition = initialPosition;
+        transform.position = initialPosition;
+
         if (shouldFaceCamera)
         {
             FaceCamera();
@@ -109,115 +178,87 @@ public class BannerMovement : MonoBehaviour
         isInitialized = true;
     }
 
-    private void OnBeat(float beatDuration)
-    {
-        if (!enableRhythmicMovement || !isInitialized || !isActiveAndEnabled) return;
-
-        swayDirection *= -1;
-        if (useRotationSway)
-        {
-            currentSwayTargetRotation = rotationSwayAmount * swayDirection;
-        }
-        else
-        {
-            currentSwayTargetOffset = swayAmount * swayDirection;
-        }
-    }
-
-    void Update()
-    {
-        if (!isInitialized || !enableRhythmicMovement || !isActiveAndEnabled)
-        {
-            if (baseWorldPosition != Vector3.zero)
-            {
-                transform.position = baseWorldPosition;
-                 if (shouldFaceCamera)
-                {
-                    FaceCamera();
-                }
-            }
-            return;
-        }
-
-        ApplySwaying();
-    }
-
+    /// <summary>
+    /// FEATURE DU FICHIER 2: Applique le balancement avancé basé sur un pivot.
+    /// </summary>
     private void ApplySwaying()
     {
-        if (shouldFaceCamera)
+        currentSwayActual = Mathf.Lerp(currentSwayActual, currentSwayTarget, Time.deltaTime * swayTransitionSpeed);
+
+        if (shouldFaceCamera && attachedUnit == null) // Pour les bannières statiques, on rafraîchit l'orientation
         {
             FaceCamera();
-            if (useRotationSway) {
-                baseWorldRotation = transform.rotation;
-            }
+            baseWorldRotation = transform.rotation;
         }
 
         if (useRotationSway)
         {
-            currentSwayActualRotation = Mathf.Lerp(currentSwayActualRotation, currentSwayTargetRotation, Time.deltaTime * swayTransitionSpeed);
-            float pivotYOffset = bannerHeight * (pivotOffsetRatio - 0.5f);
-            Vector3 pivotPoint = baseWorldPosition + transform.up * pivotYOffset;
-            Quaternion sway = Quaternion.AngleAxis(currentSwayActualRotation, transform.right);
-            transform.rotation = baseWorldRotation * sway;
+            // Calcul du pivot pour une rotation naturelle
+            float pivotYWorldOffset = bannerHeight * (pivotOffsetRatio - 0.5f);
+            Vector3 pivotPoint = baseWorldPosition + transform.up * pivotYWorldOffset;
+
+            // Appliquer la rotation de base (vers la caméra) et la rotation de balancement
+            transform.rotation = baseWorldRotation * Quaternion.AngleAxis(currentSwayActual, transform.right);
+
+            // Ajuster la position pour simuler la rotation autour du pivot
             transform.position = baseWorldPosition;
-            transform.RotateAround(pivotPoint, transform.right, currentSwayActualRotation);
+            transform.RotateAround(pivotPoint, transform.right, currentSwayActual);
         }
         else
         {
-            currentSwayActualOffset = Mathf.Lerp(currentSwayActualOffset, currentSwayTargetOffset, Time.deltaTime * swayTransitionSpeed);
-            Vector3 swayOffsetVector = transform.right * currentSwayActualOffset;
+            // Balancement simple en position
+            Vector3 swayOffsetVector = transform.right * currentSwayActual;
             transform.position = baseWorldPosition + swayOffsetVector;
         }
     }
 
     private void FaceCamera()
     {
-        if (mainCamera == null) return;
-
-        Vector3 lookDirection = mainCamera.transform.position - transform.position;
-        if (!useRotationSway)
+        if (mainCamera != null)
         {
-            lookDirection.y = 0;
-        }
-
-        if (lookDirection != Vector3.zero)
-        {
-            transform.rotation = Quaternion.LookRotation(lookDirection);
+            transform.rotation = Quaternion.LookRotation(transform.position - mainCamera.transform.position);
         }
     }
-    
+
+    #endregion
+
+    #region Editor Gizmos
+
+    /// <summary>
+    /// FEATURE DU FICHIER 2: Dessine des aides visuelles dans l'éditeur.
+    /// </summary>
     void OnDrawGizmosSelected()
     {
-        if (!Application.isPlaying || !isInitialized) return;
+        if (!Application.isPlaying && !isInitialized) return;
+
+        Vector3 positionToDrawFrom = Application.isPlaying ? baseWorldPosition : transform.position;
+        Quaternion rotationToDrawFrom = Application.isPlaying ? baseWorldRotation : transform.rotation;
 
         Gizmos.color = Color.blue;
-        Gizmos.DrawSphere(baseWorldPosition, 0.1f);
-        Gizmos.DrawLine(baseWorldPosition, transform.position);
+        Gizmos.DrawSphere(positionToDrawFrom, 0.1f);
+        Gizmos.DrawLine(positionToDrawFrom, transform.position);
 
         if (useRotationSway)
         {
             float pivotYOffset = bannerHeight * (pivotOffsetRatio - 0.5f);
-            Vector3 pivotPointPreview = baseWorldPosition + transform.up * pivotYOffset;
+            Vector3 pivotPointPreview = positionToDrawFrom + transform.up * pivotYOffset;
             Gizmos.color = Color.red;
-            Gizmos.DrawSphere(pivotPointPreview, 0.05f);
-            Gizmos.DrawLine(baseWorldPosition, pivotPointPreview);
+            Gizmos.DrawWireSphere(pivotPointPreview, 0.1f);
+            Gizmos.DrawLine(positionToDrawFrom, pivotPointPreview);
 
-            Quaternion leftSwayPreview = Quaternion.AngleAxis(-rotationSwayAmount, transform.right);
-            Quaternion rightSwayPreview = Quaternion.AngleAxis(rotationSwayAmount, transform.right);
             Vector3 topOfBannerRelative = Vector3.up * bannerHeight * (1f - pivotOffsetRatio);
-
             Gizmos.color = Color.green;
-            Gizmos.DrawLine(pivotPointPreview, pivotPointPreview + (baseWorldRotation * leftSwayPreview * topOfBannerRelative));
-            Gizmos.DrawLine(pivotPointPreview, pivotPointPreview + (baseWorldRotation * rightSwayPreview * topOfBannerRelative));
+            Gizmos.DrawLine(pivotPointPreview, pivotPointPreview + (rotationToDrawFrom * Quaternion.AngleAxis(-rotationSwayAmount, Vector3.right) * topOfBannerRelative));
+            Gizmos.DrawLine(pivotPointPreview, pivotPointPreview + (rotationToDrawFrom * Quaternion.AngleAxis(rotationSwayAmount, Vector3.right) * topOfBannerRelative));
         }
         else
         {
             Gizmos.color = Color.green;
-            Vector3 leftExtent = baseWorldPosition - (transform.right * swayAmount);
-            Vector3 rightExtent = baseWorldPosition + (transform.right * swayAmount);
+            Vector3 leftExtent = positionToDrawFrom - (transform.right * swayAmount);
+            Vector3 rightExtent = positionToDrawFrom + (transform.right * swayAmount);
             Gizmos.DrawLine(leftExtent, rightExtent);
-            Gizmos.DrawSphere(leftExtent, 0.05f);
-            Gizmos.DrawSphere(rightExtent, 0.05f);
         }
     }
+
+    #endregion
 }

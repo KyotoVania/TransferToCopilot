@@ -56,7 +56,7 @@ public class CheckRecentDamageCondition : Unity.Behavior.Condition
         var enemyUnit = bbSelfUnit.Value as EnemyUnit;
         if (enemyUnit == null || !enemyUnit.LastAttackerInfo.HasValue)
         {
-            Debug.LogWarning($"[{GameObject?.name}] CheckRecentDamageCondition: Aucune unité ennemie valide ou pas d'attaquant enregistré.");
+            //Debug.LogWarning($"[{GameObject?.name}] CheckRecentDamageCondition: Aucune unité ennemie valide ou pas d'attaquant enregistré.");
             return false; // Pas d'attaquant enregistré
         }
 
