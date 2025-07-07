@@ -52,6 +52,10 @@ public class MusicReactiveTile_Optimized : Tile, IComboObserver
     private int lastComboThresholdReached = 0;
     private Vector3 basePositionForAnimation;
     private Vector3 baseScaleForAnimation;
+    private Vector3 pendingWaterTargetPos;
+    private Vector3 pendingWaterTargetScale;
+    private float pendingWaterPhase1Duration;
+    private float pendingWaterPhase2Duration;
     #endregion
 
     #region Initialization Methods
@@ -180,27 +184,117 @@ public class MusicReactiveTile_Optimized : Tile, IComboObserver
             {
                 if (!reactionProfile.alwaysReact && Random.value > currentDynamicReactionProbability) continue;
 
+                // Préparer les paramètres de l'animation
                 float intensityFactor = GetCurrentIntensityFactor();
                 float currentWaterMoveHeight = reactionProfile.waterMoveHeight * intensityFactor;
-                Vector3 targetPos = basePositionForAnimation + Vector3.up * currentWaterMoveHeight;
-                Vector3 targetScale = baseScaleForAnimation * reactionProfile.waterScaleFactor * intensityFactor;
-                float animDuration = beatDuration * reactionProfile.waterAnimationDurationMultiplier;
+                Vector3 upPosition = basePositionForAnimation + Vector3.up * currentWaterMoveHeight;
+                Vector3 maxScale = baseScaleForAnimation * reactionProfile.waterScaleFactor * intensityFactor;
+                
+                // Calculer les durées comme dans l'original
+                float totalAnimationDuration = beatDuration * reactionProfile.waterAnimationDurationMultiplier;
+                float preBeatDuration = totalAnimationDuration * reactionProfile.preBeatFraction;
+                float postBeatDuration = totalAnimationDuration - preBeatDuration;
+
+                // Calcul du timing par rapport au prochain beat
+                float nextBeatTime = Time.time + beatDuration;
+                if (MusicManager.Instance != null) 
+                {
+                    nextBeatTime = MusicManager.Instance.GetNextBeatTime();
+                }
+                
+                float timeUntilNextBeat = nextBeatTime - Time.time;
+                
+                // Ajuster si on est trop proche du prochain beat
+                if (timeUntilNextBeat < preBeatDuration * 0.8f && MusicManager.Instance != null) 
+                {
+                    nextBeatTime += beatDuration;
+                }
+                
+                // Calculer le délai avant de commencer l'animation
+                float animationStartTime = nextBeatTime - preBeatDuration;
+                float delayBeforeStart = Mathf.Max(0, animationStartTime - Time.time);
 
                 isAnimating = true;
-                TileAnimationManager.Instance.RequestAnimation(
-                    this.transform,
-                    animDuration,
-                    OnAnimationComplete,
-                    targetPosition: targetPos,
-                    moveCurve: reactionProfile.movementCurve,
-                    targetScale: targetScale,
-                    // Note: Utilise la même courbe pour le scale. Créez-en une autre dans le SO si besoin.
-                    scaleCurve: reactionProfile.movementCurve
-                );
+                
+                // Si on doit attendre avant de commencer
+                if (delayBeforeStart > 0)
+                {
+                    Invoke(nameof(StartWaterAnimationSequence), delayBeforeStart);
+                    // Stocker les paramètres pour l'animation différée
+                    StoreWaterAnimationParams(upPosition, maxScale, preBeatDuration, postBeatDuration);
+                }
+                else
+                {
+                    // Commencer immédiatement
+                    StartWaterAnimationPhase1(upPosition, maxScale, preBeatDuration, postBeatDuration);
+                }
+                
                 break;
             }
         }
     }
+
+    
+    
+private void StoreWaterAnimationParams(Vector3 targetPos, Vector3 targetScale, float phase1Duration, float phase2Duration)
+{
+    pendingWaterTargetPos = targetPos;
+    pendingWaterTargetScale = targetScale;
+    pendingWaterPhase1Duration = phase1Duration;
+    pendingWaterPhase2Duration = phase2Duration;
+}
+
+private void StartWaterAnimationSequence()
+{
+    StartWaterAnimationPhase1(pendingWaterTargetPos, pendingWaterTargetScale, pendingWaterPhase1Duration, pendingWaterPhase2Duration);
+}
+
+private void StartWaterAnimationPhase1(Vector3 upPosition, Vector3 maxScale, float phase1Duration, float phase2Duration)
+{
+    // Phase 1 : Montée et grossissement avec une courbe sinusoïdale d'entrée
+    AnimationCurve phase1Curve = AnimationCurve.EaseInOut(0, 0, 1, 1);
+    // Approximation de Sin(t * PI * 0.5) - courbe d'accélération douce
+    phase1Curve.keys = new Keyframe[] {
+        new Keyframe(0f, 0f, 0f, 1.8f),
+        new Keyframe(0.5f, 0.5f, 1.2f, 1.2f),
+        new Keyframe(1f, 1f, 0f, 0f)
+    };
+    
+    TileAnimationManager.Instance.RequestAnimation(
+        this.transform,
+        phase1Duration,
+        () => OnWaterPhase1Complete(upPosition, maxScale, phase2Duration),
+        targetPosition: upPosition,
+        moveCurve: phase1Curve,
+        targetScale: maxScale,
+        scaleCurve: phase1Curve
+    );
+}
+
+private void OnWaterPhase1Complete(Vector3 currentUpPosition, Vector3 currentMaxScale, float phase2Duration)
+{
+    // Phase 2 : Descente et rétrécissement avec une courbe sinusoïdale de sortie
+    AnimationCurve phase2Curve = AnimationCurve.EaseInOut(0, 0, 1, 1);
+    // Approximation de 1 - Sin((1-t) * PI * 0.5) - courbe de décélération douce
+    phase2Curve.keys = new Keyframe[] {
+        new Keyframe(0f, 0f, 0f, 0f),
+        new Keyframe(0.5f, 0.5f, 1.2f, 1.2f),
+        new Keyframe(1f, 1f, 1.8f, 0f)
+    };
+    
+    TileAnimationManager.Instance.RequestAnimation(
+        this.transform,
+        phase2Duration,
+        OnAnimationComplete,
+        targetPosition: basePositionForAnimation,
+        moveCurve: phase2Curve,
+        targetScale: baseScaleForAnimation,
+        scaleCurve: phase2Curve
+    );
+}
+
+// Modifier aussi la méthode InitializeReactiveVisualState pour nettoyer les invocations en attente :
+
 
     private void HandleMountainTileBeat_Optimized(float beatDuration)
     {
@@ -228,6 +322,9 @@ public class MusicReactiveTile_Optimized : Tile, IComboObserver
         // La position/scale de fin est déjà gérée par le Manager.
         // On peut ajouter d'autres logiques ici si nécessaire.
     }
+    
+    
+    
     #endregion
 
     #region Utility Methods
@@ -255,9 +352,11 @@ public class MusicReactiveTile_Optimized : Tile, IComboObserver
     
     public void InitializeReactiveVisualState()
     {
+        // Annuler toute animation différée
+        CancelInvoke(nameof(StartWaterAnimationSequence));
+    
         if (Application.isPlaying)
         {
-            // CORRIGÉ : L'appel à StopTileAnimations existe maintenant
             if (isAnimating && TileAnimationManager.Instance != null)
             {
                 TileAnimationManager.Instance.StopTileAnimations(transform);
@@ -285,7 +384,6 @@ public class MusicReactiveTile_Optimized : Tile, IComboObserver
     {
         base.OnDestroy();
 
-        // CORRIGÉ : L'appel à StopTileAnimations existe maintenant
         if (isAnimating && TileAnimationManager.Instance != null)
         {
             TileAnimationManager.Instance.StopTileAnimations(transform);
