@@ -324,7 +324,7 @@ public class MusicManager : MonoBehaviour
         }
 
         // Appliquer la valeur RTPC à Wwise
-        feverIntensityRTPC.SetGlobalValue(intensity);
+	    feverIntensityRTPC.SetValue(gameObject, intensity);
     
         Debug.Log($"[MusicManager] Intensité Fever mise à jour : {intensity:F1}%");
     }

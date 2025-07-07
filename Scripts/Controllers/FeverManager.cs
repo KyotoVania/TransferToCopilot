@@ -55,6 +55,33 @@ public class FeverManager : MonoBehaviour
         {
             Debug.LogError("[FeverManager] ComboController.Instance est introuvable ! Le Mode Fever ne fonctionnera pas.");
         }
+
+        // S'abonner aux changements d'état musical pour réappliquer le Fever
+        if (MusicManager.Instance != null)
+        {
+            MusicManager.Instance.OnMusicStateChanged += OnMusicStateChanged;
+        }
+    }
+
+    private void OnDisable()
+    {
+        // Se désabonner des événements pour éviter les fuites mémoire
+        if (MusicManager.Instance != null)
+        {
+            MusicManager.Instance.OnMusicStateChanged -= OnMusicStateChanged;
+        }
+    }
+
+    private void OnMusicStateChanged(string newMusicState)
+    {
+        Debug.Log($"[FeverManager] Transition musicale détectée : {newMusicState}. Réapplication de l'intensité Fever.");
+        
+        // Réappliquer l'intensité Fever actuelle après la transition
+        float rtpcValue = CalculateRTPCValue(_currentFeverLevel);
+        if (MusicManager.Instance != null)
+        {
+            MusicManager.Instance.SetFeverIntensity(rtpcValue);
+        }
     }
 
     private void HandleComboUpdated(int newComboCount)
