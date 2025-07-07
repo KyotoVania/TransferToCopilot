@@ -86,6 +86,7 @@ public class MusicManager : MonoBehaviour
     {
         if (AkUnitySoundEngine.IsInitialized())
         {
+         
             InitializeMusicAndSetState(initialMusicState);
         }
         else
@@ -324,8 +325,34 @@ public class MusicManager : MonoBehaviour
         }
 
         // Appliquer la valeur RTPC à Wwise
-	    feverIntensityRTPC.SetValue(gameObject, intensity);
+		feverIntensityRTPC.SetGlobalValue(intensity);
+
     
         Debug.Log($"[MusicManager] Intensité Fever mise à jour : {intensity:F1}%");
     }
+
+public void UpdateWwiseListener(GameObject newListener)
+{
+    if (newListener == null)
+    {
+        Debug.LogWarning("[MusicManager] Tentative de mise à jour de l'auditeur avec un objet null.");
+        return;
+    }
+
+    if (AkUnitySoundEngine.IsInitialized())
+    {
+        // On récupère l'ID Wwise du nouvel auditeur (la nouvelle caméra)
+        ulong listenerId = AkUnitySoundEngine.GetAkGameObjectID(newListener);
+        if (listenerId != AkUnitySoundEngine.AK_INVALID_GAME_OBJECT)
+        {
+            // On définit ce nouvel auditeur comme l'unique auditeur pour ce GameObject
+            AkUnitySoundEngine.SetListeners(gameObject, new ulong[] { listenerId }, 1);
+            Debug.Log($"[MusicManager] L'auditeur Wwise a été mis à jour avec succès vers : {newListener.name}");
+        }
+        else
+        {
+            Debug.LogWarning($"[MusicManager] L'objet {newListener.name} ne semble pas avoir d'AkAudioListener valide.");
+        }
+    }
+}
 }

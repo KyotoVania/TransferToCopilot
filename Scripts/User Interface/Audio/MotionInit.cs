@@ -5,7 +5,7 @@ public class WwiseMotionInitializer : MonoBehaviour
     void Awake()
     {
         // Attendre que Wwise soit initialisé
-        AkSoundEngine.RegisterGameObj(gameObject, "MotionInit");
+        AkUnitySoundEngine.RegisterGameObj(gameObject, "MotionInit");
         
         // Ajouter le Motion output
         // Updated constructor syntax for 2024.1.5
@@ -16,7 +16,7 @@ public class WwiseMotionInitializer : MonoBehaviour
             AkPanningRule.AkPanningRule_Speakers  // Panning rule
         );
         
-        AkSoundEngine.AddOutput(motionSettings);
+        AkUnitySoundEngine.AddOutput(motionSettings);
         Debug.Log("[WwiseMotionInitializer] Motion output initialized with settings: " + motionSettings);
         
     }
