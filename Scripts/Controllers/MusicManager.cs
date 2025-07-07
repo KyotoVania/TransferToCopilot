@@ -316,7 +316,6 @@ public class MusicManager : MonoBehaviour
     {
         // Clamp la valeur entre 0 et 100 pour sécurité
         intensity = Mathf.Clamp(intensity, 0f, 100f);
-    
         // Vérifier que le paramètre RTPC est configuré
         if (feverIntensityRTPC == null || !feverIntensityRTPC.IsValid())
         {
