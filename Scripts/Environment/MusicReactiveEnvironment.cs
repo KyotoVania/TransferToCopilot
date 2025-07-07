@@ -338,8 +338,8 @@ public class MusicReactiveEnvironment : Environment
                             isWaitingForTileDown = true;
                         }
                     }
-                    // Detect when the tile has moved back down to reset
-                    else if (reactToTileDownMovement && deltaY < -tileMovementThreshold)
+                    // Detect when the tile has moved back down to reset - ONLY if not animating
+                    else if (reactToTileDownMovement && deltaY < -tileMovementThreshold && !isAnimating)
                     {
                         if (debugReactions)
                         {
@@ -356,8 +356,9 @@ public class MusicReactiveEnvironment : Environment
                     }
 
                     // If we detect the tile has returned to a stable position near original
-                    // and we were waiting for it, reset the waiting flag
-                    if (isWaitingForTileDown && Mathf.Abs(currentTilePosition.y - originalWorldPosition.y) < tileMovementThreshold * 0.5f)
+                    // and we were waiting for it, reset the waiting flag - ONLY if not animating
+                    if (isWaitingForTileDown && !isAnimating && 
+                        Mathf.Abs(currentTilePosition.y - originalWorldPosition.y) < tileMovementThreshold * 0.5f)
                     {
                         isWaitingForTileDown = false;
                         hasTileMovedUp = false;
@@ -390,7 +391,8 @@ public class MusicReactiveEnvironment : Environment
                 framesWithoutMovement++;
 
                 // If we've seen no movement for a while and we're in a waiting state, reset the flags
-                if (framesWithoutMovement > 60 && isWaitingForTileDown &&
+                // ONLY if not currently animating and increase the timeout to avoid interfering with animations
+                if (framesWithoutMovement > 120 && isWaitingForTileDown && !isAnimating &&
                     animationType == EnvironmentAnimationType.BounceTileReactive)
                 {
                     isWaitingForTileDown = false;
@@ -398,7 +400,7 @@ public class MusicReactiveEnvironment : Environment
 
                     if (debugReactions)
                     {
-                        Debug.Log($"[REACTIVE ENVIRONMENT] {gameObject.name} no movement for 60 frames, resetting flags");
+                        Debug.Log($"[REACTIVE ENVIRONMENT] {gameObject.name} no movement for 120 frames and not animating, resetting flags");
                     }
                 }
             }
