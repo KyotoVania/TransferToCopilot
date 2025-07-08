@@ -25,13 +25,14 @@ public class AttackUnitNode : Unity.Behavior.Action
 
     private Unit selfUnitInstance = null;
     private Unit currentTargetUnitForThisNode = null;
-    private Coroutine nodeManagedAttackCycleCoroutine = null;
 
-    // --- NEW: STATE TRACKING ---
-    private bool isWaitingForAttackDelay = false;
-    private int currentAttackBeatCounter = 0;
-    private bool hasSubscribedToBeatForAttackDelay = false;
-    private Vector3 startingPosition; // We'll store the unit's position here.
+    // MODIFIÉ : Une seule coroutine pour gérer toute la boucle d'attaque.
+    private Coroutine attackLoopCoroutine = null;
+
+    // NOUVEAU : Un compteur de temps pour le délai, géré au sein de la coroutine.
+    private int currentBeatCounterForDelay = 0;
+    private bool hasSubscribedToBeat = false;
+    private Vector3 startingPosition;
 
     protected override Status OnStart()
     {
@@ -50,129 +51,127 @@ public class AttackUnitNode : Unity.Behavior.Action
             return Status.Failure;
         }
 
-        // --- NEW: Record starting position ---
         startingPosition = selfUnitInstance.transform.position;
 
         currentTargetUnitForThisNode = bbTargetUnit?.Value;
         if (currentTargetUnitForThisNode == null || currentTargetUnitForThisNode.Health <= 0)
         {
             SetIsAttackingBlackboardVar(false);
-            return Status.Success;
+            return Status.Success; // La cible est déjà invalide, succès car il n'y a rien à faire.
         }
 
         SetIsAttackingBlackboardVar(true);
-        isWaitingForAttackDelay = false;
+
+        // MODIFIÉ : On lance la coroutine principale qui gérera tout le cycle.
+        attackLoopCoroutine = selfUnitInstance.StartCoroutine(AttackLoop());
+
         return Status.Running;
     }
 
     protected override Status OnUpdate()
     {
-        if (selfUnitInstance == null || !selfUnitInstance.gameObject.activeInHierarchy) return Status.Failure;
+        // OnUpdate est maintenant beaucoup plus simple !
+        // Sa seule responsabilité est de vérifier les conditions qui pourraient interrompre l'action.
+
+        // La cible est morte ou a disparu ?
         if (currentTargetUnitForThisNode == null || currentTargetUnitForThisNode.Health <= 0 || !currentTargetUnitForThisNode.gameObject.activeInHierarchy)
         {
-            return Status.Success;
+            return Status.Success; // L'action est terminée avec succès.
         }
 
-        // --- THE FIX ---
-        // On every update, check if the unit has been moved from its starting attack position.
+        // L'unité a-t-elle été déplacée (ex: repoussée) ?
         if (selfUnitInstance.transform.position != startingPosition)
         {
-            // The unit was moved (knocked back)! Stop attacking immediately.
-            return Status.Failure;
-        }
-        // --- END OF FIX ---
-
-        if (isWaitingForAttackDelay)
-        {
-            return Status.Running;
+            return Status.Failure; // L'action a échoué car la condition de position n'est plus respectée.
         }
 
-        if (nodeManagedAttackCycleCoroutine == null)
-        {
-            nodeManagedAttackCycleCoroutine = selfUnitInstance.StartCoroutine(PerformSingleAttackCycle());
-        }
-
+        // Si aucune condition de sortie n'est remplie, on laisse la coroutine continuer son travail.
         return Status.Running;
     }
 
-    private IEnumerator PerformSingleAttackCycle()
+    // NOUVEAU : La coroutine qui gère la boucle complète : Attaque -> Délai -> Répétition
+    private IEnumerator AttackLoop()
     {
-        yield return selfUnitInstance.StartCoroutine(selfUnitInstance.PerformAttackCoroutine(currentTargetUnitForThisNode));
-
-        if (currentTargetUnitForThisNode == null || currentTargetUnitForThisNode.Health <= 0)
+        // Boucle infinie qui sera interrompue par le changement de statut du nœud (Success ou Failure dans OnUpdate)
+        while (true)
         {
-            nodeManagedAttackCycleCoroutine = null;
-            yield break;
+            // 1. Exécuter l'attaque
+            yield return selfUnitInstance.StartCoroutine(selfUnitInstance.PerformAttackCoroutine(currentTargetUnitForThisNode));
+
+            // Une vérification supplémentaire ici au cas où la cible meurt pendant l'animation d'attaque
+            if (currentTargetUnitForThisNode == null || currentTargetUnitForThisNode.Health <= 0)
+            {
+                yield break; // Termine la coroutine
+            }
+
+            // 2. Gérer le délai d'attaque basé sur le rythme
+            if (selfUnitInstance.AttackDelay > 0)
+            {
+                currentBeatCounterForDelay = 0;
+                SubscribeToBeat();
+
+                // Attendre que le nombre de battements requis soit atteint
+                while (currentBeatCounterForDelay < selfUnitInstance.AttackDelay)
+                {
+                    yield return null; // Attend la frame suivante
+                }
+
+                UnsubscribeFromBeat();
+            }
+            else
+            {
+                // S'il n'y a pas de délai, on attend juste une frame pour éviter une boucle infinie sans pause.
+                yield return null;
+            }
         }
-
-        currentAttackBeatCounter = 0;
-        isWaitingForAttackDelay = (selfUnitInstance.AttackDelay > 0);
-
-        if (isWaitingForAttackDelay)
-        {
-            SubscribeToBeatForAttackDelay();
-        }
-
-        nodeManagedAttackCycleCoroutine = null;
     }
 
     protected override void OnEnd()
     {
-        UnsubscribeFromBeatForAttackDelay();
-        if (nodeManagedAttackCycleCoroutine != null && selfUnitInstance != null)
+        // Nettoyage propre à l'arrêt du nœud
+        UnsubscribeFromBeat();
+        if (attackLoopCoroutine != null && selfUnitInstance != null)
         {
-            selfUnitInstance.StopCoroutine(nodeManagedAttackCycleCoroutine);
+            selfUnitInstance.StopCoroutine(attackLoopCoroutine);
         }
         SetIsAttackingBlackboardVar(false);
         ResetNodeInternalState();
     }
 
-    // --- Helper methods for beat delay, blackboard, and state reset remain the same ---
-
-    private void HandleAttackBeatDelay(float beatDuration)
+    // MODIFIÉ : Le gestionnaire de battements se contente maintenant d'incrémenter un compteur.
+    private void HandleBeat(float beatDuration)
     {
-        if (!isWaitingForAttackDelay)
-        {
-            UnsubscribeFromBeatForAttackDelay();
-            return;
-        }
+        currentBeatCounterForDelay++;
+    }
 
-        currentAttackBeatCounter++;
-        if (currentAttackBeatCounter >= selfUnitInstance.AttackDelay)
+    private void SubscribeToBeat()
+    {
+        if (MusicManager.Instance != null && !hasSubscribedToBeat)
         {
-            isWaitingForAttackDelay = false;
-            UnsubscribeFromBeatForAttackDelay();
+            MusicManager.Instance.OnBeat += HandleBeat;
+            hasSubscribedToBeat = true;
         }
     }
 
-    private void SubscribeToBeatForAttackDelay()
+    private void UnsubscribeFromBeat()
     {
-        if (MusicManager.Instance != null && !hasSubscribedToBeatForAttackDelay)
+        if (MusicManager.Instance != null && hasSubscribedToBeat)
         {
-            MusicManager.Instance.OnBeat += HandleAttackBeatDelay;
-            hasSubscribedToBeatForAttackDelay = true;
-        }
-    }
-
-    private void UnsubscribeFromBeatForAttackDelay()
-    {
-        if (MusicManager.Instance != null && hasSubscribedToBeatForAttackDelay)
-        {
-            MusicManager.Instance.OnBeat -= HandleAttackBeatDelay;
-            hasSubscribedToBeatForAttackDelay = false;
+            MusicManager.Instance.OnBeat -= HandleBeat;
+            hasSubscribedToBeat = false;
         }
     }
 
     private void ResetNodeInternalState()
     {
-        nodeManagedAttackCycleCoroutine = null;
+        attackLoopCoroutine = null;
         selfUnitInstance = null;
         currentTargetUnitForThisNode = null;
-        currentAttackBeatCounter = 0;
-        isWaitingForAttackDelay = false;
-        hasSubscribedToBeatForAttackDelay = false;
+        currentBeatCounterForDelay = 0;
+        hasSubscribedToBeat = false;
     }
 
+    // Les helpers pour le Blackboard restent inchangés
     private void SetIsAttackingBlackboardVar(bool value)
     {
         if(bbIsAttackingBlackboard != null && bbIsAttackingBlackboard.Value != value)

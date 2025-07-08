@@ -14,16 +14,15 @@ public class InputTargetingManager : MonoBehaviour
     public static InputTargetingManager Instance { get; private set; }
 
     // --- Événements Publics ---
-    // Notifié en continu quand un bâtiment est ciblé (souris ou manette)
-    public static event System.Action<Building> OnBuildingHovered;
-    // Notifié quand plus rien n'est survolé/ciblé
+    // MODIFIED: Events now pass a generic GameObject, which can be a building or a unit.
+    public static event System.Action<GameObject> OnTargetHovered;
     public static event System.Action OnHoverEnded;
-    // Notifié quand le joueur valide la sélection (clic ou bouton manette)
-    public static event System.Action<Building> OnBuildingSelected;
+    public static event System.Action<GameObject> OnTargetSelected;
 
     [Header("Raycast Settings")]
     [SerializeField] private LayerMask tileLayerMask;
     [SerializeField] private LayerMask buildingLayerMask;
+    [SerializeField] private LayerMask unitLayerMask; // NEW: Layer mask for your targetable units.
     [SerializeField] private float raycastDistance = 100f;
 
     [Header("Mouse Settings")]
@@ -34,16 +33,18 @@ public class InputTargetingManager : MonoBehaviour
 
     [Header("Gamepad Targeting")]
     [SerializeField] private bool isTargetingMode = false;
-    private List<Building> targetableBuildings = new List<Building>();
+    // MODIFIED: The list now holds GameObjects. Note: Gamepad cycling will only find Buildings by default.
+    private List<GameObject> targetableObjects = new List<GameObject>();
     private int currentTargetIndex = 0;
-    
+
     [Header("Debugging")]
     [SerializeField] private bool debugLogs = true;
 
     private float lastClickTime;
-    private Building currentlyHoveredBuilding;
+    // MODIFIED: The currently hovered object is now a GameObject.
+    private GameObject currentlyHoveredObject;
     private BuildingSelectionFeedback currentFeedback;
-    
+
     void Awake()
     {
         // --- Singleton Initialisation ---
@@ -79,9 +80,8 @@ public class InputTargetingManager : MonoBehaviour
             InputManager.Instance.GameplayActions.CycleTarget.performed -= OnCycleTargetPressed;
         }
         RhythmGameCameraController.OnToggleCameraLockRequested -= HandleToggleCameraLockRequest;
-        
-        // Nettoyage au cas où un objet serait encore en surbrillance
-        UpdateHoveredBuilding(null);
+
+        UpdateHoveredTarget(null);
         SetCursor(defaultCursorTexture);
     }
 
@@ -93,33 +93,33 @@ public class InputTargetingManager : MonoBehaviour
             HandleMouseTargeting();
         }
     }
-    
+
     /// <summary>
     /// Gère la sélection via clic de souris. La sélection via manette est gérée par OnSelectPerformed.
     /// </summary>
     private void HandleMouseTargeting()
     {
-        // Si on est en mode ciblage manette, on ne fait rien avec la souris.
         if (isTargetingMode) return;
-        
+
         Ray ray = Camera.main.ScreenPointToRay(Input.mousePosition);
-        Building foundBuilding = GetBuildingFromRay(ray);
-        UpdateHoveredBuilding(foundBuilding);
+        // MODIFIED: Method now finds any targetable GameObject.
+        GameObject foundTarget = GetTargetableFromRay(ray);
+        UpdateHoveredTarget(foundTarget);
 
         // Gestion du clic pour la sélection
         if (Input.GetMouseButtonDown(0) && Time.time - lastClickTime > clickCooldown)
         {
             lastClickTime = Time.time;
-            if (currentlyHoveredBuilding != null)
+            if (currentlyHoveredObject != null)
             {
-                 if(debugLogs) Debug.Log($"[InputTargetingManager] Mouse click selection: {currentlyHoveredBuilding.name}");
-                 OnBuildingSelected?.Invoke(currentlyHoveredBuilding);
+                 if(debugLogs) Debug.Log($"[InputTargetingManager] Mouse click selection: {currentlyHoveredObject.name}");
+                 OnTargetSelected?.Invoke(currentlyHoveredObject); // MODIFIED: Pass the GameObject
             }
             else
             {
                  // Clic dans le vide, on notifie aussi pour que les systèmes puissent réagir (ex: enlever la bannière)
                  if(debugLogs) Debug.Log($"[InputTargetingManager] Mouse click on empty space.");
-                 OnBuildingSelected?.Invoke(null);
+                 OnTargetSelected?.Invoke(null); // MODIFIED: Pass null
             }
         }
     }
@@ -127,14 +127,14 @@ public class InputTargetingManager : MonoBehaviour
     /// <summary>
     /// Met à jour le bâtiment actuellement survolé et déclenche les événements et la surbrillance.
     /// </summary>
-    private void UpdateHoveredBuilding(Building newBuilding)
+    private void UpdateHoveredTarget(GameObject newTarget) // MODIFIED: Parameter is a GameObject
     {
-        if (newBuilding != currentlyHoveredBuilding)
+        if (newTarget != currentlyHoveredObject)
         {
             // 1. Nettoyer l'ancien bâtiment
-            if (currentlyHoveredBuilding != null)
+            if (currentlyHoveredObject != null)
             {
-                if(debugLogs) Debug.Log($"[InputTargetingManager] Hover ended on {currentlyHoveredBuilding.name}");
+                if(debugLogs) Debug.Log($"[InputTargetingManager] Hover ended on {currentlyHoveredObject.name}");
                 OnHoverEnded?.Invoke();
 
                 if (currentFeedback != null && currentFeedback.CurrentState == OutlineState.Hover)
@@ -144,15 +144,15 @@ public class InputTargetingManager : MonoBehaviour
             }
 
             // 2. Mettre à jour avec le nouveau bâtiment
-            currentlyHoveredBuilding = newBuilding;
-            
-            if (currentlyHoveredBuilding != null)
-            {
-                if(debugLogs) Debug.Log($"[InputTargetingManager] Hover started on {currentlyHoveredBuilding.name}");
-                OnBuildingHovered?.Invoke(currentlyHoveredBuilding);
+            currentlyHoveredObject = newTarget;
 
-                // Gérer l'outline
-                currentFeedback = currentlyHoveredBuilding.GetComponent<BuildingSelectionFeedback>();
+            if (currentlyHoveredObject != null)
+            {
+                if(debugLogs) Debug.Log($"[InputTargetingManager] Hover started on {currentlyHoveredObject.name}");
+                OnTargetHovered?.Invoke(currentlyHoveredObject); // MODIFIED: Pass the GameObject
+
+                // Gérer l'outline (will only work if the hovered object has this component)
+                currentFeedback = currentlyHoveredObject.GetComponent<BuildingSelectionFeedback>();
                 if (currentFeedback != null && currentFeedback.CurrentState == OutlineState.Default)
                 {
                     currentFeedback.SetOutlineState(OutlineState.Hover);
@@ -167,7 +167,7 @@ public class InputTargetingManager : MonoBehaviour
             }
         }
     }
-    
+
     private void SetCursor(Texture2D cursorTexture)
     {
         if (cursorTexture != null)
@@ -177,28 +177,27 @@ public class InputTargetingManager : MonoBehaviour
     }
 
     #region Gamepad Targeting
-    
+
     private void HandleToggleCameraLockRequest()
     {
         if (isTargetingMode) ExitTargetingMode();
         else EnterTargetingMode();
     }
-    
+
     private void EnterTargetingMode()
     {
         if (debugLogs) Debug.Log("[InputTargetingManager] Entering targeting mode WITH camera lock.");
-        ScanForTargetableBuildings();
-        if (targetableBuildings.Count == 0) return;
+        ScanForTargetableObjects();
+        if (targetableObjects.Count == 0) return;
 
         isTargetingMode = true;
-        SelectClosestBuildingAsDefault();
-        UpdateGamepadTarget(); // This will now lock camera since we're entering lock mode
-        
-        // Explicitly lock the camera when entering this mode
+        SelectClosestTargetAsDefault();
+        UpdateGamepadTarget();
+
         var cameraController = FindFirstObjectByType<RhythmGameCameraController>();
-        if (cameraController != null && targetableBuildings.Count > 0)
+        if (cameraController != null && targetableObjects.Count > 0)
         {
-            cameraController.LockOnTarget(targetableBuildings[currentTargetIndex].transform);
+            cameraController.LockOnTarget(targetableObjects[currentTargetIndex].transform);
         }
     }
 
@@ -206,129 +205,124 @@ public class InputTargetingManager : MonoBehaviour
     {
         if (debugLogs) Debug.Log("[InputTargetingManager] Exiting targeting mode.");
         isTargetingMode = false;
-        UpdateHoveredBuilding(null); // Clear hover state
+        UpdateHoveredTarget(null); // Clear hover state
 
         var cameraController = FindFirstObjectByType<RhythmGameCameraController>();
         if (cameraController != null) cameraController.UnlockCamera();
-        
-        targetableBuildings.Clear();        
+
+        targetableObjects.Clear();
     }
 
     private void OnCycleTargetPressed(InputAction.CallbackContext context)
     {
-        // Initialize targeting mode if not already active
-        if (!isTargetingMode) 
+        if (!isTargetingMode)
         {
             InitializeTargetingWithoutCameraLock();
             return;
         }
-        
-        if (targetableBuildings.Count <= 1) return;
+
+        if (targetableObjects.Count <= 1) return;
 
         float axisValue = context.ReadValue<float>();
         if (Mathf.Abs(axisValue) < 0.5f) return;
 
-        if (axisValue > 0) currentTargetIndex = (currentTargetIndex + 1) % targetableBuildings.Count;
-        else currentTargetIndex = (currentTargetIndex - 1 + targetableBuildings.Count) % targetableBuildings.Count;
-        
+        if (axisValue > 0) currentTargetIndex = (currentTargetIndex + 1) % targetableObjects.Count;
+        else currentTargetIndex = (currentTargetIndex - 1 + targetableObjects.Count) % targetableObjects.Count;
+
         UpdateGamepadTarget();
     }
 
-    /// <summary>
-    /// Initialize targeting mode without locking the camera - only updates highlights
-    /// </summary>
     private void InitializeTargetingWithoutCameraLock()
     {
         if (debugLogs) Debug.Log("[InputTargetingManager] Initializing targeting mode without camera lock.");
-        ScanForTargetableBuildings();
-        if (targetableBuildings.Count == 0) return;
+        ScanForTargetableObjects();
+        if (targetableObjects.Count == 0) return;
 
         isTargetingMode = true;
-        SelectClosestBuildingAsDefault();
-        
-        // Only update the highlight, don't lock the camera
-        if (targetableBuildings.Count > 0)
+        SelectClosestTargetAsDefault();
+
+        if (targetableObjects.Count > 0)
         {
-            Building targetBuilding = targetableBuildings[currentTargetIndex];
-            UpdateHoveredBuilding(targetBuilding);
+            GameObject targetObject = targetableObjects[currentTargetIndex];
+            UpdateHoveredTarget(targetObject);
         }
     }
 
-    /// <summary>
-    /// Gère la sélection via le bouton de la manette (partagé avec le clic souris via le même handler)
-    /// </summary>
     private void OnSelectPerformed(InputAction.CallbackContext context)
     {
-        // On ne gère la manette que si elle est le dernier périphérique utilisé et qu'on est en mode ciblage
-        if (!isTargetingMode || currentlyHoveredBuilding == null) return;
-        
-        if (debugLogs) Debug.Log($"[InputTargetingManager] Gamepad selection: {currentlyHoveredBuilding.name}");
-        OnBuildingSelected?.Invoke(currentlyHoveredBuilding);
+        if (!isTargetingMode || currentlyHoveredObject == null) return;
+
+        if (debugLogs) Debug.Log($"[InputTargetingManager] Gamepad selection: {currentlyHoveredObject.name}");
+        OnTargetSelected?.Invoke(currentlyHoveredObject);
     }
-    
+
     private void UpdateGamepadTarget()
     {
-        // Clean up the list first - remove any destroyed buildings
-        CleanupDestroyedBuildings();
-        
-        if (targetableBuildings.Count == 0) 
+        CleanupDestroyedTargets();
+
+        if (targetableObjects.Count == 0)
         {
-            // No buildings left, exit targeting mode
             ExitTargetingMode();
             return;
         }
-        
-        // Ensure current index is valid after cleanup
-        if (currentTargetIndex >= targetableBuildings.Count)
+
+        if (currentTargetIndex >= targetableObjects.Count)
         {
             currentTargetIndex = 0;
         }
-        
-        Building targetBuilding = targetableBuildings[currentTargetIndex];
-        UpdateHoveredBuilding(targetBuilding);
 
-        // Only lock camera if we're already in camera lock mode
+        GameObject targetObject = targetableObjects[currentTargetIndex];
+        UpdateHoveredTarget(targetObject);
+
         var cameraController = FindFirstObjectByType<RhythmGameCameraController>();
         if (cameraController != null && cameraController.IsLocked)
         {
-            cameraController.LockOnTarget(targetBuilding.transform);
+            cameraController.LockOnTarget(targetObject.transform);
         }
     }
 
-    /// <summary>
-    /// Removes destroyed buildings from the targetable buildings list
-    /// </summary>
-    private void CleanupDestroyedBuildings()
+    private void CleanupDestroyedTargets()
     {
-        // Remove null references (destroyed GameObjects)
-        int originalCount = targetableBuildings.Count;
-        targetableBuildings.RemoveAll(building => building == null || !building.IsTargetable);
-        
-        if (originalCount != targetableBuildings.Count && debugLogs)
+        int originalCount = targetableObjects.Count;
+        targetableObjects.RemoveAll(obj => obj == null);
+
+        if (originalCount != targetableObjects.Count && debugLogs)
         {
-            Debug.Log($"[InputTargetingManager] Cleaned up {originalCount - targetableBuildings.Count} destroyed buildings. Remaining: {targetableBuildings.Count}");
+            Debug.Log($"[InputTargetingManager] Cleaned up {originalCount - targetableObjects.Count} destroyed objects. Remaining: {targetableObjects.Count}");
         }
     }
 
-    private void ScanForTargetableBuildings()
+    private void ScanForTargetableObjects()
     {
-        targetableBuildings = FindObjectsOfType<Building>()
-            .Where(b => b != null && b.IsTargetable) // Added null check for destroyed buildings
+        // NOTE: This scan only finds 'Building' objects for gamepad cycling.
+        // To include units, you would need to find them and add their GameObjects to the list.
+        // For example:
+        // var units = FindObjectsOfType<YourUnitScript>().Select(u => u.gameObject);
+        // targetableObjects.AddRange(units);
+        targetableObjects.Clear();
+        var buildings = FindObjectsOfType<Building>()
+            .Where(b => b != null && b.IsTargetable)
+            .Select(b => b.gameObject); // Select the GameObject
+
+        targetableObjects.AddRange(buildings);
+
+        targetableObjects = targetableObjects
             .OrderBy(b => b.transform.position.x)
             .ThenBy(b => b.transform.position.z)
             .ToList();
-        if(debugLogs) Debug.Log($"[InputTargetingManager] Found {targetableBuildings.Count} targetable buildings.");
+
+        if(debugLogs) Debug.Log($"[InputTargetingManager] Found {targetableObjects.Count} targetable objects for gamepad cycling.");
     }
-    
-    private void SelectClosestBuildingAsDefault()
+
+    private void SelectClosestTargetAsDefault()
     {
-        if (targetableBuildings.Count == 0) return;
+        if (targetableObjects.Count == 0) return;
         var cameraPos = Camera.main.transform.position;
         float closestDist = float.MaxValue;
-        
-        for (int i = 0; i < targetableBuildings.Count; i++)
+
+        for (int i = 0; i < targetableObjects.Count; i++)
         {
-            float dist = Vector3.Distance(cameraPos, targetableBuildings[i].transform.position);
+            float dist = Vector3.Distance(cameraPos, targetableObjects[i].transform.position);
             if (dist < closestDist)
             {
                 closestDist = dist;
@@ -340,27 +334,36 @@ public class InputTargetingManager : MonoBehaviour
     #endregion
 
     #region Utility
-    
+
     /// <summary>
-    /// Lance un rayon et retourne le bâtiment trouvé, que ce soit directement ou via sa tuile.
-    /// C'est une fusion de la logique de l'ancien MouseManager.
+    /// Lance un rayon et retourne le GameObject trouvé, que ce soit un bâtiment ou une unité.
     /// </summary>
-    private Building GetBuildingFromRay(Ray ray)
+    private GameObject GetTargetableFromRay(Ray ray)
     {
-        // Priorité 1: Toucher directement un collider sur le bâtiment
-        if (Physics.Raycast(ray, out RaycastHit hitInfo, raycastDistance, buildingLayerMask))
+        // MODIFIED: Combine building and unit layers for the raycast.
+        LayerMask combinedMask = buildingLayerMask | unitLayerMask;
+
+        // Priority 1: Toucher directement un collider sur le bâtiment ou une unité.
+        if (Physics.Raycast(ray, out RaycastHit hitInfo, raycastDistance, combinedMask))
         {
+            // Check if the hit object is a Building first
             Building building = hitInfo.collider.GetComponentInParent<Building>();
-            if (building != null) return building;
+            if (building != null)
+            {
+                return building.gameObject;
+            }
+
+            // If not a building, return the GameObject directly. This will be your unit.
+            return hitInfo.collider.gameObject;
         }
 
-        // Priorité 2: Toucher une tuile qui contient un bâtiment
+        // Priority 2: Toucher une tuile qui contient un bâtiment
         if (Physics.Raycast(ray, out hitInfo, raycastDistance, tileLayerMask))
         {
             Tile tile = hitInfo.collider.GetComponent<Tile>();
             if (tile != null && tile.currentBuilding != null)
             {
-                return tile.currentBuilding;
+                return tile.currentBuilding.gameObject;
             }
         }
 

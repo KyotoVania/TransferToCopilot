@@ -33,6 +33,7 @@ public class PlayerSaveData
     public float MusicVolume = 0.7f;
     public float SfxVolume = 0.75f;
     public bool VibrationEnabled = true;
+    public bool ShowBeatIndicator = false; // Ajout de la nouvelle variable
 }
 
 /// <summary>
@@ -465,6 +466,7 @@ public class PlayerDataManager : SingletonPersistent<PlayerDataManager>
      public static event Action<float> OnMusicVolumeChanged;
      public static event Action<float> OnSfxVolumeChanged;
      public static event Action<bool> OnVibrationChanged;
+     public static event Action<bool> OnShowBeatIndicatorChanged; // Ajout de l'événement
      
      public void SetMusicVolume(float volume)
      {
@@ -501,7 +503,21 @@ public class PlayerDataManager : SingletonPersistent<PlayerDataManager>
          }
      }
      
+     // Ajout de la méthode pour le beat indicator
+     public void SetShowBeatIndicator(bool enabled)
+     {
+         if (Data.ShowBeatIndicator != enabled)
+         {
+             Data.ShowBeatIndicator = enabled;
+             OnShowBeatIndicatorChanged?.Invoke(enabled);
+             SaveData();
+             Debug.Log($"[PlayerDataManager] Beat Indicator {(enabled ? "activé" : "désactivé")}");
+         }
+     }
+     
      public float GetMusicVolume() => Data.MusicVolume;
      public float GetSfxVolume() => Data.SfxVolume;
      public bool IsVibrationEnabled() => Data.VibrationEnabled;
+     // Ajout du getter pour le beat indicator
+     public bool IsShowBeatIndicatorEnabled() => Data.ShowBeatIndicator;
 }

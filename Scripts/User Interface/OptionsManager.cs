@@ -16,19 +16,23 @@ public class OptionsManager : MonoBehaviour
     [SerializeField] private GameObject optionsPanel;
     [SerializeField] private Slider musicVolumeSlider;
     [SerializeField] private Slider sfxVolumeSlider;
-    // Remplacer le Toggle par un Button
     [SerializeField] private Button vibrationButton;
+    [SerializeField] private Button beatIndicatorButton; // Ajout de la référence UI
     [SerializeField] private Button backButton;
 
     [Header("Vibration Button Children")]
-    // Les deux enfants du bouton (ON et OFF)
     [SerializeField] private GameObject vibrationOnChild;
     [SerializeField] private GameObject vibrationOffChild;
+
+    [Header("Beat Indicator Button Children")] // Ajout des enfants pour le nouveau bouton
+    [SerializeField] private GameObject beatIndicatorOnChild;
+    [SerializeField] private GameObject beatIndicatorOffChild;
 
     [Header("Labels")]
     [SerializeField] private TextMeshProUGUI musicVolumeLabel;
     [SerializeField] private TextMeshProUGUI sfxVolumeLabel;
     [SerializeField] private TextMeshProUGUI vibrationLabel;
+    [SerializeField] private TextMeshProUGUI beatIndicatorLabel; // Ajout du label
 
     [Header("Controller Navigation")]
     [SerializeField] private float buttonScaleMultiplier = 1.1f;
@@ -53,11 +57,12 @@ public class OptionsManager : MonoBehaviour
         PlayerDataManager.OnMusicVolumeChanged += OnMusicVolumeChanged;
         PlayerDataManager.OnSfxVolumeChanged += OnSfxVolumeChanged;
         PlayerDataManager.OnVibrationChanged += OnVibrationChanged;
+        PlayerDataManager.OnShowBeatIndicatorChanged += OnShowBeatIndicatorChanged; // S'abonner au nouvel événement
 
         if (isInitialized)
         {
             LoadCurrentSettings();
-            SetInitialSelection(); // CORRECTION: Pas de StartCoroutine
+            SetInitialSelection();
         }
     }
 
@@ -67,6 +72,7 @@ public class OptionsManager : MonoBehaviour
         PlayerDataManager.OnMusicVolumeChanged -= OnMusicVolumeChanged;
         PlayerDataManager.OnSfxVolumeChanged -= OnSfxVolumeChanged;
         PlayerDataManager.OnVibrationChanged -= OnVibrationChanged;
+        PlayerDataManager.OnShowBeatIndicatorChanged -= OnShowBeatIndicatorChanged; // Se désabonner du nouvel événement
     }
 
     private void Update()
@@ -81,30 +87,14 @@ public class OptionsManager : MonoBehaviour
 
     private void InitializeUI()
     {
-        // Configurer les listeners des sliders et toggle
-        if (musicVolumeSlider != null)
-        {
-            musicVolumeSlider.onValueChanged.AddListener(OnMusicSliderChanged);
-        }
-
-        if (sfxVolumeSlider != null)
-        {
-            sfxVolumeSlider.onValueChanged.AddListener(OnSfxSliderChanged);
-        }
-
-        if (vibrationButton != null)
-        {
-            vibrationButton.onClick.AddListener(OnVibrationButtonClicked);
-        }
-
-        if (backButton != null)
-        {
-            backButton.onClick.AddListener(OnBackButtonClicked);
-        }
-
-        // Charger les paramètres actuels
+        // Configurer les listeners
+        if (musicVolumeSlider != null) musicVolumeSlider.onValueChanged.AddListener(OnMusicSliderChanged);
+        if (sfxVolumeSlider != null) sfxVolumeSlider.onValueChanged.AddListener(OnSfxSliderChanged);
+        if (vibrationButton != null) vibrationButton.onClick.AddListener(OnVibrationButtonClicked);
+        if (beatIndicatorButton != null) beatIndicatorButton.onClick.AddListener(OnBeatIndicatorButtonClicked); // Ajouter le listener
+        if (backButton != null) backButton.onClick.AddListener(OnBackButtonClicked);
+        
         LoadCurrentSettings();
-
         isInitialized = true;
         Debug.Log("[OptionsManager] Interface utilisateur initialisée");
     }
@@ -113,7 +103,6 @@ public class OptionsManager : MonoBehaviour
     {
         if (PlayerDataManager.Instance != null)
         {
-            // Charger les valeurs sans déclencher les événements
             if (musicVolumeSlider != null)
             {
                 musicVolumeSlider.SetValueWithoutNotify(PlayerDataManager.Instance.GetMusicVolume());
@@ -126,25 +115,32 @@ public class OptionsManager : MonoBehaviour
                 UpdateSfxLabel(PlayerDataManager.Instance.GetSfxVolume());
             }
 
-            // Mettre à jour l'état du bouton vibration
             if (vibrationButton != null)
             {
                 UpdateVibrationButton(PlayerDataManager.Instance.IsVibrationEnabled());
                 UpdateVibrationLabel(PlayerDataManager.Instance.IsVibrationEnabled());
+            }
+            
+            // Mettre à jour l'état du nouveau bouton
+            if (beatIndicatorButton != null)
+            {
+                UpdateBeatIndicatorButton(PlayerDataManager.Instance.IsShowBeatIndicatorEnabled());
+                UpdateBeatIndicatorLabel(PlayerDataManager.Instance.IsShowBeatIndicatorEnabled());
             }
         }
     }
 
     private void SetupNavigation()
     {
-        // Mettre à jour la navigation pour utiliser le bouton vibration
-        optionsSelectables = new Selectable[] { musicVolumeSlider, sfxVolumeSlider, vibrationButton, backButton };
+        // Mettre à jour la navigation
+        optionsSelectables = new Selectable[] { musicVolumeSlider, sfxVolumeSlider, vibrationButton, beatIndicatorButton, backButton };
 
         // Configurer la navigation explicite
         SetupExplicitNavigation(musicVolumeSlider, null, sfxVolumeSlider, null, null);
         SetupExplicitNavigation(sfxVolumeSlider, musicVolumeSlider, vibrationButton, null, null);
-        SetupExplicitNavigation(vibrationButton, sfxVolumeSlider, backButton, null, null);
-        SetupExplicitNavigation(backButton, vibrationButton, null, null, null);
+        SetupExplicitNavigation(vibrationButton, sfxVolumeSlider, beatIndicatorButton, null, null);
+        SetupExplicitNavigation(beatIndicatorButton, vibrationButton, backButton, null, null); // Navigation pour le nouveau bouton
+        SetupExplicitNavigation(backButton, beatIndicatorButton, null, null, null); // Mettre à jour le bouton retour
 
         Debug.Log("[OptionsManager] Navigation configurée pour les options");
     }
@@ -168,48 +164,55 @@ public class OptionsManager : MonoBehaviour
 
     private void OnMusicSliderChanged(float value)
     {
-        // Mettre à jour le PlayerDataManager qui notifiera l'AudioManager
         PlayerDataManager.Instance?.SetMusicVolume(value);
-
-        // Mettre à jour le label immédiatement
         UpdateMusicLabel(value);
     }
 
     private void OnSfxSliderChanged(float value)
     {
-        // Mettre à jour le PlayerDataManager qui notifiera l'AudioManager
         PlayerDataManager.Instance?.SetSfxVolume(value);
-
-        // Mettre à jour le label immédiatement
         UpdateSfxLabel(value);
     }
 
-    // Nouveau handler pour le bouton vibration
     private void OnVibrationButtonClicked()
     {
         if (PlayerDataManager.Instance == null) return;
-        bool current = PlayerDataManager.Instance.IsVibrationEnabled();
-        bool next = !current;
+        bool next = !PlayerDataManager.Instance.IsVibrationEnabled();
         PlayerDataManager.Instance.SetVibrationEnabled(next);
         UpdateVibrationButton(next);
         UpdateVibrationLabel(next);
     }
+    
+    // Handler pour le nouveau bouton
+    private void OnBeatIndicatorButtonClicked()
+    {
+        if (PlayerDataManager.Instance == null) return;
+        bool next = !PlayerDataManager.Instance.IsShowBeatIndicatorEnabled();
+        PlayerDataManager.Instance.SetShowBeatIndicator(next);
+        UpdateBeatIndicatorButton(next);
+        UpdateBeatIndicatorLabel(next);
+    }
 
     private void OnBackButtonClicked()
     {
-        // Fermer le panneau d'options
         if (MenuManager.Instance != null)
         {
             optionsPanel.SetActive(false);
             MenuManager.Instance.transform.Find("MainMenuPanel")?.gameObject.SetActive(true);
         }
     }
-
-    // Met à jour l'affichage des enfants du bouton selon l'état
+    
     private void UpdateVibrationButton(bool enabled)
     {
         if (vibrationOnChild != null) vibrationOnChild.SetActive(enabled);
         if (vibrationOffChild != null) vibrationOffChild.SetActive(!enabled);
+    }
+
+    // Méthode pour mettre à jour l'affichage du nouveau bouton
+    private void UpdateBeatIndicatorButton(bool enabled)
+    {
+        if (beatIndicatorOnChild != null) beatIndicatorOnChild.SetActive(enabled);
+        if (beatIndicatorOffChild != null) beatIndicatorOffChild.SetActive(!enabled);
     }
 
     #endregion
@@ -218,51 +221,37 @@ public class OptionsManager : MonoBehaviour
 
     private void OnMusicVolumeChanged(float volume)
     {
-        // Synchroniser l'AudioManager
-        if (AudioManager.Instance != null)
-        {
-            AudioManager.Instance.SetMusicVolume(volume);
-        }
-
-        // Mettre à jour l'UI si nécessaire
+        if (AudioManager.Instance != null) AudioManager.Instance.SetMusicVolume(volume);
         if (musicVolumeSlider != null && !Mathf.Approximately(musicVolumeSlider.value, volume))
         {
             musicVolumeSlider.SetValueWithoutNotify(volume);
         }
-
         UpdateMusicLabel(volume);
     }
 
     private void OnSfxVolumeChanged(float volume)
     {
-        // Synchroniser l'AudioManager
-        if (AudioManager.Instance != null)
-        {
-            AudioManager.Instance.SetSfxVolume(volume);
-        }
-
-        // Mettre à jour l'UI si nécessaire
+        if (AudioManager.Instance != null) AudioManager.Instance.SetSfxVolume(volume);
         if (sfxVolumeSlider != null && !Mathf.Approximately(sfxVolumeSlider.value, volume))
         {
             sfxVolumeSlider.SetValueWithoutNotify(volume);
         }
-
         UpdateSfxLabel(volume);
     }
 
     private void OnVibrationChanged(bool enabled)
     {
-        // Ici vous pouvez ajouter la logique pour gérer les vibrations
-        // Par exemple, configurer le système de vibration de Unity ou d'un package tiers
-
-        // Mettre à jour l'UI si nécessaire
-        if (vibrationButton != null)
-        {
-            UpdateVibrationButton(enabled);
-        }
+        if (vibrationButton != null) UpdateVibrationButton(enabled);
         UpdateVibrationLabel(enabled);
-
         Debug.Log($"[OptionsManager] Vibrations {(enabled ? "activées" : "désactivées")}");
+    }
+
+    // Handler pour l'événement du nouveau bouton
+    private void OnShowBeatIndicatorChanged(bool enabled)
+    {
+        if (beatIndicatorButton != null) UpdateBeatIndicatorButton(enabled);
+        UpdateBeatIndicatorLabel(enabled);
+        Debug.Log($"[OptionsManager] Indicateur de beat {(enabled ? "activé" : "désactivé")}");
     }
 
     #endregion
@@ -271,26 +260,23 @@ public class OptionsManager : MonoBehaviour
 
     private void UpdateMusicLabel(float volume)
     {
-        if (musicVolumeLabel != null)
-        {
-            musicVolumeLabel.text = $"Musique: {volume * 100:F0}%";
-        }
+        if (musicVolumeLabel != null) musicVolumeLabel.text = $"Musique: {volume * 100:F0}%";
     }
 
     private void UpdateSfxLabel(float volume)
     {
-        if (sfxVolumeLabel != null)
-        {
-            sfxVolumeLabel.text = $"Effets: {volume * 100:F0}%";
-        }
+        if (sfxVolumeLabel != null) sfxVolumeLabel.text = $"Effets: {volume * 100:F0}%";
     }
 
     private void UpdateVibrationLabel(bool enabled)
     {
-        if (vibrationLabel != null)
-        {
-            vibrationLabel.text = $"Vibrations: {(enabled ? "ON" : "OFF")}";
-        }
+        if (vibrationLabel != null) vibrationLabel.text = $"Vibrations: {(enabled ? "ON" : "OFF")}";
+    }
+
+    // Méthode pour mettre à jour le label du nouveau bouton
+    private void UpdateBeatIndicatorLabel(bool enabled)
+    {
+        if (beatIndicatorLabel != null) beatIndicatorLabel.text = $"Indicateur Beat: {(enabled ? "ON" : "OFF")}";
     }
 
     #endregion
@@ -301,13 +287,11 @@ public class OptionsManager : MonoBehaviour
     {
         if (InputManager.Instance == null) return;
 
-        // Gérer l'action Cancel (retour)
         if (InputManager.Instance.UIActions.Cancel.WasPressedThisFrame())
         {
             OnBackButtonClicked();
         }
 
-        // Détecter si on utilise la manette pour réactiver la sélection
         Vector2 navigationInput = InputManager.Instance.UIActions.Navigate.ReadValue<Vector2>();
         bool submitPressed = InputManager.Instance.UIActions.Submit.WasPressedThisFrame();
 
@@ -315,7 +299,7 @@ public class OptionsManager : MonoBehaviour
         {
             if (EventSystem.current.currentSelectedGameObject == null)
             {
-                SetInitialSelection(); // CORRECTION: Pas de StartCoroutine
+                SetInitialSelection();
             }
         }
     }
@@ -327,46 +311,11 @@ public class OptionsManager : MonoBehaviour
 
     private IEnumerator DelayedInitialSelection()
     {
-        // Attendre une frame pour que tout soit initialisé
         yield return null;
-    
-        // Désélectionner d'abord tout
         EventSystem.current.SetSelectedGameObject(null);
-    
         yield return null;
-    
-        // Sélectionner le premier élément interactif du menu options
-        // Cela pourrait être le premier slider, toggle ou le bouton Back
-        Selectable firstSelectable = null;
-    
-        // Chercher d'abord dans les sliders (volume musique, volume SFX, etc.)
-        Slider[] sliders = optionsPanel.GetComponentsInChildren<Slider>(false);
-        if (sliders.Length > 0)
-        {
-            firstSelectable = sliders[0];
-        }
-    
-        // Si pas de slider, chercher les toggles
-        if (firstSelectable == null)
-        {
-            Toggle[] toggles = optionsPanel.GetComponentsInChildren<Toggle>(false);
-            if (toggles.Length > 0)
-            {
-                firstSelectable = toggles[0];
-            }
-        }
-    
-        // Si toujours rien, prendre le bouton Back
-        if (firstSelectable == null)
-        {
-            Button[] buttons = optionsPanel.GetComponentsInChildren<Button>(false);
-            if (buttons.Length > 0)
-            {
-                firstSelectable = buttons[0];
-            }
-        }
-    
-        // Sélectionner l'élément trouvé
+
+        Selectable firstSelectable = optionsPanel.GetComponentInChildren<Selectable>(false);
         if (firstSelectable != null && firstSelectable.interactable)
         {
             firstSelectable.Select();
@@ -378,19 +327,10 @@ public class OptionsManager : MonoBehaviour
     private void HandleVisualFeedback()
     {
         GameObject currentSelected = EventSystem.current.currentSelectedGameObject;
-
-        // Animer l'élément actuellement sélectionné
         if (currentSelected != null && currentSelected != lastSelectedObject)
         {
-            // Remettre l'ancien élément à sa taille normale
-            if (lastSelectedObject != null)
-            {
-                AnimateSelectable(lastSelectedObject, Vector3.one, false);
-            }
-
-            // Agrandir le nouvel élément sélectionné
+            if (lastSelectedObject != null) AnimateSelectable(lastSelectedObject, Vector3.one, false);
             AnimateSelectable(currentSelected, Vector3.one * buttonScaleMultiplier, true);
-
             lastSelectedObject = currentSelected;
         }
     }
@@ -398,35 +338,24 @@ public class OptionsManager : MonoBehaviour
     private void AnimateSelectable(GameObject selectableObject, Vector3 targetScale, bool isSelected)
     {
         if (selectableObject == null) return;
-
-        // Arrêter toute animation en cours
         LeanTween.cancel(selectableObject);
-
-        // Animer vers la nouvelle échelle
-        LeanTween.scale(selectableObject, targetScale, animationSpeed)
-            .setEaseOutBack();
+        LeanTween.scale(selectableObject, targetScale, animationSpeed).setEaseOutBack();
     }
 
     #endregion
 
     #region Public Methods
 
-    /// <summary>
-    /// Ouvre le panneau d'options et configure la navigation
-    /// </summary>
     public void ShowOptions()
     {
         if (optionsPanel != null)
         {
             optionsPanel.SetActive(true);
             LoadCurrentSettings();
-            SetInitialSelection(); // CORRECTION: Pas de StartCoroutine
+            SetInitialSelection();
         }
     }
 
-    /// <summary>
-    /// Ferme le panneau d'options
-    /// </summary>
     public void HideOptions()
     {
         if (optionsPanel != null)
@@ -435,15 +364,13 @@ public class OptionsManager : MonoBehaviour
         }
     }
 
-    /// <summary>
-    /// Réinitialise tous les paramètres aux valeurs par défaut
-    /// </summary>
     [ContextMenu("Reset to Default Settings")]
     public void ResetToDefaults()
     {
         PlayerDataManager.Instance?.SetMusicVolume(0.7f);
         PlayerDataManager.Instance?.SetSfxVolume(0.75f);
         PlayerDataManager.Instance?.SetVibrationEnabled(true);
+        PlayerDataManager.Instance?.SetShowBeatIndicator(false); // Réinitialiser la nouvelle option
 
         Debug.Log("[OptionsManager] Paramètres réinitialisés aux valeurs par défaut");
     }
