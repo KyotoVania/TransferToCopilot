@@ -3,6 +3,7 @@ using UnityEngine.UI;
 using Unity.Behavior.GraphFramework;
 using ScriptableObjects;
 using System.Linq;
+using System.Collections;
 using System.Collections.Generic;
 
 public class WinLoseController : MonoBehaviour
@@ -37,6 +38,10 @@ public class WinLoseController : MonoBehaviour
     public static bool IsGameOverScreenActive { get; private set; } = false;
     private bool isGameOverInstance = false;
     public bool IsGameOver => isGameOverInstance;
+
+    [Header("UI Navigation")]
+    [SerializeField] private GameObject defaultButtonOnWin; // Assign "Next Level" button
+    [SerializeField] private GameObject defaultButtonOnLose; // Assign "Lobby" button
 
     private readonly List<GameObject> _deactivatedAllyUnits = new List<GameObject>();
     private readonly List<GameObject> _deactivatedEnemyUnits = new List<GameObject>();
@@ -200,11 +205,28 @@ public class WinLoseController : MonoBehaviour
     private void ActivateGameOverSequence(string message)
     {
         Debug.Log($"[WinLoseController] Activation de la séquence de fin de partie : {message}", this);
-        if (MusicManager.Instance != null) MusicManager.Instance.SetMusicState("EndGame");
+        if (GameManager.Instance != null)
+        {
+            GameManager.Instance.SetState(GameState.EndGame);
+        }
         if (inGameUiCanvas != null) inGameUiCanvas.SetActive(false);
         if (gameCameraController != null) gameCameraController.ZoomOutToMaxAndLockZoomOnly(true, 1.5f);
         if (gameOverOverlayPanel != null) gameOverOverlayPanel.SetActive(true);
+        StartCoroutine(SelectDefaultButtonDelayed(isGameOverInstance ? defaultButtonOnWin : defaultButtonOnLose));
     }
+
+    private IEnumerator SelectDefaultButtonDelayed(GameObject buttonToSelect)
+    {
+        // Wait for animations to start
+        yield return new WaitForSecondsRealtime(0.5f);
+    
+        if (buttonToSelect != null && UnityEngine.EventSystems.EventSystem.current != null)
+        {
+            UnityEngine.EventSystems.EventSystem.current.SetSelectedGameObject(buttonToSelect);
+            Debug.Log($"[WinLoseController] Default button selected: {buttonToSelect.name}");
+        }
+    }
+
 
     private void DeactivateAllUnitGameObjects()
     {

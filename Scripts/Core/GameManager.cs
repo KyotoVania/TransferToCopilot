@@ -46,7 +46,7 @@ public class GameManager : SingletonPersistent<GameManager>
         { GameState.MainMenu, new GameStateConfig("MainMenu", true, InputMode.UI) },
         { GameState.Hub, new GameStateConfig("Hub", false, InputMode.UI) },
         { GameState.InLevel, new GameStateConfig("Exploration", false, InputMode.Gameplay) },
-        { GameState.EndGame, new GameStateConfig("", false, InputMode.UI) } // EndGame music géré par WinLoseController
+        { GameState.EndGame, new GameStateConfig("EndGame", false, InputMode.UI) } // EndGame music géré par WinLoseController
     };
 
     protected override void Awake()
