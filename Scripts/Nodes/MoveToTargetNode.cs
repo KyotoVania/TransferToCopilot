@@ -64,7 +64,6 @@ public class MoveToTargetNode_WithInternalBeatWait : Unity.Behavior.Action
 
         if (requiredMovementDelayInternal > 0)
         {
-            // --- MODIFICATION : Utilisation de MusicManager ---
             if (MusicManager.Instance != null)
             {
                 MusicManager.Instance.OnBeat += OnBeatReceived;
@@ -81,7 +80,6 @@ public class MoveToTargetNode_WithInternalBeatWait : Unity.Behavior.Action
 
     protected override Status OnUpdate()
     {
-        // ... (La logique interne reste la même, car elle ne dépend que des flags internes)
         if (selfUnitInstanceInternal == null)
             return Status.Failure;
 
@@ -105,14 +103,12 @@ public class MoveToTargetNode_WithInternalBeatWait : Unity.Behavior.Action
 
     protected override void OnEnd()
     {
-        // --- MODIFICATION : Utilisation de MusicManager ---
         if (isSubscribedToBeat && MusicManager.Instance != null)
         {
             MusicManager.Instance.OnBeat -= OnBeatReceived;
         }
         isSubscribedToBeat = false;
         
-        // ... (Le reste de la logique de OnEnd reste inchangé)
         if (movementActionStarted && selfUnitInstanceInternal != null && unitStepCoroutineHandle != null)
         {
             selfUnitInstanceInternal.StopCoroutine(unitStepCoroutineHandle);
@@ -129,12 +125,10 @@ public class MoveToTargetNode_WithInternalBeatWait : Unity.Behavior.Action
         ResetInternalState();
     }
     
-    // --- MODIFICATION : Signature de la méthode mise à jour ---
     private void OnBeatReceived(float beatDuration)
     {
         if (selfUnitInstanceInternal == null)
         {
-            // --- MODIFICATION : Utilisation de MusicManager ---
             if (isSubscribedToBeat && MusicManager.Instance != null) MusicManager.Instance.OnBeat -= OnBeatReceived;
             isSubscribedToBeat = false;
             return;
@@ -146,7 +140,6 @@ public class MoveToTargetNode_WithInternalBeatWait : Unity.Behavior.Action
             if (beatCounterInternal >= requiredMovementDelayInternal)
             {
                 delayPhaseComplete = true;
-                // --- MODIFICATION : Utilisation de MusicManager ---
                 if (isSubscribedToBeat && MusicManager.Instance != null)
                 {
                     MusicManager.Instance.OnBeat -= OnBeatReceived;
@@ -156,7 +149,6 @@ public class MoveToTargetNode_WithInternalBeatWait : Unity.Behavior.Action
         }
         else
         {
-             // --- MODIFICATION : Utilisation de MusicManager ---
              if (isSubscribedToBeat && MusicManager.Instance != null) MusicManager.Instance.OnBeat -= OnBeatReceived;
              isSubscribedToBeat = false;
         }

@@ -4,6 +4,8 @@ using Unity.Behavior.GraphFramework;
 using System.Collections;
 using System;
 using Unity.Properties;
+using System.Collections.Generic;
+using ScriptableObjects;
 
 [Serializable]
 [GeneratePropertyBag]
@@ -15,24 +17,26 @@ using Unity.Properties;
 )]
 public class AttackUnitNode : Unity.Behavior.Action
 {
+    // --- NOMS DES VARIABLES BLACKBOARD ---
     private const string SELF_UNIT_VAR = "SelfUnit";
     private const string TARGET_UNIT_VAR = "InteractionTargetUnit";
     private const string IS_ATTACKING_VAR = "IsAttacking";
+    private const string SELECTED_ACTION_TYPE_VAR = "SelectedActionType"; // Nouvelle variable pour rediriger l'action
 
+    // --- CACHE DES VARIABLES ---
     private BlackboardVariable<Unit> bbSelfUnit;
     private BlackboardVariable<Unit> bbTargetUnit;
     private BlackboardVariable<bool> bbIsAttackingBlackboard;
+    private BlackboardVariable<AIActionType> bbSelectedActionType; // Nouvelle variable
 
+    // --- NOUVELLES VARIABLES POUR GÉRER LE CYCLE D'ATTAQUE ---
     private Unit selfUnitInstance = null;
     private Unit currentTargetUnitForThisNode = null;
-
-    // MODIFIÉ : Une seule coroutine pour gérer toute la boucle d'attaque.
-    private Coroutine attackLoopCoroutine = null;
-
-    // NOUVEAU : Un compteur de temps pour le délai, géré au sein de la coroutine.
-    private int currentBeatCounterForDelay = 0;
-    private bool hasSubscribedToBeat = false;
-    private Vector3 startingPosition;
+    private Coroutine nodeManagedAttackCycleCoroutine = null;
+    private bool isWaitingForAttackDelay = false;
+    private int currentAttackBeatCounter = 0;
+    private bool hasSubscribedToBeatForAttackDelay = false;
+    // --- FIN DES NOUVELLES VARIABLES ---
 
     protected override Status OnStart()
     {
@@ -51,127 +55,150 @@ public class AttackUnitNode : Unity.Behavior.Action
             return Status.Failure;
         }
 
-        startingPosition = selfUnitInstance.transform.position;
-
         currentTargetUnitForThisNode = bbTargetUnit?.Value;
         if (currentTargetUnitForThisNode == null || currentTargetUnitForThisNode.Health <= 0)
         {
             SetIsAttackingBlackboardVar(false);
-            return Status.Success; // La cible est déjà invalide, succès car il n'y a rien à faire.
+            return Status.Success;
         }
 
         SetIsAttackingBlackboardVar(true);
-
-        // MODIFIÉ : On lance la coroutine principale qui gérera tout le cycle.
-        attackLoopCoroutine = selfUnitInstance.StartCoroutine(AttackLoop());
-
+        isWaitingForAttackDelay = false;
         return Status.Running;
+
     }
 
     protected override Status OnUpdate()
     {
-        // OnUpdate est maintenant beaucoup plus simple !
-        // Sa seule responsabilité est de vérifier les conditions qui pourraient interrompre l'action.
-
-        // La cible est morte ou a disparu ?
+        if (selfUnitInstance == null || !selfUnitInstance.gameObject.activeInHierarchy) return Status.Failure;
         if (currentTargetUnitForThisNode == null || currentTargetUnitForThisNode.Health <= 0 || !currentTargetUnitForThisNode.gameObject.activeInHierarchy)
         {
-            return Status.Success; // L'action est terminée avec succès.
+            return Status.Success;
         }
-
-        // L'unité a-t-elle été déplacée (ex: repoussée) ?
-        if (selfUnitInstance.transform.position != startingPosition)
+        
+        // Vérifier si la cible est toujours à portée d'attaque
+        if (!IsTargetInAttackRange())
         {
-            return Status.Failure; // L'action a échoué car la condition de position n'est plus respectée.
+            Debug.Log($"[{selfUnitInstance.name}] Cible {currentTargetUnitForThisNode.name} n'est plus à portée d'attaque. Changement d'action vers MoveToUnit.");
+            
+            // Mettre à jour le Blackboard pour rediriger vers le mouvement
+            if (bbSelectedActionType != null)
+            {
+                bbSelectedActionType.Value = AIActionType.MoveToUnit;
+            }
+            
+            return Status.Success; // Sortir complètement du nœud
         }
 
-        // Si aucune condition de sortie n'est remplie, on laisse la coroutine continuer son travail.
+        if (isWaitingForAttackDelay)
+        {
+            return Status.Running;
+        }
+
+        if (nodeManagedAttackCycleCoroutine == null)
+        {
+            Debug.Log($"[{selfUnitInstance.name}] Démarrage du cycle d'attaque pour {currentTargetUnitForThisNode.name}.");
+            nodeManagedAttackCycleCoroutine = selfUnitInstance.StartCoroutine(PerformSingleAttackCycle());
+        }
+
         return Status.Running;
     }
 
-    // NOUVEAU : La coroutine qui gère la boucle complète : Attaque -> Délai -> Répétition
-    private IEnumerator AttackLoop()
+    private IEnumerator PerformSingleAttackCycle()
     {
-        // Boucle infinie qui sera interrompue par le changement de statut du nœud (Success ou Failure dans OnUpdate)
-        while (true)
+        if (currentTargetUnitForThisNode == null || currentTargetUnitForThisNode.Health <= 0)
         {
-            // 1. Exécuter l'attaque
-            yield return selfUnitInstance.StartCoroutine(selfUnitInstance.PerformAttackCoroutine(currentTargetUnitForThisNode));
-
-            // Une vérification supplémentaire ici au cas où la cible meurt pendant l'animation d'attaque
-            if (currentTargetUnitForThisNode == null || currentTargetUnitForThisNode.Health <= 0)
-            {
-                yield break; // Termine la coroutine
-            }
-
-            // 2. Gérer le délai d'attaque basé sur le rythme
-            if (selfUnitInstance.AttackDelay > 0)
-            {
-                currentBeatCounterForDelay = 0;
-                SubscribeToBeat();
-
-                // Attendre que le nombre de battements requis soit atteint
-                while (currentBeatCounterForDelay < selfUnitInstance.AttackDelay)
-                {
-                    yield return null; // Attend la frame suivante
-                }
-
-                UnsubscribeFromBeat();
-            }
-            else
-            {
-                // S'il n'y a pas de délai, on attend juste une frame pour éviter une boucle infinie sans pause.
-                yield return null;
-            }
+            nodeManagedAttackCycleCoroutine = null;
+            yield break;
         }
+       
+        // Vérifier si nous sommes toujours dans la portée de l'ennemi
+        if (!IsTargetInAttackRange())
+        {
+            Debug.Log($"[{selfUnitInstance.name}] Cible {currentTargetUnitForThisNode.name} n'est plus à portée durant le cycle d'attaque. Arrêt du cycle.");
+            nodeManagedAttackCycleCoroutine = null;
+            yield break; // Le nœud sortira au prochain OnUpdate via la vérification de portée
+        }
+
+        yield return selfUnitInstance.StartCoroutine(selfUnitInstance.PerformAttackCoroutine(currentTargetUnitForThisNode));
+
+        if (currentTargetUnitForThisNode == null || currentTargetUnitForThisNode.Health <= 0)
+        {
+            nodeManagedAttackCycleCoroutine = null;
+            yield break;
+        }
+
+        currentAttackBeatCounter = 0;
+        isWaitingForAttackDelay = (selfUnitInstance.AttackDelay > 0);
+
+        if (isWaitingForAttackDelay)
+        {
+            SubscribeToBeatForAttackDelay();
+        }
+
+        nodeManagedAttackCycleCoroutine = null;
     }
 
     protected override void OnEnd()
     {
-        // Nettoyage propre à l'arrêt du nœud
-        UnsubscribeFromBeat();
-        if (attackLoopCoroutine != null && selfUnitInstance != null)
+        UnsubscribeFromBeatForAttackDelay();
+        if (nodeManagedAttackCycleCoroutine != null && selfUnitInstance != null)
         {
-            selfUnitInstance.StopCoroutine(attackLoopCoroutine);
+            selfUnitInstance.StopCoroutine(nodeManagedAttackCycleCoroutine);
         }
         SetIsAttackingBlackboardVar(false);
         ResetNodeInternalState();
     }
 
-    // MODIFIÉ : Le gestionnaire de battements se contente maintenant d'incrémenter un compteur.
-    private void HandleBeat(float beatDuration)
-    {
-        currentBeatCounterForDelay++;
-    }
+    // --- Méthodes pour la gestion du délai ---
 
-    private void SubscribeToBeat()
+    // La méthode accepte maintenant un paramètre float pour correspondre à la signature de l'événement MusicManager.OnBeat.
+    private void HandleAttackBeatDelay(float beatDuration)
     {
-        if (MusicManager.Instance != null && !hasSubscribedToBeat)
+        if (!isWaitingForAttackDelay)
         {
-            MusicManager.Instance.OnBeat += HandleBeat;
-            hasSubscribedToBeat = true;
+            UnsubscribeFromBeatForAttackDelay();
+            return;
+        }
+
+        currentAttackBeatCounter++;
+        if (currentAttackBeatCounter >= selfUnitInstance.AttackDelay)
+        {
+            isWaitingForAttackDelay = false;
+            UnsubscribeFromBeatForAttackDelay();
         }
     }
 
-    private void UnsubscribeFromBeat()
+    private void SubscribeToBeatForAttackDelay()
     {
-        if (MusicManager.Instance != null && hasSubscribedToBeat)
+        if (MusicManager.Instance != null && !hasSubscribedToBeatForAttackDelay)
         {
-            MusicManager.Instance.OnBeat -= HandleBeat;
-            hasSubscribedToBeat = false;
+            MusicManager.Instance.OnBeat += HandleAttackBeatDelay;
+            hasSubscribedToBeatForAttackDelay = true;
         }
     }
+
+    private void UnsubscribeFromBeatForAttackDelay()
+    {
+        if (MusicManager.Instance != null && hasSubscribedToBeatForAttackDelay)
+        {
+            MusicManager.Instance.OnBeat -= HandleAttackBeatDelay;
+            hasSubscribedToBeatForAttackDelay = false;
+        }
+    }
+
+    // --- Méthodes utilitaires ---
 
     private void ResetNodeInternalState()
     {
-        attackLoopCoroutine = null;
+        nodeManagedAttackCycleCoroutine = null;
         selfUnitInstance = null;
         currentTargetUnitForThisNode = null;
-        currentBeatCounterForDelay = 0;
-        hasSubscribedToBeat = false;
+        currentAttackBeatCounter = 0;
+        isWaitingForAttackDelay = false;
+        hasSubscribedToBeatForAttackDelay = false;
     }
 
-    // Les helpers pour le Blackboard restent inchangés
     private void SetIsAttackingBlackboardVar(bool value)
     {
         if(bbIsAttackingBlackboard != null && bbIsAttackingBlackboard.Value != value)
@@ -190,7 +217,55 @@ public class AttackUnitNode : Unity.Behavior.Action
         if (!blackboard.GetVariable(SELF_UNIT_VAR, out bbSelfUnit)) success = false;
         if (!blackboard.GetVariable(TARGET_UNIT_VAR, out bbTargetUnit)) success = false;
         if (!blackboard.GetVariable(IS_ATTACKING_VAR, out bbIsAttackingBlackboard)) success = false;
+        
+        // Essayer d'obtenir la variable SelectedActionType (optionnelle)
+        if (!blackboard.GetVariable(SELECTED_ACTION_TYPE_VAR, out bbSelectedActionType))
+        {
+            Debug.LogWarning($"[{GameObject?.name}] Variable Blackboard '{SELECTED_ACTION_TYPE_VAR}' non trouvée. La redirection d'action ne sera pas disponible.");
+        }
 
         return success;
+    }
+
+    // --- Méthode pour vérifier la portée d'attaque ---
+    private bool IsTargetInAttackRange()
+    {
+        if (selfUnitInstance == null || currentTargetUnitForThisNode == null)
+        {
+            return false;
+        }
+
+        bool isEnemyInRange;
+        if (currentTargetUnitForThisNode.GetUnitType() == UnitType.Boss)
+        {
+            // C'est la logique robuste de V2, maintenant utilisée spécifiquement pour les boss multi-tuiles.
+            Tile selfTile = selfUnitInstance.GetOccupiedTile();
+            List<Tile> targetTiles = currentTargetUnitForThisNode.GetOccupiedTiles(); // Récupère correctement toutes les tuiles du boss
+            if (selfTile == null || targetTiles.Count == 0 || HexGridManager.Instance == null)
+            {
+                return false; // Sécurité, si on n'a pas de tuile ou de gestionnaire de grille
+            }
+            isEnemyInRange = false; // Aucune partie du boss n'était à portée
+
+            // Vérifie la distance par rapport à chaque tuile du boss
+            foreach (var targetTile in targetTiles)
+            {
+                if (targetTile != null)
+                {
+                    int distance = HexGridManager.Instance.HexDistance(selfTile.column, selfTile.row, targetTile.column, targetTile.row);
+                    if (distance <= selfUnitInstance.AttackRange)
+                    {
+                        isEnemyInRange = true;
+                        break; // Pas besoin de vérifier les autres tuiles
+                    }
+                }
+            }
+        }
+        else
+        {
+            isEnemyInRange = selfUnitInstance.IsUnitInRange(currentTargetUnitForThisNode);
+        }
+
+        return isEnemyInRange;
     }
 }

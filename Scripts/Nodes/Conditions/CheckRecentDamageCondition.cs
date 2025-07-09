@@ -38,7 +38,6 @@ public class CheckRecentDamageCondition : Unity.Behavior.Condition
         }
         // On met en cache les variables une seule fois pour la performance.
         CacheBlackboardVariables();
-        Debug.Log($"[{GameObject?.name}] CheckRecentDamageCondition: Initialisation terminée. Variables mises en cache : {blackboardVariablesCached}");
     }
 
     /// <summary>

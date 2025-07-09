@@ -3,6 +3,9 @@ using Unity.Behavior;
 using Unity.Behavior.GraphFramework;
 using System;
 using Unity.Properties;
+using ScriptableObjects; 
+using System.Collections.Generic; 
+
 
 [Serializable]
 [GeneratePropertyBag]
@@ -59,20 +62,40 @@ public class SetOffensiveEngageActionNode : Unity.Behavior.Action
         bbInteractionTargetBuilding.Value = null; // Nettoyer la cible de bâtiment
 
         // 2. Définir la destination sur la position de l'ennemi
-        Tile enemyTile = detectedEnemy.GetOccupiedTile();
-        if (enemyTile == null)
+
+        bool isEnemyInRange;
+        if (detectedEnemy.GetUnitType() == UnitType.Boss)
         {
-            Debug.LogWarning($"[{selfUnit.name}] L'ennemi '{detectedEnemy.name}' n'a pas de tuile occupée. Engagement annulé.", selfUnit);
-            return Status.Failure;
+            // C'est la logique robuste de V2, maintenant utilisée spécifiquement pour les boss multi-tuiles.
+            Tile selfTile = selfUnit.GetOccupiedTile();
+            List<Tile> targetTiles = detectedEnemy.GetOccupiedTiles(); // Récupère correctement toutes les tuiles du boss
+            if (selfTile == null || targetTiles.Count == 0 || HexGridManager.Instance == null)
+            {
+                return Status.Failure; // Sécurité, si on n'a pas de tuile ou de gestionnaire de grille
+            }
+            isEnemyInRange = false; // Aucune partie du boss n'était à portée
+
+            // Vérifie la distance par rapport à chaque tuile du boss
+            foreach (var targetTile in targetTiles)
+            {
+                if (targetTile != null)
+                {
+                    int distance = HexGridManager.Instance.HexDistance(selfTile.column, selfTile.row, targetTile.column, targetTile.row);
+                    if (distance <= selfUnit.AttackRange)
+                    {
+                        isEnemyInRange = true;
+                        Debug.Log($"[{selfUnit.name}] Boss {detectedEnemy.name} est à portée d'attaque sur la tuile ({targetTile.column}, {targetTile.row}).");
+                    }
+                }
+            }
         }
-        bbFinalDestinationPosition.Value = new Vector2Int(enemyTile.column, enemyTile.row);
-
-        // 3. Choisir l'action : attaquer si à portée, sinon se déplacer
-        bool isEnemyInRange = selfUnit.IsUnitInRange(detectedEnemy);
+        else
+        {
+            isEnemyInRange = selfUnit.IsUnitInRange(detectedEnemy);
+        }
+        
         bbSelectedActionType.Value = isEnemyInRange ? AIActionType.AttackUnit : AIActionType.MoveToUnit;
-
-        Debug.Log($"[{selfUnit.name}] Action décidée : {bbSelectedActionType.Value}. Destination : ({enemyTile.column}, {enemyTile.row})");
-
+        Debug.Log($"[{selfUnit.name}] Action sélectionnée : {bbSelectedActionType.Value}");
         // Ce nœud a terminé sa tâche (mettre à jour le BB), il retourne donc Success.
         return Status.Success;
     }

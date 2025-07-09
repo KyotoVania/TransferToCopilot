@@ -102,6 +102,8 @@ public abstract class Unit : MonoBehaviour, ITileReservationObserver
     public delegate void UnitAttackedBuildingHandler(Unit attacker, Building target, int damage);
     public static event UnitAttackedBuildingHandler OnUnitAttackedBuilding;
 
+    [Tooltip("VFX à jouer lors de l'animation de 'cheer and despawn'.")]
+    [SerializeField] private GameObject cheerAndDespawnVFX; 
 
     /// <summary>
     /// Déclenché lorsqu'une unité est tuée par une autre.
@@ -441,7 +443,7 @@ public abstract class Unit : MonoBehaviour, ITileReservationObserver
         if (_attackBeatCounter >= AttackDelay)
         {
             _attackBeatCounter = 0;
-
+            Debug.Log($"[{name}] HandleAttackOnBeat: Attempting to attack on beat {_attackBeatCounter}. :  AttackDelay: {AttackDelay}");
             Unit potentialUnitTarget = FindAttackableUnitTarget();
             Building potentialBuildingTarget = (potentialUnitTarget == null) ? FindAttackableBuildingTarget() : null;
 
@@ -614,6 +616,7 @@ public abstract class Unit : MonoBehaviour, ITileReservationObserver
 
         int calculatedDamage = Mathf.Max(1, Attack - target.Defense);
         float attackerAnimationDuration = 0.5f;
+        //TODO : check si on peut pas utiliser le temps de beat pour la durée de l'animation
 
         if (AttackSystem != null)
         {
@@ -1269,7 +1272,19 @@ public abstract class Unit : MonoBehaviour, ITileReservationObserver
             }
         }
         yield return new WaitForSeconds(cheerAnimationDuration);
-
+        if (this is AllyUnit allyUnit)
+        {
+            if (MomentumManager.Instance != null && allyUnit.MomentumGainOnObjectiveComplete > 0)
+            {
+                MomentumManager.Instance.AddMomentum(allyUnit.MomentumGainOnObjectiveComplete);
+                Debug.Log($"[Unit] L'unité offensive {allyUnit.name} a complété son objectif et a rapporté {allyUnit.MomentumGainOnObjectiveComplete} de momentum.");
+            }
+        }
+        if (cheerAndDespawnVFX != null)
+        {
+            Instantiate(cheerAndDespawnVFX, transform.position, Quaternion.identity);
+        }
+        
         Die();
     }
 

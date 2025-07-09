@@ -301,5 +301,63 @@ public class BossUnit : EnemyUnit
             }
         }
     }
+
+    /// <summary>
+    /// Retourne une liste de toutes les tuiles vides et valides adjacentes à la zone occupée par le boss.
+    /// Ce sont les "spots" depuis lesquels les unités peuvent lancer une attaque.
+    /// </summary>
+    /// <returns>Une liste de tuiles attaquables.</returns>
+    public List<Tile> GetAttackablePerimeterTiles()
+    {
+        // Si les dépendances ne sont pas prêtes, on retourne une liste vide.
+        if (HexGridManager.Instance == null || TileReservationController.Instance == null)
+        {
+            return new List<Tile>();
+        }
+
+        // Récupère toutes les tuiles que le boss occupe actuellement.
+        List<Tile> occupied = GetOccupiedTiles();
+
+        // Utilise un HashSet pour éviter les doublons de tuiles voisines.
+        HashSet<Tile> perimeterTiles = new HashSet<Tile>();
+
+        // 1. Pour chaque tuile occupée par le boss...
+        foreach (Tile occupiedTile in occupied)
+        {
+            // ...trouve toutes ses tuiles voisines.
+            List<Tile> neighbors = HexGridManager.Instance.GetAdjacentTiles(occupiedTile);
+            foreach (Tile neighbor in neighbors)
+            {
+                // Ajoute chaque voisin au HashSet.
+                if (neighbor != null)
+                {
+                    perimeterTiles.Add(neighbor);
+                }
+            }
+        }
+
+        // 2. Maintenant, on retire du périmètre les tuiles qui sont déjà occupées par le boss lui-même.
+        foreach (Tile occupiedTile in occupied)
+        {
+            if (perimeterTiles.Contains(occupiedTile))
+            {
+                perimeterTiles.Remove(occupiedTile);
+            }
+        }
+
+        // 3. Enfin, on ne garde que les tuiles qui ne sont pas réservées par une autre unité.
+        List<Tile> finalAttackableTiles = new List<Tile>();
+        foreach (Tile perimeterTile in perimeterTiles)
+        {
+            // Vérifie si la tuile est libre.
+            if (!TileReservationController.Instance.IsTileReserved(new Vector2Int(perimeterTile.column, perimeterTile.row)))
+            {
+                finalAttackableTiles.Add(perimeterTile);
+            }
+        }
+
+        return finalAttackableTiles;
+    }
+
     #endregion
 }

@@ -59,21 +59,21 @@ namespace Gameplay
             // On s'intéresse uniquement aux cas où l'attaquant est une unité alliée.
             if (attacker is AllyUnit attackingAlly)
             {
-                var blackboard = attackingAlly.Blackboard; // Ceci est bien une BlackboardReference
+                var blackboard = attackingAlly.Blackboard;
 
                 if (blackboard != null)
                 {
-                    // 1. Déclarer une variable pour recevoir la "BlackboardVariable" elle-même.
                     BlackboardVariable<bool> isDefendingVar;
-
-                    // 2. Essayer de récupérer la variable depuis le blackboard.
-                    // La méthode retourne 'true' si la variable "IsDefending" existe.
                     if (blackboard.GetVariable("IsDefending", out isDefendingVar))
                     {
-                        // 3. Si elle existe, on vérifie sa propriété ".Value".
                         if (isDefendingVar.Value)
                         {
-                            // L'unité était bien en mode défensif, on déclenche l'événement.
+                            if (MomentumManager.Instance != null && attackingAlly.MomentumGainOnObjectiveComplete > 0)
+                            {
+                                MomentumManager.Instance.AddMomentum(attackingAlly.MomentumGainOnObjectiveComplete);
+                                Debug.Log($"[AllyUnitRegistry] L'unité défensive {attackingAlly.name} a tué une unité et a rapporté {attackingAlly.MomentumGainOnObjectiveComplete} de momentum.");
+                            }
+                            
                             OnDefensiveKillConfirmed?.Invoke(attackingAlly);
                         }
                     }

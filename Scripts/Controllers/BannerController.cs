@@ -83,6 +83,7 @@ public class BannerController : MonoBehaviour
 
     private void Start()
     {
+        // The initial placement on the base is handled by this coroutine
         StartCoroutine(InitializeBannerOnAllyBase());
     }
 
@@ -120,7 +121,6 @@ public class BannerController : MonoBehaviour
 
     #region Event Handlers
 
-    // MODIFIED: Method signature now correctly accepts a GameObject.
     private void HandleTargetHovered(GameObject targetObject)
     {
         if (targetObject == null) return;
@@ -134,30 +134,24 @@ public class BannerController : MonoBehaviour
         HideVisual(persistentPreviewBanner, true);
     }
 
-    // MODIFIED: Method signature now correctly accepts a GameObject.
     private void HandleTargetSelected(GameObject targetObject)
     {
-        HideVisual(persistentPreviewBanner, true); // Always hide preview on selection.
+        HideVisual(persistentPreviewBanner, true);
 
-        // Case 1: Clicked on empty space.
+        // Case 1: Clicked on empty space, reset banner to base.
         if (targetObject == null)
         {
-            if (HasActiveBanner)
-            {
-                if(debugLogs) Debug.Log("[BannerController] Clicked on empty space. Clearing banner.");
-                ClearBanner();
-            }
+            if (debugLogs) Debug.Log("[BannerController] Clicked on empty space. Resetting banner to base.");
             return;
         }
 
-        // MODIFIED: Check for components to determine what was selected.
         // Case 2: A Building was selected.
         if (targetObject.TryGetComponent<Building>(out Building selectedBuilding))
         {
             if (HasActiveBanner && selectedBuilding == CurrentBuilding)
             {
-                if(debugLogs) Debug.Log($"[BannerController] Same building selected. Clearing banner.");
-                ClearBanner();
+                if(debugLogs) Debug.Log($"[BannerController] Same building selected. Resetting banner to base.");
+                ClearBanner(); // Reset to base
             }
             else
             {
@@ -170,8 +164,8 @@ public class BannerController : MonoBehaviour
         {
             if (HasActiveBanner && selectedUnit == CurrentTargetedUnit)
             {
-                 if(debugLogs) Debug.Log($"[BannerController] Same unit selected. Clearing banner.");
-                 ClearBanner();
+                 if(debugLogs) Debug.Log($"[BannerController] Same unit selected. Resetting banner to base.");
+                 ClearBanner(); // Reset to base
             }
             else
             {
@@ -194,30 +188,31 @@ public class BannerController : MonoBehaviour
             {
                 positionToNotify = new Vector2Int(unitTile.column, unitTile.row);
                 CurrentBannerPosition = positionToNotify;
+                NotifyObservers(positionToNotify.x, positionToNotify.y);
             }
             else
             {
-                ClearBanner();
+                if(debugLogs) Debug.LogWarning($"[BannerController] Target unit '{CurrentTargetedUnit.name}' has a banner but its tile is temporarily unavailable. Waiting for next beat.");
                 return;
             }
         }
         else if (_currentTile != null)
         {
             positionToNotify = new Vector2Int(_currentTile.column, _currentTile.row);
+            NotifyObservers(positionToNotify.x, positionToNotify.y);
         }
         else
         {
+            if (debugLogs) Debug.LogError("[BannerController] Banner is active but has no valid target (Unit or Tile). Resetting to base as a fallback.");
             ClearBanner();
             return;
         }
-
-        NotifyObservers(positionToNotify.x, positionToNotify.y);
     }
 
     private void HandleTargetedUnitDestroyed()
     {
-        if (debugLogs) Debug.Log("[BannerController] Targeted unit was destroyed. Clearing banner.");
-        ClearBanner();
+        if (debugLogs) Debug.Log("[BannerController] Targeted unit was destroyed. Resetting banner to base.");
+        ClearBanner(); // Reset to base
     }
 
     #endregion
@@ -228,11 +223,12 @@ public class BannerController : MonoBehaviour
     {
         if (building == null) return false;
         Tile occupiedTile = building.GetOccupiedTile();
-        // Assuming your Building script has an IsTargetable property.
         if (occupiedTile == null || !building.IsTargetable) return false;
 
-        ClearBanner();
+        // Clean up previous target state without deactivating the banner
+        _CleanUpCurrentTarget();
 
+        // Set new target state
         CurrentBuilding = building;
         _currentTile = occupiedTile;
         CurrentBannerPosition = new Vector2Int(occupiedTile.column, occupiedTile.row);
@@ -250,11 +246,12 @@ public class BannerController : MonoBehaviour
 
     public bool PlaceBannerOnUnit(Unit unit)
     {
-        // Add a check for IsTargetable if your Unit script has this property.
         if (unit == null) return false;
 
-        ClearBanner();
+        // Clean up previous target state without deactivating the banner
+        _CleanUpCurrentTarget();
 
+        // Set new target state
         CurrentTargetedUnit = unit;
         HasActiveBanner = true;
         CurrentTargetedUnit.OnUnitDestroyed += HandleTargetedUnitDestroyed;
@@ -271,10 +268,27 @@ public class BannerController : MonoBehaviour
         return true;
     }
 
+    /// <summary>
+    /// MODIFIED: This method no longer deactivates the banner. Instead, it resets it to the allied base.
+    /// This is the new default state for the banner.
+    /// </summary>
     public void ClearBanner()
     {
-        if (!HasActiveBanner) return;
+        if (debugLogs) Debug.Log("[BannerController] Clearing current target and resetting banner to ally base.");
 
+        // First, reset the state of the current target
+        _CleanUpCurrentTarget();
+
+        // Then, find the ally base and place the banner there
+        StartCoroutine(InitializeBannerOnAllyBase());
+    }
+
+    /// <summary>
+    /// NEW: Private helper to clean up the current target's state without changing HasActiveBanner.
+    /// This prevents recursion and separates responsibilities.
+    /// </summary>
+    private void _CleanUpCurrentTarget()
+    {
         if (CurrentBuilding != null)
         {
             CurrentBuilding.GetComponent<BuildingSelectionFeedback>()?.SetOutlineState(OutlineState.Default);
@@ -284,16 +298,11 @@ public class BannerController : MonoBehaviour
             CurrentTargetedUnit.OnUnitDestroyed -= HandleTargetedUnitDestroyed;
         }
 
-        HasActiveBanner = false;
-        CurrentBannerPosition = Vector2Int.zero;
         CurrentBuilding = null;
         CurrentTargetedUnit = null;
         _currentTile = null;
-
-        HideVisual(persistentBanner, false);
-        NotifyObservers(-1, -1);
-        if(debugLogs) Debug.Log("[BannerController] Banner cleared.");
     }
+
 
     #endregion
 
@@ -338,14 +347,12 @@ public class BannerController : MonoBehaviour
     {
         if (visual == null || unit == null) return;
 
-        // MODIFIED: The 'true' parameter keeps the banner's original world scale.
-        visual.transform.SetParent(unit.transform, true); // Attacher à l'unité
-
-        visual.transform.localPosition = Vector3.zero; // Réinitialiser la position locale
+        visual.transform.SetParent(unit.transform, true);
+        visual.transform.localPosition = Vector3.zero;
         visual.SetActive(true);
 
         BannerMovement bannerMovement = visual.GetComponent<BannerMovement>();
-        bannerMovement?.AttachToUnit(unit); // Laisser le script de mouvement gérer l'offset
+        bannerMovement?.AttachToUnit(unit);
 
         UpdateDebugVisual(isPreview, visual.transform.position, true);
     }
@@ -367,7 +374,7 @@ public class BannerController : MonoBehaviour
         Renderer[] renderers = targetObject.GetComponentsInChildren<Renderer>();
         if (renderers.Length == 0) return targetObject.transform.position.y + 2f;
 
-        Bounds combinedBounds = new Bounds(renderers[0].bounds.center, Vector3.zero);
+        Bounds combinedBounds = new Bounds();
         bool hasBounds = false;
 
         foreach (Renderer renderer in renderers)
@@ -392,14 +399,29 @@ public class BannerController : MonoBehaviour
 
     #region Observer Pattern & Helpers
 
+    /// <summary>
+    /// Finds the player's base and places the banner on it.
+    /// This is used for initialization and for resetting the banner.
+    /// </summary>
     private IEnumerator InitializeBannerOnAllyBase()
     {
-        yield return new WaitForSeconds(0.5f);
+        // A short delay can prevent issues during scene loading
+        yield return new WaitForSeconds(0.1f);
+
         PlayerBuilding allyBase = FindFirstObjectByType<PlayerBuilding>();
         if (allyBase != null)
         {
-            if (debugLogs) Debug.Log($"[BannerController] Auto-placing banner on ally base: {allyBase.name}");
+            if (debugLogs) Debug.Log($"[BannerController] Auto-placing/Resetting banner on ally base: {allyBase.name}");
             PlaceBannerOnBuilding(allyBase);
+        }
+        else
+        {
+            if (debugLogs) Debug.LogError("[BannerController] Could not find an ally base to place the banner!");
+            // If no base, truly deactivate the banner
+            _CleanUpCurrentTarget();
+            HasActiveBanner = false;
+            HideVisual(persistentBanner, false);
+            NotifyObservers(-1, -1);
         }
     }
 

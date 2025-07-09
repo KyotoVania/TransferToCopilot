@@ -70,7 +70,6 @@ public class NeutralBuilding : Building
             }
         }
 
-        // --- MODIFICATION : Utilisation de MusicManager.Instance ---
         if (MusicManager.Instance != null)
         {
             MusicManager.Instance.OnBeat += HandleBeatLogic;
@@ -100,18 +99,18 @@ public class NeutralBuilding : Building
         }
         base.OnDestroy();
     }
-    
+
     private void HandleBeatLogic(float beatDuration)
     {
         if (unitesQuiCapturentActuellement.Count > 0 && teamActuellementEnCapture != this.Team && teamActuellementEnCapture != TeamType.Neutral)
         {
             currentCaptureProgressPoints += unitesQuiCapturentActuellement.Count;
-            
+
             if (captureProgressSound != null && audioSource != null)
             {
                 audioSource.PlayOneShot(captureProgressSound);
             }
-            
+
             foreach (Unit unit in unitesQuiCapturentActuellement.ToList())
             {
                 unit?.OnCaptureBeat();
@@ -123,7 +122,65 @@ public class NeutralBuilding : Building
             }
         }
     }
-    
+
+    private void CompleteCaptureProcess(TeamType conqueringTeam)
+    {
+        TeamType oldTeam = this.Team;
+        SetTeam(conqueringTeam);
+
+        if (captureCompleteSound != null && audioSource != null) audioSource.PlayOneShot(captureCompleteSound);
+        if (captureInProgressParticlesInstance != null) captureInProgressParticlesInstance.Stop();
+
+        NotifyUnitsOfCaptureStop(unitesQuiCapturentActuellement.ToList());
+        unitesQuiCapturentActuellement.Clear();
+
+        currentCaptureProgressPoints = 0f;
+        teamActuellementEnCapture = TeamType.Neutral;
+
+        // --- NOUVEAU : Logique de gestion après la capture par le joueur ---
+        if (conqueringTeam == TeamType.Player)
+        {
+            HandlePlayerCapture();
+        }
+
+        if (captureCompletedVFXPrefab != null)
+        {
+            GameObject completedVFXInstance = Instantiate(captureCompletedVFXPrefab, transform.position + Vector3.up * captureVFXYOffset, Quaternion.identity);
+            Destroy(completedVFXInstance, captureCompletedVFXDuration);
+        }
+    }
+
+    /// <summary>
+    /// NOUVEAU : Gère les actions spécifiques à effectuer lorsque le joueur capture ce bâtiment.
+    /// Désactive les colliders et réinitialise la bannière si elle est dessus.
+    /// </summary>
+    private void HandlePlayerCapture()
+    {
+        // Désactive le collider du bâtiment lui-même pour qu'il ne soit plus cliquable
+        MeshCollider buildingCollider = GetComponent<MeshCollider>();
+        if (buildingCollider != null)
+        {
+            buildingCollider.enabled = false;
+        }
+
+        // Désactive le collider de la tuile occupée pour libérer le passage
+        if (occupiedTile != null)
+        {
+            MeshCollider tileCollider = occupiedTile.GetComponent<MeshCollider>();
+            if (tileCollider != null)
+            {
+                tileCollider.enabled = false;
+            }
+        }
+
+        // Si la bannière de ralliement était sur ce bâtiment, la renvoyer à la base
+        if (BannerController.Exists && BannerController.Instance.CurrentBuilding == this)
+        {
+            Debug.Log($"[NeutralBuilding] Bâtiment {this.name} capturé par le joueur. Réinitialisation de la bannière.");
+            BannerController.Instance.ClearBanner();
+        }
+    }
+
     #region Unchanged Code
     private void FindRoofRenderer()
     {
@@ -165,7 +222,7 @@ public class NeutralBuilding : Building
         if (!canBeCaptured || teamAttemptingCapture == TeamType.Neutral) return false;
         if (this.Team == teamAttemptingCapture) return false;
         if (capturingUnit == null || !IsUnitInCaptureRange(capturingUnit)) return false;
-        
+
         if (teamActuellementEnCapture != teamAttemptingCapture)
         {
             NotifyUnitsOfCaptureStop(unitesQuiCapturentActuellement.ToList());
@@ -180,7 +237,7 @@ public class NeutralBuilding : Building
                 if (!captureInProgressParticlesInstance.isPlaying) captureInProgressParticlesInstance.Play();
             }
         }
-        
+
         bool added = unitesQuiCapturentActuellement.Add(capturingUnit);
         return true;
     }
@@ -213,28 +270,6 @@ public class NeutralBuilding : Building
             captureInProgressParticlesInstance.Stop();
         }
         targetColorDisplay = GetColorForTeam(this.Team);
-    }
-    
-    private void CompleteCaptureProcess(TeamType conqueringTeam)
-    {
-        TeamType oldTeam = this.Team;
-        SetTeam(conqueringTeam);
-
-        if (captureCompleteSound != null && audioSource != null) audioSource.PlayOneShot(captureCompleteSound);
-        if (captureInProgressParticlesInstance != null) captureInProgressParticlesInstance.Stop();
-
-        NotifyUnitsOfCaptureStop(unitesQuiCapturentActuellement.ToList());
-        unitesQuiCapturentActuellement.Clear();
-
-        currentCaptureProgressPoints = 0f;
-        teamActuellementEnCapture = TeamType.Neutral;
-
-        // --- AJOUT : Gestion de l'effet visuel de capture complétée ---
-        if (captureCompletedVFXPrefab != null)
-        {
-            GameObject completedVFXInstance = Instantiate(captureCompletedVFXPrefab, transform.position + Vector3.up * captureVFXYOffset, Quaternion.identity);
-            Destroy(completedVFXInstance, captureCompletedVFXDuration);
-        }
     }
 
     protected override void OnTeamChanged(TeamType newTeam)
