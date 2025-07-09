@@ -15,7 +15,6 @@ public class TutorialManager : MonoBehaviour
     [SerializeField] private List<GameObject> unitsAndSpellsUIObjects = new List<GameObject>();
     public static TutorialManager Instance { get; private set; }
 
-    // --- NOUVEAUX AJOUTS ---
     /// <summary>
     /// Indique si une séquence de tutoriel est actuellement en cours.
     /// Peut être consulté par d'autres systèmes (comme PlayerBuilding).
@@ -43,7 +42,6 @@ public class TutorialManager : MonoBehaviour
             return;
         }
         Instance = this;
-        // FIN DU BLOC AJOUTÉ
 
         // Note : NE PAS appeler DontDestroyOnLoad(gameObject);
         
@@ -99,7 +97,6 @@ public class TutorialManager : MonoBehaviour
         currentStep = null;
         if (uiManager != null) uiManager.HidePanel();
 
-        // --- NOUVEAUX AJOUTS ---
         // On désactive l'interrupteur et on notifie que c'est terminé.
         IsTutorialActive = false;
         OnTutorialCompleted?.Invoke();
@@ -141,7 +138,6 @@ public class TutorialManager : MonoBehaviour
         switch (currentStep.triggerType)
         {
             case TutorialTriggerType.BeatCount:
-                // --- MODIFICATION : On se désabonne de MusicManager.Instance ---
                 if (MusicManager.Instance != null) MusicManager.Instance.OnBeat -= HandleBeat;
                 break;
             case TutorialTriggerType.PlayerInputs:

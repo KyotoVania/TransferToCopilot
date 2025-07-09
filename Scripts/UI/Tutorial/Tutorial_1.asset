@@ -13,49 +13,85 @@ MonoBehaviour:
   m_Name: Tutorial_1
   m_EditorClassIdentifier: 
   steps:
-  - tutorialText: To control your subjects from this distance you must use the royal
-      instruments and the royal banner.
+  - tutorialText: Welcome, my Prince! To control your subjects from afar, you must
+      use the royal instruments and the royal banner.
     triggerType: 1
     triggerParameter: 7
     groupToShowOnStart: 0
-  - tutorialText: The banner starts on our base and our troops try to go to the position
-      the banner had when they spawned.
+  - tutorialText: The banner starts on our castle. Your troops will march toward
+      wherever the banner was when they spawned.
     triggerType: 1
     triggerParameter: 7
     groupToShowOnStart: 0
-  - tutorialText: 'You can click on a building to move the banner, Try it on the
-      Windmill ! '
+  - tutorialText: Move the banner to the Windmill! Click it with the mouse, or use
+      D-Pad Left/Right to cycle targets and D-Pad Down to place
     triggerType: 3
     triggerParameter: 1
     groupToShowOnStart: 0
-  - tutorialText: Use the X. C. and V. keys of the keyboard to give instructions
-      to the castle, each unit and spell has its own combination to be called
+  - tutorialText: Excellent! Now let's summon troops. Use X, C, and V keys (or X,
+      A, B on gamepad) to give instructions to the castle, each unit and spell has
+      its own combination to be called
     triggerType: 1
     triggerParameter: 7
     groupToShowOnStart: 1
-  - tutorialText: 'Try calling one of our knights with the combination X.C.V.X.
-
-      It
-      will only work if you do it in rhythm'
+  - tutorialText: "Each unit has a unique pattern. Try summoning a Warrior with a
+      simple: X \u2192 X \u2192 X \u2192 X. Remember to stay on beat!"
     triggerType: 4
     triggerParameter: 1
-    groupToShowOnStart: 0
-  - tutorialText: Your units costs gold to invoke, after the invocation they can't
-      be called again until the cooldown is finished
+    groupToShowOnStart: 1
+  - tutorialText: Perfect! Your knight is marching to the banner. Units cost gold
+      and have a cooldown before you can summon them again.
     triggerType: 1
     triggerParameter: 7
     groupToShowOnStart: 3
-  - tutorialText: 'Each correct input increase the combo counter.
-
-      Failing
-      the timing in a sequence will restart it.'
+  - tutorialText: Defensive units protect buildings, offensive units push forward.
+      Mix your army composition wisely!
+    triggerType: 1
+    triggerParameter: 7
+    groupToShowOnStart: 0
+  - tutorialText: Each correct input increases your COMBO counter! Missing the rhythm
+      resets it. Try to build a combo of 8!
+    triggerType: 8
+    triggerParameter: 8
+    groupToShowOnStart: 2
+  - tutorialText: Great rhythm! Keep comboing - every 10 hits increases your FEVER
+      level, powering up all your units!
+    triggerType: 7
+    triggerParameter: 1
+    groupToShowOnStart: 0
+  - tutorialText: 'Fever active! All units spawned before you reached the 10 combo
+      get powerfull buffs. The effect can be triger again with 10 combo, try to reach
+      the max level to get a really nice advantage (max: 4)!'
+    triggerType: 1
+    triggerParameter: 7
+    groupToShowOnStart: 0
+  - tutorialText: Momentum is precious! You gain it from successful summons and completed
+      objectives. It powers your strongest abilities or units!
     triggerType: 1
     triggerParameter: 7
     groupToShowOnStart: 2
-  - tutorialText: 'That''s all for now my Prince.
-
-      Go wild and obliterate our
-      enemies !'
+  - tutorialText: Watch your knights reach the windmill. When units complete their
+      objective, they celebrate and grant you MOMENTUM!
+    triggerType: 1
+    triggerParameter: 7
+    groupToShowOnStart: 4
+  - tutorialText: With Momentum charged, you can cast strong SPELLS or powerful hero!
+      Press ] (or Y on gamepad) to see all available spells.
+    triggerType: 1
+    triggerParameter: 7
+    groupToShowOnStart: 0
+  - tutorialText: Each spell has a unique 4-input sequence. They might cost Momentum
+      but can buff all units, damage enemies, or grant resources!
+    triggerType: 1
+    triggerParameter: 7
+    groupToShowOnStart: 0
+  - tutorialText: Try to cast a zap spell on one of the enemy tent with C->C->V->V
+    triggerType: 6
+    triggerParameter: 1
+    groupToShowOnStart: 0
+  - tutorialText: "Remember: Rhythm \u2192 Combos \u2192 Fever \u2192 Stronger units!
+      Completed objectives \u2192 Momentum \u2192 Powerful spells! Now defend the
+      kingdom!"
     triggerType: 1
     triggerParameter: 7
     groupToShowOnStart: 0

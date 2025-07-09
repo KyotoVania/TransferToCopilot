@@ -17,7 +17,9 @@ MonoBehaviour:
     speakerPortrait: {fileID: -1856009930, guid: 900a9e6e6260cc84e8e280b5eb4ef35b,
       type: 3}
     dialogueText: They also stopped our windmill from working.
+    shouldActivateInput: 0
   - speakerName: General
     speakerPortrait: {fileID: -1856009930, guid: 900a9e6e6260cc84e8e280b5eb4ef35b,
       type: 3}
     dialogueText: "Let's DESTROY the defenders \nand re-capture it ! "
+    shouldActivateInput: 0

@@ -4,7 +4,8 @@ using UnityEngine.UI;
 using TMPro;
 using System.Collections.Generic;
 using System.Collections;
-using ScriptableObjects; // <--- LIGNE AJOUTÉE ICI
+using ScriptableObjects;
+using UnityEngine.EventSystems; 
 
 /// <summary>
 /// Gère UNIQUEMENT l'affichage du panneau de dialogue et du texte.
@@ -30,6 +31,11 @@ public class DialogueUIManager : MonoBehaviour
     private bool _isTyping = false;
     private Coroutine _typingCoroutine;
 
+    private SequenceController _sequenceController;
+    private InputTargetingManager _inputTargetingManager;
+
+    private bool _shouldReactivateControls = true;
+
     public static event System.Action OnDialogueSystemStart;
     public static event System.Action OnDialogueSystemEnd;
 
@@ -53,6 +59,9 @@ public class DialogueUIManager : MonoBehaviour
         }
         dialoguePanel.SetActive(false);
         _currentSequenceQueue = new Queue<DialogueEntry>();
+
+        _sequenceController = FindObjectOfType<SequenceController>();
+        _inputTargetingManager = FindObjectOfType<InputTargetingManager>();
     }
 
     void Start()
@@ -60,15 +69,28 @@ public class DialogueUIManager : MonoBehaviour
         clickAdvanceButton.onClick.AddListener(HandleAdvanceClick);
     }
 
+    private void Update()
+    {
+        // Si un dialogue est affiché et que l'utilisateur appuie sur "Submit"
+        if (_isDisplayingDialogue && InputManager.Instance != null && InputManager.Instance.UIActions.Submit.WasPressedThisFrame())
+        {
+            HandleAdvanceClick();
+        }
+    }
+
     public bool IsDialogueActive()
     {
         return _isDisplayingDialogue;
     }
 
-    // La signature de cette méthode attend maintenant ScriptableObjects.DialogueSequence
-    public void StartDialogue(DialogueSequence sequence)
+    public void StartDialogue(DialogueSequence sequence, bool shouldReactivateControls = true)
     {
         if (sequence == null || sequence.entries.Count == 0 || _isDisplayingDialogue) return;
+
+        _shouldReactivateControls = shouldReactivateControls;
+
+        // AJOUT : Désactiver les contrôles de jeu
+        DisableGameplayControls();
 
         _isDisplayingDialogue = true;
         _currentSequenceQueue.Clear();
@@ -79,7 +101,59 @@ public class DialogueUIManager : MonoBehaviour
 
         OnDialogueSystemStart?.Invoke();
         dialoguePanel.SetActive(true);
+        
+        SelectDialogueButton();
+        
         DisplayNextEntry();
+    }
+
+    public void ContinueDialogue(DialogueSequence sequence)
+    {
+        StartDialogue(sequence, false);
+    }
+
+    private void DisableGameplayControls()
+    {
+        if (_sequenceController != null)
+        {
+            _sequenceController.enabled = false;
+        }
+
+        if (_inputTargetingManager != null)
+        {
+            _inputTargetingManager.enabled = false;
+        }
+    }
+
+    // AJOUT : Méthode pour réactiver les contrôles de gameplay
+    private void EnableGameplayControls()
+    {
+        if (_shouldReactivateControls)
+        {
+            if (_sequenceController != null)
+            {
+                _sequenceController.enabled = true;
+            }
+
+            if (_inputTargetingManager != null)
+            {
+                _inputTargetingManager.enabled = true;
+            }
+        }
+    }
+
+    public void ForceEnableGameplayControls()
+    {
+        _shouldReactivateControls = true;
+        EnableGameplayControls();
+    }
+
+    private void SelectDialogueButton()
+    {
+        if (clickAdvanceButton != null && EventSystem.current != null)
+        {
+            EventSystem.current.SetSelectedGameObject(clickAdvanceButton.gameObject);
+        }
     }
 
     private void HandleAdvanceClick()
@@ -122,6 +196,13 @@ public class DialogueUIManager : MonoBehaviour
                     _isTyping = false;
                 }
             }
+            
+            if (_currentEntry.shouldActivateInput)
+            {
+                EnableGameplayControls();
+            }
+            
+            SelectDialogueButton();
         }
         else
         {

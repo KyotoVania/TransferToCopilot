@@ -17,15 +17,18 @@ MonoBehaviour:
     speakerPortrait: {fileID: -1856009930, guid: 900a9e6e6260cc84e8e280b5eb4ef35b,
       type: 3}
     dialogueText: ARE YOU READY PRINCE !?
+    shouldActivateInput: 0
   - speakerName: Prince
     speakerPortrait: {fileID: -1856009930, guid: 900a9e6e6260cc84e8e280b5eb4ef35b,
       type: 3}
     dialogueText: 'CLEARLY NOT !!
 
       I never learned how to move an army'
+    shouldActivateInput: 0
   - speakerName: Butler
     speakerPortrait: {fileID: 1186422308, guid: 900a9e6e6260cc84e8e280b5eb4ef35b,
       type: 3}
     dialogueText: 'Its okay Prince,
 
       i''ll guide you.'
+    shouldActivateInput: 1
