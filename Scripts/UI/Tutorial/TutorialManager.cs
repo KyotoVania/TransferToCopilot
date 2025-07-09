@@ -141,6 +141,13 @@ public class TutorialManager : MonoBehaviour
             case TutorialTriggerType.UnitSummoned:
                 SequenceController.OnCharacterInvocationSequenceComplete += HandleUnitSummoned;
                 break;
+            case TutorialTriggerType.MomentumSpend:
+                // On s'abonne à l'événement du TutorialMomentumManager
+                if (TutorialMomentumManager.Instance != null)
+                {
+                    TutorialMomentumManager.Instance.OnMomentumSpent += HandleMomentumSpent;
+                }
+                break;
             case TutorialTriggerType.FeverLevelReached:
                 // Les TutorialFeverObserver se charge automatiquement via son Start()
                 // Pas besoin de souscription manuelle ici
@@ -177,6 +184,13 @@ public class TutorialManager : MonoBehaviour
             case TutorialTriggerType.UnitSummoned:
                 SequenceController.OnCharacterInvocationSequenceComplete -= HandleUnitSummoned;
                 break;
+            case TutorialTriggerType.MomentumSpend:
+                // On se désabonne proprement
+                if (TutorialMomentumManager.Instance != null)
+                {
+                    TutorialMomentumManager.Instance.OnMomentumSpent -= HandleMomentumSpent;
+                }
+                break;
             case TutorialTriggerType.FeverLevelReached:
                 // Les TutorialFeverObserver se décharge automatiquement
                 // Pas besoin de désouscription manuelle ici
@@ -189,6 +203,14 @@ public class TutorialManager : MonoBehaviour
         }
     }
 
+    /// <summary>
+    /// Gère l'événement de dépense de momentum et fait avancer le tutoriel.
+    /// </summary>
+    private void HandleMomentumSpent()
+    {
+        // On n'a pas besoin de vérifier de paramètre ici, la simple dépense suffit.
+        AdvanceToNextStep();
+    }
 
     private void HandleBeat(float beatDuration) { beatCounter++; if (beatCounter >= currentStep.triggerParameter) AdvanceToNextStep(); }
     private void HandlePlayerInput(string key, Color timingColor) { inputCounter++; if (inputCounter >= currentStep.triggerParameter) AdvanceToNextStep(); }
