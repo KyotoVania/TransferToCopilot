@@ -1,4 +1,3 @@
-// Fichier: Scripts/Tutorials/TutorialBannerObserver.cs
 using UnityEngine;
 
 // Cette classe est un Singleton simple qui écoute les événements de la bannière
@@ -25,7 +24,7 @@ public class TutorialBannerObserver : MonoBehaviour, Game.Observers.IBannerObser
 
     public void OnBannerPlaced(int column, int row)
     {
-        // On ne veut déclencher l'événement de tutoriel qu'une seule fois, 
+        // On ne veut déclencher l'événement de tutoriel qu'une seule fois,
         // la première fois que la bannière est placée.
         if (!hasBeenPlacedOnce)
         {

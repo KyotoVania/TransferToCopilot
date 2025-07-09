@@ -66,7 +66,6 @@ public class TutorialUIManager : MonoBehaviour
 
     private IEnumerator FadePanel(bool fadeIn)
     {
-        // --- NOUVELLE LOGIQUE ROBUSTE ---
         // 1. On s'assure que le GameObject est actif AVANT de faire quoi que ce soit.
         // C'est la correction principale de l'erreur.
         if (fadeIn)

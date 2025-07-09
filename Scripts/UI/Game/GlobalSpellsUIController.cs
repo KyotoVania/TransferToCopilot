@@ -157,14 +157,13 @@ public class GlobalSpellsUIController : MonoBehaviour
         UpdateGlowFeedback();
     }
     
-    // NOUVEAU : Gestion du toggle
     private void OnTriggerUiPerformed(UnityEngine.InputSystem.InputAction.CallbackContext context)
     {
         ToggleGlobalDisplayMode();
     }
     #endregion
 
-    #region Global Display Mode - NOUVEAU
+    #region Global Display Mode
     private void ToggleGlobalDisplayMode()
     {
         _isGlobalDisplayMode = !_isGlobalDisplayMode;

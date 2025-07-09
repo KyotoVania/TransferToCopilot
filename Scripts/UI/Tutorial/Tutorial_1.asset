@@ -63,7 +63,7 @@ MonoBehaviour:
       get powerfull buffs. The effect can be triger again with 10 combo, try to reach
       the max level to get a really nice advantage (max: 4)!'
     triggerType: 1
-    triggerParameter: 7
+    triggerParameter: 8
     groupToShowOnStart: 0
   - tutorialText: Momentum is precious! You gain it from successful summons and completed
       objectives. It powers your strongest abilities or units!

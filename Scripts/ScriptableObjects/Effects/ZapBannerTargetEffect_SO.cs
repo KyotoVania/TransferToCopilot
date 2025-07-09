@@ -40,6 +40,20 @@
             // Get the target building
             Building targetBuilding = BannerController.Instance.CurrentBuilding;
             
+            // Check if the target is an enemy building
+            if (!(targetBuilding is EnemyBuilding) || targetBuilding.Team != TeamType.Enemy)
+            {
+                Debug.LogWarning($"[ZapBannerTargetEffect] Target {targetBuilding.name} is not an enemy building! Type: {targetBuilding.GetType().Name}, Team: {targetBuilding.Team}");
+                
+                // Play fail sound if available
+                if (failSound != null && failSound.IsValid() && caster != null)
+                {
+                    failSound.Post(caster);
+                }
+                
+                return; // Early exit - not an enemy building
+            }
+            
             // Calculate bonus damage from perfect timing
             int totalDamage = damageAmount;
             if (perfectCount > 0)
@@ -77,7 +91,7 @@
         
         public override string GetEffectDescription()
         {
-            return $"Lance un éclair sur le bâtiment actuellement ciblé par la bannière, infligeant {damageAmount} points de dégâts. Les frappes parfaites augmentent les dégâts.";
+            return $"Lance un éclair sur le bâtiment ennemi actuellement ciblé par la bannière, infligeant {damageAmount} points de dégâts. Les frappes parfaites augmentent les dégâts.";
         }
     }
 }

@@ -7,8 +7,9 @@ public enum TutorialTriggerType
     UnitSummoned,       // Avancer quand une unité est invoquée
     MomentumGained,   
     MomentumSpend,   
-    FeverLevelReached,
-    ComboCountReached,
+    FeverLevelReached,  // Nouveau trigger pour atteindre un niveau de fever
+    ComboCountReached,  // Nouveau trigger pour atteindre un certain combo
     MomentumSpellCast,
+    SequencePanelHUD, // Nouveau trigger pour afficher le HUD du panneau de séquence
     UnitObjectiveComplete  
 }

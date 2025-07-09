@@ -26,6 +26,11 @@ public class TutorialManager : MonoBehaviour
     /// </summary>
     public static event System.Action OnTutorialCompleted;
 
+    /// <summary>
+    /// Expose l'étape actuelle pour que les observers puissent y accéder
+    /// </summary>
+    public TutorialStep CurrentStep => currentStep;
+
     private Queue<TutorialStep> tutorialQueue;
     private TutorialStep currentStep;
 
@@ -71,10 +76,18 @@ public class TutorialManager : MonoBehaviour
 
         Debug.Log("Début de la séquence de tutoriel !");
         tutorialQueue = new Queue<TutorialStep>(sequenceToPlay.steps);
-        AdvanceToNextStep();
+        AdvanceToNextStepInternal();
     }
 
-    private void AdvanceToNextStep()
+    /// <summary>
+    /// Méthode publique pour permettre aux observers d'avancer le tutoriel
+    /// </summary>
+    public void AdvanceToNextStep()
+    {
+        AdvanceToNextStepInternal();
+    }
+
+    private void AdvanceToNextStepInternal()
     {
         UnsubscribeFromCurrentTrigger();
 
@@ -128,6 +141,18 @@ public class TutorialManager : MonoBehaviour
             case TutorialTriggerType.UnitSummoned:
                 SequenceController.OnCharacterInvocationSequenceComplete += HandleUnitSummoned;
                 break;
+            case TutorialTriggerType.FeverLevelReached:
+                // Les TutorialFeverObserver se charge automatiquement via son Start()
+                // Pas besoin de souscription manuelle ici
+                break;
+            case TutorialTriggerType.ComboCountReached:
+                // Les TutorialComboObserver se charge automatiquement via son Start()
+                // Pas besoin de souscription manuelle ici
+                break;
+            case TutorialTriggerType.SequencePanelHUD:
+                // Les TutorialSequencePanelObserver se charge automatiquement via son Start()
+                // Pas besoin de souscription manuelle ici
+                break;
         }
     }
 
@@ -151,6 +176,14 @@ public class TutorialManager : MonoBehaviour
                 break;
             case TutorialTriggerType.UnitSummoned:
                 SequenceController.OnCharacterInvocationSequenceComplete -= HandleUnitSummoned;
+                break;
+            case TutorialTriggerType.FeverLevelReached:
+                // Les TutorialFeverObserver se décharge automatiquement
+                // Pas besoin de désouscription manuelle ici
+                break;
+            case TutorialTriggerType.ComboCountReached:
+                // Les TutorialComboObserver se décharge automatiquement
+                // Pas besoin de désouscription manuelle ici
                 break;
         }
     }
