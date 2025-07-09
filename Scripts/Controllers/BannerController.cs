@@ -256,6 +256,13 @@ public class BannerController : MonoBehaviour
         HasActiveBanner = true;
         CurrentTargetedUnit.OnUnitDestroyed += HandleTargetedUnitDestroyed;
 
+        // Gérer l'outline pour les unités (équivalent à ce qui est fait pour les bâtiments)
+        UnitSelectionFeedback unitFeedback = unit.GetComponent<UnitSelectionFeedback>();
+        if (unitFeedback != null)
+        {
+            unitFeedback.SetOutlineState(OutlineState.Selected);
+        }
+
         ShowAndAttachVisualToUnit(persistentBanner, unit, false);
 
         Tile unitTile = unit.GetOccupiedTile();
@@ -296,6 +303,12 @@ public class BannerController : MonoBehaviour
         if (CurrentTargetedUnit != null)
         {
             CurrentTargetedUnit.OnUnitDestroyed -= HandleTargetedUnitDestroyed;
+            // Remettre l'outline de l'unité à l'état par défaut
+            UnitSelectionFeedback unitFeedback = CurrentTargetedUnit.GetComponent<UnitSelectionFeedback>();
+            if (unitFeedback != null)
+            {
+                unitFeedback.SetOutlineState(OutlineState.Default);
+            }
         }
 
         CurrentBuilding = null;

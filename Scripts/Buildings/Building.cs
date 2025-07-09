@@ -2,7 +2,7 @@ using UnityEngine;
 using System.Collections;
 using Sirenix.OdinInspector;
 
-public abstract class Building : MonoBehaviour
+public abstract class Building : MonoBehaviour, ITargetable
 {
     [Header("Team Settings")]
     [SerializeField] private TeamType _team = TeamType.Neutral;
@@ -229,4 +229,8 @@ public abstract class Building : MonoBehaviour
         // Set the new health
         SetCurrentHealth(newHealth);
     }
+
+    // ITargetable implementation
+    public Transform TargetPoint => transform;
+    public GameObject GameObject => gameObject;
 }

@@ -8,6 +8,7 @@ using System.Linq;
 /// Lance des événements pour notifier les autres systèmes (comme le BannerController)
 /// des intentions du joueur (survol, sélection) sans gérer lui-même la logique de jeu.
 /// Ce script remplace la partie "détection" de l'ancien MouseManager.
+/// Supporte maintenant le ciblage des bâtiments ET des unités boss via l'interface ITargetable.
 /// </summary>
 public class InputTargetingManager : MonoBehaviour
 {
@@ -131,19 +132,27 @@ public class InputTargetingManager : MonoBehaviour
     {
         if (newTarget != currentlyHoveredObject)
         {
-            // 1. Nettoyer l'ancien bâtiment
+            // 1. Nettoyer l'ancien objet (bâtiment ou unité)
             if (currentlyHoveredObject != null)
             {
                 if(debugLogs) Debug.Log($"[InputTargetingManager] Hover ended on {currentlyHoveredObject.name}");
                 OnHoverEnded?.Invoke();
 
+                // Gérer l'outline pour les bâtiments
                 if (currentFeedback != null && currentFeedback.CurrentState == OutlineState.Hover)
                 {
                     currentFeedback.SetOutlineState(OutlineState.Default);
                 }
+                
+                // Gérer l'outline pour les unités
+                UnitSelectionFeedback unitFeedback = currentlyHoveredObject.GetComponent<UnitSelectionFeedback>();
+                if (unitFeedback != null && unitFeedback.CurrentState == OutlineState.Hover)
+                {
+                    unitFeedback.SetOutlineState(OutlineState.Default);
+                }
             }
 
-            // 2. Mettre à jour avec le nouveau bâtiment
+            // 2. Mettre à jour avec le nouveau objet
             currentlyHoveredObject = newTarget;
 
             if (currentlyHoveredObject != null)
@@ -151,17 +160,25 @@ public class InputTargetingManager : MonoBehaviour
                 if(debugLogs) Debug.Log($"[InputTargetingManager] Hover started on {currentlyHoveredObject.name}");
                 OnTargetHovered?.Invoke(currentlyHoveredObject); // MODIFIED: Pass the GameObject
 
-                // Gérer l'outline (will only work if the hovered object has this component)
+                // Gérer l'outline pour les bâtiments (will only work if the hovered object has this component)
                 currentFeedback = currentlyHoveredObject.GetComponent<BuildingSelectionFeedback>();
                 if (currentFeedback != null && currentFeedback.CurrentState == OutlineState.Default)
                 {
                     currentFeedback.SetOutlineState(OutlineState.Hover);
                 }
+                
+                // Gérer l'outline pour les unités
+                UnitSelectionFeedback unitFeedback = currentlyHoveredObject.GetComponent<UnitSelectionFeedback>();
+                if (unitFeedback != null && unitFeedback.CurrentState == OutlineState.Default)
+                {
+                    unitFeedback.SetOutlineState(OutlineState.Hover);
+                }
+                
                 SetCursor(hoverCursorTexture);
             }
             else
             {
-                // Pas de nouveau bâtiment
+                // Pas de nouveau objet
                 currentFeedback = null;
                 SetCursor(defaultCursorTexture);
             }
@@ -294,24 +311,22 @@ public class InputTargetingManager : MonoBehaviour
 
     private void ScanForTargetableObjects()
     {
-        // NOTE: This scan only finds 'Building' objects for gamepad cycling.
-        // To include units, you would need to find them and add their GameObjects to the list.
-        // For example:
-        // var units = FindObjectsOfType<YourUnitScript>().Select(u => u.gameObject);
-        // targetableObjects.AddRange(units);
         targetableObjects.Clear();
-        var buildings = FindObjectsOfType<Building>()
-            .Where(b => b != null && b.IsTargetable)
-            .Select(b => b.gameObject); // Select the GameObject
+        
+        // Find all objects that implement ITargetable interface
+        var allTargetables = FindObjectsOfType<MonoBehaviour>().OfType<ITargetable>()
+            .Where(t => t != null && t.IsTargetable && t.GameObject != null)
+            .Select(t => t.GameObject);
 
-        targetableObjects.AddRange(buildings);
+        targetableObjects.AddRange(allTargetables);
 
+        // Sort by position for consistent cycling
         targetableObjects = targetableObjects
-            .OrderBy(b => b.transform.position.x)
-            .ThenBy(b => b.transform.position.z)
+            .OrderBy(obj => obj.transform.position.x)
+            .ThenBy(obj => obj.transform.position.z)
             .ToList();
 
-        if(debugLogs) Debug.Log($"[InputTargetingManager] Found {targetableObjects.Count} targetable objects for gamepad cycling.");
+        if(debugLogs) Debug.Log($"[InputTargetingManager] Found {targetableObjects.Count} targetable objects (buildings + boss units) for gamepad cycling.");
     }
 
     private void SelectClosestTargetAsDefault()
@@ -336,32 +351,36 @@ public class InputTargetingManager : MonoBehaviour
     #region Utility
 
     /// <summary>
-    /// Lance un rayon et retourne le GameObject trouvé, que ce soit un bâtiment ou une unité.
+    /// Lance un rayon et retourne l'objet ITargetable trouvé, que ce soit un bâtiment ou une unité boss.
     /// </summary>
     private GameObject GetTargetableFromRay(Ray ray)
     {
-        // MODIFIED: Combine building and unit layers for the raycast.
+        // Combine building and unit layers for the raycast.
         LayerMask combinedMask = buildingLayerMask | unitLayerMask;
 
-        // Priority 1: Toucher directement un collider sur le bâtiment ou une unité.
+        // Priority 1: Toucher directement un collider sur un objet ciblable.
         if (Physics.Raycast(ray, out RaycastHit hitInfo, raycastDistance, combinedMask))
         {
-            // Check if the hit object is a Building first
+            // Check if the hit object implements ITargetable
+            ITargetable targetable = hitInfo.collider.GetComponentInParent<ITargetable>();
+            if (targetable != null && targetable.IsTargetable)
+            {
+                return targetable.GameObject;
+            }
+
+            // Fallback: Check for Building component (for compatibility)
             Building building = hitInfo.collider.GetComponentInParent<Building>();
-            if (building != null)
+            if (building != null && building.IsTargetable)
             {
                 return building.gameObject;
             }
-
-            // If not a building, return the GameObject directly. This will be your unit.
-            return hitInfo.collider.gameObject;
         }
 
-        // Priority 2: Toucher une tuile qui contient un bâtiment
+        // Priority 2: Toucher une tuile qui contient un bâtiment ciblable
         if (Physics.Raycast(ray, out hitInfo, raycastDistance, tileLayerMask))
         {
             Tile tile = hitInfo.collider.GetComponent<Tile>();
-            if (tile != null && tile.currentBuilding != null)
+            if (tile != null && tile.currentBuilding != null && tile.currentBuilding.IsTargetable)
             {
                 return tile.currentBuilding.gameObject;
             }

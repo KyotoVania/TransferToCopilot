@@ -270,4 +270,7 @@ public class EnemyUnit : Unit
         base.OnDestroy();
     }
     #endregion
+    // Override de ITargetable pour les unités ennemies
+    // Seules les unités de type Boss sont ciblables
+    public override bool IsTargetable => GetUnitType() == UnitType.Boss;
 }

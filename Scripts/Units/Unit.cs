@@ -15,7 +15,7 @@ public enum UnitState
     Capturing,
 }
 
-public abstract class Unit : MonoBehaviour, ITileReservationObserver
+public abstract class Unit : MonoBehaviour, ITileReservationObserver, ITargetable
 {
     // --- FEATURE DU FICHIER 1 : Événement de destruction ---
     /// <summary>
@@ -1354,5 +1354,12 @@ public abstract class Unit : MonoBehaviour, ITileReservationObserver
 
         this.Health = this.CurrentStats.MaxHealth;
     }
+
+    // ITargetable implementation
+    public Transform TargetPoint => transform;
+    public GameObject GameObject => gameObject;
     #endregion
+    // Override dans les classes dérivées pour spécifier si l'unité est ciblable
+    public virtual bool IsTargetable => false; // Par défaut, les unités ne sont pas ciblables
 }
+

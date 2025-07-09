@@ -390,8 +390,56 @@ public class RhythmGameCameraController : MonoBehaviour
         isCameraLocked = false;
         currentTarget = null;
         
+        // MODIFIÉ : Au lieu de retourner à la position pré-lock, on reste où on est et on fait juste un dézoom
         if (_cameraAnimationCoroutine != null) StopCoroutine(_cameraAnimationCoroutine);
-        _cameraAnimationCoroutine = StartCoroutine(AnimateToStateCoroutine(_preLockPosition, _preLockRotation, unlockAnimationDuration));
+        _cameraAnimationCoroutine = StartCoroutine(AnimateUnlockZoomCoroutine());
+    }
+
+    /// <summary>
+    /// NOUVEAU : Anime un dézoom fluide lors de l'unlock au lieu de retourner à la position pré-lock
+    /// </summary>
+    private IEnumerator AnimateUnlockZoomCoroutine()
+    {
+        controlsLocked = true;
+        
+        float duration = unlockAnimationDuration * 0.5f; // Dézoom plus rapide que l'animation complète
+        float elapsedTime = 0f;
+        
+        if (isOrthographic)
+        {
+            float startSize = cameraComponent.orthographicSize;
+            float targetSize = Mathf.Clamp(startSize + 3f, minZoom, maxZoom); // Dézoome de 3 unités
+            
+            while (elapsedTime < duration)
+            {
+                elapsedTime += Time.deltaTime;
+                float t = Mathf.SmoothStep(0, 1, elapsedTime / duration);
+                cameraComponent.orthographicSize = Mathf.Lerp(startSize, targetSize, t);
+                yield return null;
+            }
+            
+            cameraComponent.orthographicSize = targetSize;
+        }
+        else
+        {
+            // Pour la caméra perspective, on recule (augmente Y) pour dézoomer
+            Vector3 startPosition = transform.position;
+            Vector3 targetPosition = startPosition;
+            targetPosition.y = Mathf.Clamp(startPosition.y + 5f, perspectiveMinY, perspectiveMaxY); // Recule de 5 unités
+            
+            while (elapsedTime < duration)
+            {
+                elapsedTime += Time.deltaTime;
+                float t = Mathf.SmoothStep(0, 1, elapsedTime / duration);
+                transform.position = Vector3.Lerp(startPosition, targetPosition, t);
+                yield return null;
+            }
+            
+            transform.position = targetPosition;
+        }
+        
+        controlsLocked = false;
+        _cameraAnimationCoroutine = null;
     }
 
     private void HandleLockedCameraMovement()
@@ -431,3 +479,4 @@ public class RhythmGameCameraController : MonoBehaviour
 
     public bool IsLocked => isCameraLocked;
 }
+
