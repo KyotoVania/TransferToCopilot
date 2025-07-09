@@ -24,13 +24,35 @@ public class TutorialBannerObserver : MonoBehaviour, Game.Observers.IBannerObser
 
     public void OnBannerPlaced(int column, int row)
     {
-        // On ne veut déclencher l'événement de tutoriel qu'une seule fois,
-        // la première fois que la bannière est placée.
-        if (!hasBeenPlacedOnce)
+        // On récupère le bâtiment ciblé directement depuis le singleton BannerController.
+        if (hasBeenPlacedOnce)
         {
-            hasBeenPlacedOnce = true;
+            Debug.LogWarning("[TutorialBannerObserver] OnBannerPlaced a été appelé, mais la bannière a déjà été placée une fois. On ignore cet appel.");
+            return;
+        }
+        Building targetBuilding = BannerController.Instance.CurrentBuilding;
+        
+        // Si aucune bannière n'est active ou si la cible est nulle, on arrête.
+        if (!BannerController.Instance.HasActiveBanner || targetBuilding == null)
+        {
+            Debug.LogWarning("[TutorialBannerObserver] OnBannerPlaced a été appelé, mais il n'y a pas de bâtiment cible valide.");
+            return;
+        }
+        
+        // --- LOGIQUE DU ZAP APPLIQUÉE ICI ---
+        // On vérifie si l'équipe du bâtiment est Ennemie ou Neutre.
+        if (targetBuilding.Team == TeamType.Enemy || targetBuilding.Team == TeamType.Neutral)
+        {
+            Debug.Log($"[TutorialBannerObserver] Le joueur a placé la bannière sur une cible valide : {targetBuilding.name} (Équipe: {targetBuilding.Team}). L'étape du tutoriel est validée !");
+            
+            // On déclenche l'événement pour faire avancer le tutoriel.
             OnBannerPlacedOnBuilding?.Invoke();
-            Debug.Log("[TutorialBannerObserver] Banner placed for the first time, invoking OnBannerPlacedOnBuilding.");
+            hasBeenPlacedOnce = true;
+        }
+        else
+        {
+            // Le placement initial sur le bâtiment allié sera ignoré ici.
+            Debug.Log($"[TutorialBannerObserver] La bannière a été placée sur une cible non valide pour le tutoriel ({targetBuilding.name}, Équipe: {targetBuilding.Team}). On ignore.");
         }
     }
 

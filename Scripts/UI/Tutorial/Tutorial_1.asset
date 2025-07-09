@@ -60,25 +60,25 @@ MonoBehaviour:
     triggerParameter: 1
     groupToShowOnStart: 0
   - tutorialText: 'Fever active! All units spawned before you reached the 10 combo
-      get powerfull buffs. The effect can be triger again with 10 combo, try to reach
-      the max level to get a really nice advantage (max: 4)!'
+      get powerfull buffs. Try to reach the max level to get a really nice advantage
+      (max: 4)!'
     triggerType: 1
     triggerParameter: 8
     groupToShowOnStart: 0
   - tutorialText: Momentum is precious! You gain it from successful summons and completed
       objectives. It powers your strongest abilities or units!
     triggerType: 1
-    triggerParameter: 7
+    triggerParameter: 8
     groupToShowOnStart: 2
   - tutorialText: Watch your knights reach the windmill. When units complete their
       objective, they celebrate and grant you MOMENTUM!
     triggerType: 1
-    triggerParameter: 7
+    triggerParameter: 8
     groupToShowOnStart: 4
   - tutorialText: With Momentum charged, you can cast strong SPELLS or powerful hero!
       Press ] (or Y on gamepad) to see all available spells.
-    triggerType: 1
-    triggerParameter: 7
+    triggerType: 10
+    triggerParameter: 1
     groupToShowOnStart: 0
   - tutorialText: Each spell has a unique 4-input sequence. They might cost Momentum
       but can buff all units, damage enemies, or grant resources!
