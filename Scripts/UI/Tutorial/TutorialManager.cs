@@ -48,7 +48,7 @@ public class TutorialManager : MonoBehaviour
         }
         Instance = this;
 
-        // Note : NE PAS appeler DontDestroyOnLoad(gameObject);
+        // Note : NE PAS appeler DontDestroyOnLoad(gameObject);	
         
         // Le reste de votre logique Awake/Start originale peut rester ici.
     }
@@ -185,6 +185,7 @@ public class TutorialManager : MonoBehaviour
                 // Les TutorialComboObserver se décharge automatiquement
                 // Pas besoin de désouscription manuelle ici
                 break;
+			
         }
     }
 

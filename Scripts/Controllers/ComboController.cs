@@ -1,4 +1,3 @@
-// Fichier: Scripts2/Controllers/ComboController.cs (Version mise à jour)
 using UnityEngine;
 using System.Collections.Generic;
 using System;

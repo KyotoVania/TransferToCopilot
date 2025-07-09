@@ -11,9 +11,9 @@ public class FeverManager : MonoBehaviour
     [SerializeField]
     private int combosPerFeverLevel = 10;
     
-    [Tooltip("Nombre maximum de paliers de Fever (0-based, donc 4 = 5 niveaux: 0,1,2,3,4)")]
+    [Tooltip("Nombre maximum de paliers de Fever (0-based, donc 3 = 4 niveaux : 0, 1, 2, 3)")]
     [SerializeField]
-    private int maxFeverLevel = 4;
+    private int maxFeverLevel = 3;
     public int MaxFeverLevel => maxFeverLevel; // Rendre le niveau max accessible publiquement
 
     [Header("État (lecture seule)")]
