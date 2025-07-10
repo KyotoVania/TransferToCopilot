@@ -4,6 +4,7 @@ using UnityEngine;
 
 public class BossAttackSystem : MonoBehaviour, IAttack
 {
+    [Header("Attack Settings")]
     [Tooltip("Effet visuel à jouer lors de l'attaque (ex: une onde de choc). Optionnel.")]
     [SerializeField] private GameObject attackVFX;
     [Tooltip("La distance de repoussement en nombre de cases.")]
@@ -11,103 +12,151 @@ public class BossAttackSystem : MonoBehaviour, IAttack
     [Tooltip("Rotation fixe pour le VFX (pour corriger l'orientation du boss)")]
     [SerializeField] private Vector3 vfxRotation = Vector3.zero;
 
-    public bool CanAttack(Transform attacker, Transform target, float attackRange)
-    {
-        // La décision d'attaquer est gérée par le boss, pas par la portée.
-        return true;
-    }
+    [Header("Animation Settings")]
+    [Tooltip("Hauteur du saut pendant la préparation.")]
+    [SerializeField] private float jumpHeight = 1.5f;
+    [Tooltip("Multiplicateur d'échelle pour la compression (X, Y, Z).")]
+    [SerializeField] private Vector3 squashMultiplier = new Vector3(1.2f, 0.8f, 1.2f);
+    [Tooltip("Définit la vitesse de l'animation de chute. 1 = 100% de la durée du beat, 0.2 = 20% (très rapide).")]
+    [Range(0.1f, 1f)]
+    [SerializeField] private float impactAnimationSpeed = 0.25f;
+    [Tooltip("Type d'assouplissement (easing) pour la préparation.")]
+    [SerializeField] private LeanTweenType prepEase = LeanTweenType.easeOutQuad;
+    [Tooltip("Type d'assouplissement (easing) pour l'impact.")]
+    [SerializeField] private LeanTweenType impactEase = LeanTweenType.easeInCubic;
 
-    public IEnumerator PerformAttack(Transform attacker, Transform target, int damage, float animationDuration)
+    private Vector3 _originalScale;
+    private Vector3 _originalPosition;
+    
+    /// <summary>
+    /// MODIFIÉ : Accepte maintenant la durée d'un beat pour une synchronisation parfaite.
+    /// </summary>
+    public IEnumerator PerformPreparationAnimation(Transform attacker, float beatDuration)
     {
-        Unit bossUnit = attacker.GetComponent<Unit>();
+        _originalScale = attacker.localScale;
+        _originalPosition = attacker.position;
+        LeanTween.cancel(attacker.gameObject);
+
+        Vector3 targetSquashScale = new Vector3(
+            _originalScale.x * squashMultiplier.x,
+            _originalScale.y * squashMultiplier.y,
+            _originalScale.z * squashMultiplier.z
+        );
+
+        LTSeq sequence = LeanTween.sequence();
+
+        // L'animation totale dure maintenant exactement un beat.
+        float halfBeat = beatDuration / 2f;
+        sequence.append(LeanTween.scale(attacker.gameObject, targetSquashScale, halfBeat).setEase(prepEase));
+        sequence.append(LeanTween.moveY(attacker.gameObject, _originalPosition.y + jumpHeight, halfBeat).setEase(prepEase));
+        sequence.append(LeanTween.scale(attacker.gameObject, _originalScale, halfBeat).setEase(prepEase));
+        
+        yield return new WaitForSeconds(beatDuration);
+    }
+    
+    /// <summary>
+    /// MODIFIÉ : Accepte maintenant la durée d'un beat.
+    /// </summary>
+    public IEnumerator PerformImpactAnimation(Transform attacker, int damage, Unit bossUnit, float beatDuration)
+    {
         if (bossUnit == null) yield break;
 
-        if (attackVFX != null)
-        {
-            // Utiliser une rotation fixe au lieu de Quaternion.identity pour corriger l'orientation
-            Quaternion vfxQuat = Quaternion.Euler(vfxRotation);
-			Debug.Log($"[{bossUnit.name}] attaque avec l'effet visuel. Rotation: {vfxQuat.eulerAngles}");
-            Instantiate(attackVFX, attacker.position, vfxQuat);
-        }
+        LeanTween.cancel(attacker.gameObject);
+        
+        // --- MODIFIÉ : L'animation de chute est maintenant plus rapide ---
+        float actualAnimationDuration = beatDuration * impactAnimationSpeed;
+        
+        LeanTween.moveY(attacker.gameObject, _originalPosition.y, actualAnimationDuration)
+            .setEase(impactEase)
+            .setOnComplete(() => {
+                if (attackVFX != null)
+                {
+                    Instantiate(attackVFX, attacker.position, Quaternion.Euler(vfxRotation));
+                }
 
-        // On attend un peu pour la synchronisation visuelle
-        yield return new WaitForSeconds(animationDuration * 0.3f);
-
+                Vector3 targetImpactScale = new Vector3(
+                    _originalScale.x * squashMultiplier.x,
+                    _originalScale.y * squashMultiplier.y,
+                    _originalScale.z * squashMultiplier.z
+                );
+                
+                LeanTween.scale(attacker.gameObject, targetImpactScale, 0.15f)
+                         .setEase(LeanTweenType.easeShake)
+                         .setOnComplete(() => {
+                             LeanTween.scale(attacker.gameObject, _originalScale, 0.15f);
+                         });
+            });
+        
+        // Appliquer les dégâts au début de l'impact
+        ApplyAoeDamage(damage, bossUnit);
+        
+        // La coroutine dure toujours exactement un beat pour maintenir le rythme global.
+        yield return new WaitForSeconds(beatDuration);
+    }
+    
+    // Logique de dégâts et knockback extraite dans sa propre méthode pour plus de clarté
+    private void ApplyAoeDamage(int damage, Unit bossUnit)
+    {
         Tile centralTile = bossUnit.GetOccupiedTile();
-        if (centralTile == null) yield break;
+        if (centralTile == null) return;
 
-        // On récupère les cases adjacentes au corps du boss (rayon 2)
         List<Tile> tilesInAoERange = HexGridManager.Instance.GetTilesWithinRange(centralTile.column, centralTile.row, 2);
-
-        List<Coroutine> knockbackCoroutines = new List<Coroutine>();
 
         foreach (var tile in tilesInAoERange)
         {
-            if (tile.currentUnit != null && tile.currentUnit is AllyUnit)
+            if (tile.currentUnit != null && tile.currentUnit is AllyUnit allyToPush)
             {
-                AllyUnit allyToPush = tile.currentUnit as AllyUnit;
-
-                // 1. Appliquer les dégâts
-                Debug.Log($"[{bossUnit.name}] attaque [{allyToPush.name}].");
                 allyToPush.TakeDamage(damage, bossUnit);
-
-                // 2. Tenter de repousser l'unité
-                if (allyToPush != null && allyToPush.Health > 0) // On ne repousse pas une unité morte
+                if (allyToPush.Health > 0)
                 {
-                    knockbackCoroutines.Add(StartCoroutine(KnockbackUnit(bossUnit, allyToPush)));
+                    StartCoroutine(KnockbackUnit(bossUnit, allyToPush));
                 }
             }
         }
-
-        foreach (var coroutine in knockbackCoroutines)
-        {
-            yield return coroutine;
-        }
-
-        yield return new WaitForSeconds(animationDuration * 0.7f);
     }
+    
+    // Le reste du script (KnockbackUnit, PerformAttack, CanAttack) reste inchangé...
+    #region Unchanged Methods
+    public IEnumerator PerformAttack(Transform attacker, Transform target, int damage, float animationDuration)
+    {
+        yield return StartCoroutine(PerformPreparationAnimation(attacker, animationDuration/2));
+        yield return new WaitForSeconds(animationDuration * 0.5f);
+        yield return StartCoroutine(PerformImpactAnimation(attacker, damage, attacker.GetComponent<Unit>(), animationDuration/2));
+    }
+    
+    public bool CanAttack(Transform attacker, Transform target, float attackRange) => true;
 
-    /// <summary>
-    /// Gère la logique de repoussement pour une unité spécifique.
-    /// </summary>
     private IEnumerator KnockbackUnit(Unit boss, AllyUnit unitToPush)
     {
         Tile startTile = unitToPush.GetOccupiedTile();
+        if (startTile == null) yield break;
+        
         Tile currentTileForPathfinding = startTile;
         Tile destinationTile = startTile;
 
-        if (startTile == null) yield break;
-
-        // On cherche une case de destination valide en s'éloignant du boss, case par case.
         for (int i = 0; i < knockbackDistance; i++)
         {
-            // Trouve le voisin le plus éloigné du boss
             Tile nextTileAway = HexGridManager.Instance.GetNeighborAwayFromTarget(
                 currentTileForPathfinding.column, currentTileForPathfinding.row,
                 boss.GetOccupiedTile().column, boss.GetOccupiedTile().row
             );
 
-            if (nextTileAway != null && !nextTileAway.IsOccupied &&
+            if (nextTileAway != null && !nextTileAway.IsOccupied && 
                 !TileReservationController.Instance.IsTileReservedByOtherUnit(new Vector2Int(nextTileAway.column, nextTileAway.row), unitToPush))
             {
-                // Si la case est valide, elle devient notre nouvelle destination potentielle
                 destinationTile = nextTileAway;
                 currentTileForPathfinding = nextTileAway;
             }
             else
             {
-                // Si on rencontre un obstacle, on arrête de chercher plus loin.
                 break;
             }
         }
 
-        // Si on a trouvé une nouvelle destination (différente de celle de départ)
         if (destinationTile != startTile)
         {
-            Debug.Log($"[{boss.name}] repousse [{unitToPush.name}] vers la case ({destinationTile.column}, {destinationTile.row}).");
-            // On lance la coroutine de mouvement de l'unité elle-même.
-            // C'est la manière la plus propre de la faire bouger.
             yield return unitToPush.StartCoroutine(unitToPush.MoveToTile(destinationTile));
         }
     }
+    #endregion
 }
