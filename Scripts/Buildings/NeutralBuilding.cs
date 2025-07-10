@@ -38,7 +38,7 @@ public class NeutralBuilding : Building
     private Color currentColorDisplay;
     private Color targetColorDisplay;
 
-    private AudioSource audioSource;
+    protected AudioSource audioSource; // Changé de private à protected pour permettre l'accès aux classes dérivées
     private ParticleSystem captureInProgressParticlesInstance;
 
     public bool IsRecapturable => canBeCaptured;

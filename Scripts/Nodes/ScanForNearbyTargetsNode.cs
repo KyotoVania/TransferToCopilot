@@ -172,6 +172,9 @@ public class ScanForNearbyTargetsNode : Unity.Behavior.Action // Nom de classe g
 
         if (tilesInRange != null)
         {
+            // Vérifier si l'unité a un objectif de capture de bâtiment actif
+            bool hasCaptureBuildingObjective = HasActiveBuildingCaptureObjective();
+            
             foreach (Tile tile in tilesInRange)
             {
                 if (tile == null) continue;
@@ -179,6 +182,13 @@ public class ScanForNearbyTargetsNode : Unity.Behavior.Action // Nom de classe g
                 // Scan pour Unités Ennemies (EnemyUnit)
                 if (tile.currentUnit != null && tile.currentUnit is EnemyUnit && selfAllyUnitCache.IsValidUnitTarget(tile.currentUnit)) //
                 {
+                    // Ignorer les boss si l'objectif principal est la capture d'un bâtiment
+                    if (hasCaptureBuildingObjective && tile.currentUnit is BossUnit)
+                    {
+                        LogNodeMessage($"Boss {tile.currentUnit.name} ignoré car objectif de capture de bâtiment actif.", false, true);
+                        continue;
+                    }
+                    
                     float distSq = (tile.currentUnit.transform.position - selfPosition).sqrMagnitude;
                     if (distSq < minUnitDistSq)
                     {
@@ -217,6 +227,42 @@ public class ScanForNearbyTargetsNode : Unity.Behavior.Action // Nom de classe g
     {
         if (bbDetectedEnemyUnit != null) bbDetectedEnemyUnit.Value = null;
         if (bbDetectedBuilding != null) bbDetectedBuilding.Value = null;
+    }
+
+    /// <summary>
+    /// Vérifie si l'unité a un objectif actif de capture de bâtiment
+    /// </summary>
+    private bool HasActiveBuildingCaptureObjective()
+    {
+        if (agent?.BlackboardReference == null) return false;
+        
+        // Vérifier si l'objectif initial est un bâtiment ennemi/neutre non complété
+        if (agent.BlackboardReference.GetVariable("HasInitialObjectiveSet", out BlackboardVariable<bool> hasObjective) &&
+            agent.BlackboardReference.GetVariable("IsObjectiveCompleted", out BlackboardVariable<bool> isCompleted) &&
+            agent.BlackboardReference.GetVariable("InitialTargetBuilding", out BlackboardVariable<Building> targetBuilding))
+        {
+            if (hasObjective.Value && !isCompleted.Value && targetBuilding.Value != null)
+            {
+                // Si le bâtiment cible est ennemi ou neutre, c'est un objectif de capture
+                return targetBuilding.Value.Team == TeamType.Enemy || targetBuilding.Value.Team == TeamType.Neutral;
+            }
+        }
+        
+        // Vérifier si la bannière pointe vers un bâtiment ennemi/neutre
+        if (agent.BlackboardReference.GetVariable("HasBannerTarget", out BlackboardVariable<bool> hasBanner) &&
+            agent.BlackboardReference.GetVariable("BannerTargetPosition", out BlackboardVariable<Vector2Int> bannerPos))
+        {
+            if (hasBanner.Value && selfAllyUnitCache != null)
+            {
+                Building bannerBuilding = selfAllyUnitCache.FindBuildingAtPosition(bannerPos.Value);
+                if (bannerBuilding != null)
+                {
+                    return bannerBuilding.Team == TeamType.Enemy || bannerBuilding.Team == TeamType.Neutral;
+                }
+            }
+        }
+        
+        return false;
     }
 
     protected override void OnEnd()

@@ -8,6 +8,8 @@ public class BossAttackSystem : MonoBehaviour, IAttack
     [SerializeField] private GameObject attackVFX;
     [Tooltip("La distance de repoussement en nombre de cases.")]
     [SerializeField] private int knockbackDistance = 2;
+    [Tooltip("Rotation fixe pour le VFX (pour corriger l'orientation du boss)")]
+    [SerializeField] private Vector3 vfxRotation = Vector3.zero;
 
     public bool CanAttack(Transform attacker, Transform target, float attackRange)
     {
@@ -22,7 +24,10 @@ public class BossAttackSystem : MonoBehaviour, IAttack
 
         if (attackVFX != null)
         {
-            Instantiate(attackVFX, attacker.position, Quaternion.identity);
+            // Utiliser une rotation fixe au lieu de Quaternion.identity pour corriger l'orientation
+            Quaternion vfxQuat = Quaternion.Euler(vfxRotation);
+			Debug.Log($"[{bossUnit.name}] attaque avec l'effet visuel. Rotation: {vfxQuat.eulerAngles}");
+            Instantiate(attackVFX, attacker.position, vfxQuat);
         }
 
         // On attend un peu pour la synchronisation visuelle

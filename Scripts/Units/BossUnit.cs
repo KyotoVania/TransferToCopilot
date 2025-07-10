@@ -1,4 +1,3 @@
-// Fichier: Scripts2/Units/BossUnit.cs
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
@@ -154,29 +153,97 @@ public class BossUnit : EnemyUnit
                 _beatCounter = 0;
                 DestroyTargetBuilding();
             }
-            return; // On ne fait rien d'autre si on a atteint la destination
+            return;
         }
 
         if (currentState == UnitState.Idle) UpdateFacingDirectionSafe();
         if (IsMoving) return;
+        
         int moveDelay = MovementDelay;
         if (moveDelay <= 0) return;
 
         _beatCounter++;
-        if (_beatCounter == moveDelay - 2)
+        Debug.Log($"[BossUnit] Beat Counter: {_beatCounter} / Move Delay: {moveDelay}");
+
+        // NOUVEAU CYCLE D'ACTION CLAIR:
+        // Beat X-2 et avant: Attente
+        // Beat X-1: Préparation d'attaque (squash and jump)
+        // Beat X: Impact d'attaque + mouvement immédiat
+
+        if (_beatCounter == moveDelay - 1)
         {
+            // Beat X-1: Lancer l'animation de préparation
             if (AttackSystem != null)
             {
-                StopCoroutine(nameof(AttackSystem.PerformAttack));
+                if (enableVerboseLogging) Debug.Log("[BossUnit] Beat X-1: Début de la préparation d'attaque");
+                
+                // Arrêter toute coroutine d'attaque en cours
+                BossAttackSystem bossAttackSystem = AttackSystem as BossAttackSystem;
+                if (bossAttackSystem != null)
+                {
+                    bossAttackSystem.StopAnimation();
+                }
+                
                 SetState(UnitState.Attacking);
-                StartCoroutine(AttackSystem.PerformAttack(transform, null, Attack, beatDuration));
+                StartCoroutine(StartPreparationPhase(beatDuration));
             }
         }
         else if (_beatCounter >= moveDelay)
         {
+            // Beat X: Impact + mouvement
             _beatCounter = 0;
-            StartCoroutine(AdvanceOneRow());
+            
+            if (enableVerboseLogging) Debug.Log("[BossUnit] Beat X: Impact et mouvement");
+            
+            StartCoroutine(ExecuteImpactAndMove(beatDuration));
         }
+    }
+
+    private IEnumerator StartPreparationPhase(float beatDuration)
+    {
+        if (AttackSystem != null)
+        {
+            BossAttackSystem bossAttackSystem = AttackSystem as BossAttackSystem;
+            if (bossAttackSystem != null)
+            {
+                // Lancer seulement la phase de préparation
+                yield return StartCoroutine(bossAttackSystem.PerformPreparationAnimation(transform));
+            }
+        }
+    }
+
+    private IEnumerator ExecuteImpactAndMove(float beatDuration)
+    {
+        bool shouldMove = true;
+        
+        // Exécuter l'impact de l'attaque
+        if (AttackSystem != null)
+        {
+            BossAttackSystem bossAttackSystem = AttackSystem as BossAttackSystem;
+            if (bossAttackSystem != null)
+            {
+                // Exécuter la phase d'impact
+                yield return StartCoroutine(bossAttackSystem.PerformImpactAnimation(transform, Attack, this));
+            }
+        }
+        
+        // Vérifier si le chemin est bloqué pour le mouvement
+        Tile nextCentralTile = GetNextTileTowardsDestination();
+        if (nextCentralTile != null && bossMovementSystem != null && 
+            !bossMovementSystem.IsDestinationAreaClear(nextCentralTile, this))
+        {
+            if (enableVerboseLogging) Debug.Log("[BossUnit] Chemin bloqué après attaque, pas de mouvement");
+            shouldMove = false;
+        }
+        
+        // Si le chemin est libre, effectuer le mouvement
+        if (shouldMove)
+        {
+            yield return StartCoroutine(AdvanceOneRow());
+        }
+        
+        // Remettre l'état à Idle
+        SetState(UnitState.Idle);
     }
 
     // --- INITIALISATION ET CYCLES DE VIE ---
@@ -189,16 +256,6 @@ public class BossUnit : EnemyUnit
         if (bossMovementSystem == null) Debug.LogError("Le composant BossMovementSystem est manquant !");
         yield return new WaitForEndOfFrame();
         OccupyAdjacentTiles();
-    }
-
-    protected override void OnEnable()
-    {
-        if (MusicManager.Instance != null) MusicManager.Instance.OnBeat += OnRhythmBeat;
-    }
-
-    protected override void OnDisable()
-    {
-        if (MusicManager.Instance != null) MusicManager.Instance.OnBeat -= OnRhythmBeat;
     }
 
     // --- MOUVEMENT ET ACTION FINALE ---
@@ -253,7 +310,6 @@ public class BossUnit : EnemyUnit
         SetState(UnitState.Idle);
     }
 
-    // --- GESTION DES TUILES (inchangé) ---
     #region Tile Management
     public override List<Tile> GetOccupiedTiles()
     {

@@ -67,15 +67,9 @@ public class BossDamageBuilding : NeutralBuilding
     [SerializeField] private bool enableDebugLogs = true;
 
     // Variables privées pour le mode artillerie
-    private AudioSource audioSource;
     private bool isAttackingRhythmically = false;
     private BossUnit currentArtilleryTarget;
     private int currentBeatCounter = 0; // Compteur pour les beats
-
-    private void Awake()
-    {
-        audioSource = GetComponent<AudioSource>();
-    }
 
     private void OnDisable()
     {
