@@ -34,7 +34,6 @@ public class BossAttackSystem : MonoBehaviour, IAttack
         // On récupère les cases adjacentes au corps du boss (rayon 2)
         List<Tile> tilesInAoERange = HexGridManager.Instance.GetTilesWithinRange(centralTile.column, centralTile.row, 2);
 
-        // --- NOUVEAU: Liste pour stocker les coroutines de repoussement ---
         List<Coroutine> knockbackCoroutines = new List<Coroutine>();
 
         foreach (var tile in tilesInAoERange)
@@ -50,18 +49,15 @@ public class BossAttackSystem : MonoBehaviour, IAttack
                 // 2. Tenter de repousser l'unité
                 if (allyToPush != null && allyToPush.Health > 0) // On ne repousse pas une unité morte
                 {
-                    // --- NOUVEAU: On lance la coroutine et on l'ajoute à la liste ---
                     knockbackCoroutines.Add(StartCoroutine(KnockbackUnit(bossUnit, allyToPush)));
                 }
             }
         }
 
-        // --- NOUVEAU: On attend que TOUTES les coroutines de repoussement soient terminées ---
         foreach (var coroutine in knockbackCoroutines)
         {
             yield return coroutine;
         }
-        // --- FIN DES MODIFICATIONS ---
 
         yield return new WaitForSeconds(animationDuration * 0.7f);
     }

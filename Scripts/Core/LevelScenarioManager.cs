@@ -72,6 +72,9 @@ public class LevelScenarioManager : MonoBehaviour
         Building.OnBuildingDestroyed += HandleTargetDestroyed;
         TriggerZone.OnZoneEntered += HandleZoneEntered;
         Building.OnBuildingTeamChangedGlobal += HandleBuildingTeamChanged;
+        
+        // S'abonner aux événements de mort des boss
+        SubscribeToBossDeathEvents();
     }
 
     private void UnsubscribeFromGameEvents()
@@ -79,6 +82,9 @@ public class LevelScenarioManager : MonoBehaviour
         Building.OnBuildingDestroyed -= HandleTargetDestroyed;
         TriggerZone.OnZoneEntered -= HandleZoneEntered;
         Building.OnBuildingTeamChangedGlobal -= HandleBuildingTeamChanged;
+        
+        // Se désabonner des événements de mort des boss
+        UnsubscribeFromBossDeathEvents();
     }
 
     #region Handlers
@@ -119,6 +125,45 @@ public class LevelScenarioManager : MonoBehaviour
         ProcessEvents(TriggerType.OnZoneEnter, zoneID);
     }
 
+    private void HandleBossDeath()
+    {
+        // Cette méthode sera appelée par l'événement OnUnitDestroyed de chaque boss individuellement
+        // On ne peut pas identifier quel boss spécifique car l'événement ne passe pas de paramètre
+        Debug.Log("[LevelScenarioManager] Un boss est mort. Déclenchement des événements OnBossDied.");
+        ProcessEvents(TriggerType.OnBossDied, "Boss"); // Utiliser un nom générique pour tous les boss
+    }
+
+    #endregion
+
+    #region Boss Death Event Management
+
+    private void SubscribeToBossDeathEvents()
+    {
+        // Trouver tous les boss dans la scène et s'abonner à leur événement de mort
+        BossUnit[] bosses = FindObjectsByType<BossUnit>(FindObjectsSortMode.None);
+        foreach (BossUnit boss in bosses)
+        {
+            if (boss != null)
+            {
+                boss.OnUnitDestroyed += HandleBossDeath;
+                Debug.Log($"[LevelScenarioManager] Abonné aux événements de mort du boss '{boss.name}'.");
+            }
+        }
+    }
+
+    private void UnsubscribeFromBossDeathEvents()
+    {
+        // Trouver tous les boss dans la scène et se désabonner de leur événement de mort
+        BossUnit[] bosses = FindObjectsByType<BossUnit>(FindObjectsSortMode.None);
+        foreach (BossUnit boss in bosses)
+        {
+            if (boss != null)
+            {
+                boss.OnUnitDestroyed -= HandleBossDeath;
+            }
+        }
+    }
+
     #endregion
 
     private void ProcessEvents(TriggerType trigger, string param = "")
@@ -134,7 +179,8 @@ public class LevelScenarioManager : MonoBehaviour
                 if (trigger == TriggerType.OnZoneEnter ||
                     trigger == TriggerType.OnSpecificTargetDestroyed ||
                     trigger == TriggerType.OnAllTargetsWithTagDestroyed ||
-                    trigger == TriggerType.OnBuildingCaptured)
+                    trigger == TriggerType.OnBuildingCaptured ||
+                    trigger == TriggerType.OnBossDied)
                 {
                     match = (evt.triggerParameter == param);
                 }

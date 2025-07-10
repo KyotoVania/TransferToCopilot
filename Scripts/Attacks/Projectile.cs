@@ -12,6 +12,11 @@ public class Projectile : MonoBehaviour
 
     private bool initialized = false;
     private Vector3 lastKnownTargetPosition;
+    
+    // Variables pour la trajectoire lob
+    private LobProjectileData lobData;
+    private float lobProgress = 0f;
+    private Vector3 lobStartPosition;
 
     [Tooltip("Distance à laquelle le projectile est considéré comme ayant atteint la cible (pour les cibles mobiles).")]
     [SerializeField] private float hitThreshold = 0.5f;
@@ -29,6 +34,8 @@ public class Projectile : MonoBehaviour
         speed = projectileSpeed;
         impactVFXPrefab = vfxPrefab;
         this.attacker = attacker; // Update to store the Unit attacker
+        
+        if (showAttackLogs) Debug.Log($"[Projectile] Initialize: VFX Prefab = {(vfxPrefab != null ? vfxPrefab.name : "NULL")}");
 
         if (targetTransform != null)
         {
@@ -42,6 +49,16 @@ public class Projectile : MonoBehaviour
         }
 
         initialized = true;
+        
+        // Vérifier s'il y a des données de trajectoire lob
+        lobData = GetComponent<LobProjectileData>();
+        if (lobData != null && lobData.useLobTrajectory)
+        {
+            lobStartPosition = transform.position;
+            lobData.Initialize(lobStartPosition, lastKnownTargetPosition);
+            lobProgress = 0f;
+        }
+        
         Destroy(gameObject, maxLifetime); // Autodestruction après un certain temps pour éviter les projectiles perdus
     }
 
@@ -88,19 +105,51 @@ public class Projectile : MonoBehaviour
         }
 
 
-        Vector3 direction = (targetPositionToChase - transform.position).normalized;
-
-        if (direction != Vector3.zero)
+        // Gérer le mouvement selon le type de trajectoire
+        if (lobData != null && lobData.useLobTrajectory && lobData.isInitialized)
         {
-            transform.rotation = Quaternion.LookRotation(direction);
+            // Trajectoire en arc (lob)
+            float distanceToTarget = Vector3.Distance(lobStartPosition, lastKnownTargetPosition);
+            float progressIncrement = (speed * Time.deltaTime) / distanceToTarget;
+            lobProgress += progressIncrement;
+            
+            if (lobProgress >= 1f)
+            {
+                // Atteint la cible
+                transform.position = lastKnownTargetPosition;
+                HandleImpact(targetTransform != null && targetTransform.gameObject.activeInHierarchy ? targetTransform.GetComponent<Collider>() : null);
+                return;
+            }
+            
+            // Calculer la nouvelle position sur l'arc
+            Vector3 newPosition = lobData.GetLobPosition(lobProgress);
+            
+            // Calculer la direction pour la rotation
+            Vector3 direction = lobData.GetLobDirection(lobProgress);
+            if (direction != Vector3.zero)
+            {
+                transform.rotation = Quaternion.LookRotation(direction);
+            }
+            
+            transform.position = newPosition;
         }
-
-        transform.position += direction * speed * Time.deltaTime;
-
-        // Vérifier la distance par rapport à la dernière position connue de la cible
-        if (Vector3.Distance(transform.position, lastKnownTargetPosition) < hitThreshold)
+        else
         {
-            HandleImpact(targetTransform != null && targetTransform.gameObject.activeInHierarchy ? targetTransform.GetComponent<Collider>() : null);
+            // Trajectoire en ligne droite (comportement original)
+            Vector3 direction = (targetPositionToChase - transform.position).normalized;
+
+            if (direction != Vector3.zero)
+            {
+                transform.rotation = Quaternion.LookRotation(direction);
+            }
+
+            transform.position += direction * speed * Time.deltaTime;
+
+            // Vérifier la distance par rapport à la dernière position connue de la cible
+            if (Vector3.Distance(transform.position, lastKnownTargetPosition) < hitThreshold)
+            {
+                HandleImpact(targetTransform != null && targetTransform.gameObject.activeInHierarchy ? targetTransform.GetComponent<Collider>() : null);
+            }
         }
     }
 
@@ -147,8 +196,22 @@ public class Projectile : MonoBehaviour
 
             if (unitTarget != null)
             {
-                if (showAttackLogs) Debug.Log($"[Projectile] Application de {damage} dégâts à l'unité {unitTarget.name}.");
-                unitTarget.TakeDamage(damage, attacker); // Passer l'attaquant
+                // Vérifier s'il y a des données spéciales pour les boss
+                BossProjectileData bossData = GetComponent<BossProjectileData>();
+                if (bossData != null && unitTarget is BossUnit bossTarget)
+                {
+                    // Appliquer des dégâts en pourcentage pour les boss
+                    if (showAttackLogs) 
+                        Debug.Log($"[Projectile] Application de {bossData.damagePercentage}% de dégâts au boss {bossTarget.name} {(bossData.isFromTower ? "(depuis une tour)" : "")}.");
+                    
+                    bossTarget.TakePercentageDamage(bossData.damagePercentage);
+                }
+                else
+                {
+                    // Dégâts normaux pour les autres unités
+                    if (showAttackLogs) Debug.Log($"[Projectile] Application de {damage} dégâts à l'unité {unitTarget.name}.");
+                    unitTarget.TakeDamage(damage, attacker); // Passer l'attaquant
+                }
             }
             else if (buildingTarget != null)
             {
@@ -160,7 +223,12 @@ public class Projectile : MonoBehaviour
         // Instancier l'effet visuel d'impact si défini
         if (impactVFXPrefab != null)
         {
+            if (showAttackLogs) Debug.Log($"[Projectile] Instanciation du VFX d'impact : {impactVFXPrefab.name} à la position {transform.position}");
             Instantiate(impactVFXPrefab, transform.position, Quaternion.LookRotation(-transform.forward)); // Tourné vers l'arrière pour l'explosion
+        }
+        else
+        {
+            if (showAttackLogs) Debug.Log($"[Projectile] Aucun VFX d'impact défini (impactVFXPrefab est null)");
         }
 
         // Détruire le projectile

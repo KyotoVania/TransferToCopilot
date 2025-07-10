@@ -36,9 +36,7 @@ public class BossMovementSystem : MonoBehaviour, IMovement
         {
             Vector2Int tilePos = new Vector2Int(tile.column, tile.row);
 
-            // ----- LA CORRECTION EST ICI -----
-            // On vérifie si la case est occupée par une AUTRE unité (différente du boss)
-            // OU si elle est réservée par une AUTRE unité.
+      
             bool isOccupiedByOther = tile.currentUnit != null && tile.currentUnit != bossUnit;
             bool isReservedByOther = TileReservationController.Instance.IsTileReservedByOtherUnit(tilePos, bossUnit);
 

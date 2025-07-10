@@ -314,7 +314,7 @@ public class InputTargetingManager : MonoBehaviour
         targetableObjects.Clear();
         
         // Find all objects that implement ITargetable interface
-        var allTargetables = FindObjectsOfType<MonoBehaviour>().OfType<ITargetable>()
+        var allTargetables = FindObjectsByType<MonoBehaviour>(FindObjectsSortMode.None).OfType<ITargetable>()
             .Where(t => t != null && t.IsTargetable && t.GameObject != null)
             .Select(t => t.GameObject);
 

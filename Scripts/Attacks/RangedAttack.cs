@@ -31,6 +31,13 @@ public class RangedAttack : MonoBehaviour, IAttack
     [Header("Fever Mode")]
     [Tooltip("Délai entre chaque projectile supplémentaire en secondes.")]
     [SerializeField] private float feverProjectileDelay = 0.1f;
+
+    [Header("Lob Trajectory")]
+    [Tooltip("Si true, les projectiles suivront une trajectoire en arc (lob) au lieu d'une ligne droite.")]
+    [SerializeField] private bool useLobTrajectory = false;
+    
+    [Tooltip("Hauteur de l'arc pour la trajectoire lob (plus haut = arc plus prononcé).")]
+    [SerializeField] private float lobHeight = 3f;
     public IEnumerator PerformAttack(Transform attacker, Transform target, int damage, float duration)
     {
         if (projectilePrefab == null)
@@ -124,6 +131,17 @@ public class RangedAttack : MonoBehaviour, IAttack
             Debug.LogError($"[{attacker.name}] RangedAttack: Le prefab du projectile '{projectilePrefab.name}' ne contient pas de script Projectile !");
             Destroy(projectileGO);
             return;
+        }
+        
+        // Ajouter les données de trajectoire lob si nécessaire
+        if (useLobTrajectory)
+        {
+            LobProjectileData lobData = projectileGO.AddComponent<LobProjectileData>();
+            lobData.lobHeight = lobHeight;
+            lobData.useLobTrajectory = true;
+            
+            if (showAttackLogs) 
+                Debug.Log($"[{attacker.name}] RangedAttack: Projectile configuré avec trajectoire lob (hauteur: {lobHeight}).");
         }
         
         projectileScript.Initialize(target, damage, projectileSpeed, impactVfx, attacker.GetComponent<Unit>());
