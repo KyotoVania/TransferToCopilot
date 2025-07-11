@@ -223,7 +223,6 @@ public class LevelScenarioManager : MonoBehaviour
 
         switch (scenarioEvent.actionType)
         {
-            // ----- MODIFICATION ICI -----
             case ActionType.ActivateSpawnerBuilding:
             case ActionType.DeactivateSpawnerBuilding:
                 bool isActive = scenarioEvent.actionType == ActionType.ActivateSpawnerBuilding;
@@ -235,7 +234,6 @@ public class LevelScenarioManager : MonoBehaviour
             case ActionType.TriggerGameObject:
                  TriggerGameObjectByName(scenarioEvent.actionParameter_GameObjectName);
                 break;
-            // ---------------------------
             case ActionType.EndLevel:
                 if (GameManager.Instance != null) GameManager.Instance.LoadHub();
                 break;
