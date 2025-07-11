@@ -34,9 +34,27 @@ public class NeutralBuilding : Building
     [Header("Visual Settings")]
     [SerializeField] private string roofMaterialName = "Roof";
     [SerializeField] private Transform roofObject;
+    [Tooltip("Intensity multiplier for emission effect")]
+    [SerializeField] private float emissionIntensity = 1f;
+    [Tooltip("Base emission intensity for neutral state")]
+    [SerializeField] private float baseEmissionIntensity = 0.1f;
+    
     private Renderer roofRenderer;
+    private MaterialPropertyBlock _propertyBlock;
     private Color currentColorDisplay;
     private Color targetColorDisplay;
+    
+    // Nouvelle variable pour l'intensité smooth
+    private float currentEmissionIntensity;
+    private float targetEmissionIntensity;
+    
+    // Shader property IDs for better performance
+    private static readonly int EmissionColorID = Shader.PropertyToID("_EmissionColor");
+    private static readonly int AlbedoColorID = Shader.PropertyToID("_AlbedoColor");
+    
+    // Store original material properties
+    private Color _originalEmissionColor;
+    private Color _originalAlbedoColor;
 
     protected AudioSource audioSource; // Changé de private à protected pour permettre l'accès aux classes dérivées
     private ParticleSystem captureInProgressParticlesInstance;
@@ -52,6 +70,11 @@ public class NeutralBuilding : Building
         FindRoofRenderer();
         targetColorDisplay = GetColorForTeam(this.Team);
         currentColorDisplay = targetColorDisplay;
+        
+        // Initialiser les intensités d'émission
+        targetEmissionIntensity = GetEmissionIntensityForTeam();
+        currentEmissionIntensity = targetEmissionIntensity;
+        
         UpdateRoofColor(currentColorDisplay);
 
         if (GetComponent<AudioSource>() == null) audioSource = gameObject.AddComponent<AudioSource>();
@@ -84,9 +107,21 @@ public class NeutralBuilding : Building
 
     private void Update()
     {
+        // Interpolation smooth de la couleur
         if (currentColorDisplay != targetColorDisplay)
         {
             currentColorDisplay = Color.Lerp(currentColorDisplay, targetColorDisplay, Time.deltaTime * colorLerpSpeed);
+        }
+        
+        // Interpolation smooth de l'intensité d'émission
+        if (Mathf.Abs(currentEmissionIntensity - targetEmissionIntensity) > 0.01f)
+        {
+            currentEmissionIntensity = Mathf.Lerp(currentEmissionIntensity, targetEmissionIntensity, Time.deltaTime * colorLerpSpeed);
+        }
+        
+        // Mise à jour du rendu si nécessaire
+        if (currentColorDisplay != targetColorDisplay || Mathf.Abs(currentEmissionIntensity - targetEmissionIntensity) > 0.01f)
+        {
             UpdateRoofColor(currentColorDisplay);
         }
     }
@@ -105,6 +140,9 @@ public class NeutralBuilding : Building
         if (unitesQuiCapturentActuellement.Count > 0 && teamActuellementEnCapture != this.Team && teamActuellementEnCapture != TeamType.Neutral)
         {
             currentCaptureProgressPoints += unitesQuiCapturentActuellement.Count;
+
+            // Mettre à jour la target intensity pour l'interpolation smooth
+            targetEmissionIntensity = GetEmissionIntensityForTeam();
 
             if (captureProgressSound != null && audioSource != null)
             {
@@ -196,6 +234,34 @@ public class NeutralBuilding : Building
         if (renderers.Length > 0) roofRenderer = renderers[0];
     }
 
+    /// <summary>
+    /// Initialize the MaterialPropertyBlock and store original material properties
+    /// </summary>
+    private void InitializeMaterialProperties()
+    {
+        if (roofRenderer == null) return;
+        
+        // Initialize MaterialPropertyBlock
+        if (_propertyBlock == null) _propertyBlock = new MaterialPropertyBlock();
+        
+        // Store original material properties
+        Material sharedMat = roofRenderer.sharedMaterial;
+        if (sharedMat != null)
+        {
+            // Get original albedo color
+            if (sharedMat.HasProperty(AlbedoColorID))
+                _originalAlbedoColor = sharedMat.GetColor(AlbedoColorID);
+            else
+                _originalAlbedoColor = Color.white;
+                
+            // Get original emission color
+            if (sharedMat.HasProperty(EmissionColorID))
+                _originalEmissionColor = sharedMat.GetColor(EmissionColorID);
+            else
+                _originalEmissionColor = Color.black;
+        }
+    }
+
     private Color GetColorForTeam(TeamType team)
     {
         switch (team)
@@ -209,12 +275,44 @@ public class NeutralBuilding : Building
     private void UpdateRoofColor(Color color)
     {
         if (roofRenderer == null) return;
-        roofRenderer.material.color = color;
-        if (roofRenderer.material.HasProperty("_EmissionColor"))
+
+        // Apply only emission changes, not albedo
+        if (_propertyBlock == null) _propertyBlock = new MaterialPropertyBlock();
+        roofRenderer.GetPropertyBlock(_propertyBlock);
+
+        // Utiliser l'intensité interpolée au lieu de la calculer à chaque fois
+        Color emissionColor = color * currentEmissionIntensity;
+        _propertyBlock.SetColor(EmissionColorID, emissionColor);
+
+        // Apply the changes
+        roofRenderer.SetPropertyBlock(_propertyBlock);
+    }
+
+    /// <summary>
+    /// Get the appropriate emission intensity based on current team and capture state
+    /// </summary>
+    private float GetEmissionIntensityForTeam()
+    {
+        // Neutral buildings have minimal emission (almost 0)
+        if (this.Team == TeamType.Neutral && teamActuellementEnCapture == TeamType.Neutral)
         {
-            roofRenderer.material.EnableKeyword("_EMISSION");
-            roofRenderer.material.SetColor("_EmissionColor", color * 0.5f);
+            return baseEmissionIntensity; // Should be around 0.1
         }
+        
+        // Buildings being captured: progressive intensity based on capture progress
+        if (teamActuellementEnCapture != TeamType.Neutral && teamActuellementEnCapture != this.Team)
+        {
+            float captureProgress = CaptureProgressNormalized; // 0.0 to 1.0
+            return Mathf.Lerp(baseEmissionIntensity, emissionIntensity, captureProgress);
+        }
+        
+        // Buildings already captured have full emission intensity
+        if (this.Team != TeamType.Neutral)
+        {
+            return emissionIntensity; // Should be around 1.0
+        }
+        
+        return baseEmissionIntensity;
     }
 
     public bool StartCapture(TeamType teamAttemptingCapture, Unit capturingUnit)
@@ -303,3 +401,5 @@ public class NeutralBuilding : Building
     }
     #endregion
 }
+
+

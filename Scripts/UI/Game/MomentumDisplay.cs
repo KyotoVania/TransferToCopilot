@@ -1,5 +1,6 @@
 ﻿using UnityEngine;
 using UnityEngine.UI; // Important pour avoir accès au type Slider
+using System.Collections;
 using System.Collections.Generic;
 
 public class MomentumDisplay : MonoBehaviour
@@ -11,7 +12,16 @@ public class MomentumDisplay : MonoBehaviour
     [Tooltip("Liste des GameObjects des 3 icônes de charge. Elles seront activées/désactivées.")]
     [SerializeField] private List<GameObject> chargeIcons;
 
+    [Header("Animation Settings")]
+    [Tooltip("Durée de l'animation de progression du momentum en secondes")]
+    [SerializeField] private float animationDuration = 0.3f;
+    
+    [Tooltip("Courbe d'animation pour la progression (optionnel)")]
+    [SerializeField] private AnimationCurve animationCurve = AnimationCurve.EaseInOut(0, 0, 1, 1);
+
     private MomentumManager _momentumManager;
+    private Coroutine _currentAnimation;
+    private float _targetValue;
 
     // Awake est appelé avant Start. C'est le meilleur endroit pour récupérer les composants.
     void Awake()
@@ -63,18 +73,26 @@ public class MomentumDisplay : MonoBehaviour
     }
 
     /// <summary>
-    /// Met à jour l'affichage du Momentum en pilotant le Slider et les icônes.
+    /// Met à jour l'affichage du Momentum en pilotant le Slider et les icônes avec animation.
     /// </summary>
     private void UpdateMomentumDisplay(int charges, float momentumValue)
     {
-        // Mettre à jour la valeur du Slider. C'est la ligne clé de la correction.
+        // Animer la progression du Slider au lieu d'un changement instantané
         if (momentumSlider != null)
         {
-            // Le Slider se chargera lui-même de mettre à jour son image de remplissage.
-            momentumSlider.value = momentumValue;
+            _targetValue = momentumValue;
+            
+            // Arrêter l'animation précédente si elle existe
+            if (_currentAnimation != null)
+            {
+                StopCoroutine(_currentAnimation);
+            }
+            
+            // Démarrer la nouvelle animation
+            _currentAnimation = StartCoroutine(AnimateMomentumSlider());
         }
 
-        // La logique des icônes de charge reste la même.
+        // La logique des icônes de charge reste instantanée (plus naturel)
         if (chargeIcons != null)
         {
             for (int i = 0; i < chargeIcons.Count; i++)
@@ -85,5 +103,32 @@ public class MomentumDisplay : MonoBehaviour
                 }
             }
         }
+    }
+
+    /// <summary>
+    /// Coroutine qui anime la progression du slider de momentum
+    /// </summary>
+    private IEnumerator AnimateMomentumSlider()
+    {
+        float startValue = momentumSlider.value;
+        float elapsedTime = 0f;
+
+        while (elapsedTime < animationDuration)
+        {
+            elapsedTime += Time.deltaTime;
+            float progress = elapsedTime / animationDuration;
+            
+            // Utiliser la courbe d'animation si définie, sinon progression linéaire
+            float curveValue = animationCurve != null ? animationCurve.Evaluate(progress) : progress;
+            
+            // Interpoler entre la valeur de départ et la valeur cible
+            momentumSlider.value = Mathf.Lerp(startValue, _targetValue, curveValue);
+            
+            yield return null;
+        }
+
+        // S'assurer que la valeur finale est exacte
+        momentumSlider.value = _targetValue;
+        _currentAnimation = null;
     }
 }
