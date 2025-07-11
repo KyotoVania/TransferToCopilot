@@ -225,11 +225,24 @@ public class EnemyUnit : Unit
         return otherUnit is AllyUnit;
     }
 
-    public override bool IsValidBuildingTarget(Building building)
-    {
-        if (building == null || !building.IsTargetable) return false;
-        return building.Team == TeamType.Player || building.Team == TeamType.Neutral;
-    }
+ public override bool IsValidBuildingTarget(Building building)
+  {
+      if (building == null || !building.IsTargetable) return false;
+
+      // Les unités ennemies ne peuvent attaquer que les bâtiments du joueur
+      // Les bâtiments neutres doivent être capturés, pas attaqués
+      return building.Team == TeamType.Player;
+  }
+public bool IsValidCaptureTarget(Building building)
+  {
+      if (building == null) return false;
+
+      NeutralBuilding neutralBuilding = building as NeutralBuilding;
+      if (neutralBuilding == null) return false;
+
+      return neutralBuilding.IsRecapturable &&
+             (neutralBuilding.Team == TeamType.Neutral || neutralBuilding.Team == TeamType.Player);
+  }
 
     public bool PerformCaptureEnemy(Building buildingToCapture)
     {

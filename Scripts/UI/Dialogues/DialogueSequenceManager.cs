@@ -107,7 +107,7 @@ public class DialogueSequenceManager : MonoBehaviour
         isSequenceRunning = true;
 
         if (playerCameraController != null) playerCameraController.controlsLocked = true;
-        SetMainUIChildrenActive(false);
+        //SetMainUIChildrenActive(false);
 
         if (fadeToBlackImage == null)
         {
@@ -224,7 +224,6 @@ public class DialogueSequenceManager : MonoBehaviour
             }
         }
 
-        // --- NOUVELLE LOGIQUE POUR TROUVER TOUS LES ENNEMIS ---
         // On cherche tous les composants EnemyUnit, même sur les objets inactifs.
         EnemyUnit[] allEnemiesInScene = FindObjectsOfType<EnemyUnit>(true); // Le 'true' est crucial !
         Debug.Log($"[DialogueSequenceManager] Found {allEnemiesInScene.Length} total enemy units (active and inactive).");

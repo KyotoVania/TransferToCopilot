@@ -100,7 +100,7 @@ public partial class ScanForTargetsNode_Enemy : Unity.Behavior.Action
         {
             LogNodeMessage("SelfUnit instance became null during OnUpdate.", true);
             ClearDetectedTargets();
-            return Status.Failure;
+            return Status.Failure;  
         }
 
         Tile currentTile = selfUnitInstance.GetOccupiedTile();
@@ -138,7 +138,7 @@ public partial class ScanForTargetsNode_Enemy : Unity.Behavior.Action
 
             // Scan pour bâtiments ciblables (Joueur ou Neutre)
             if (tile.currentBuilding != null && tile.currentBuilding.CurrentHealth > 0 &&
-                (tile.currentBuilding.Team == TeamType.Player || tile.currentBuilding.Team == TeamType.Neutral)) //
+                (tile.currentBuilding.Team == TeamType.Player || tile.currentBuilding.Team == TeamType.Neutral || tile.currentBuilding.Team == TeamType.NeutralPlayer))
             {
                 Building potentialTargetBuilding = tile.currentBuilding;
                 float distSq = (potentialTargetBuilding.transform.position - selfPosition).sqrMagnitude;

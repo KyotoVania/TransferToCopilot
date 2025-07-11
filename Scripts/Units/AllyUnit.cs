@@ -442,13 +442,23 @@ public class AllyUnit : Unit, IBannerObserver
     public override bool IsValidBuildingTarget(Building building)
     {
         if (building == null || !building.IsTargetable) return false;
-        return building.Team == TeamType.Enemy || building.Team == TeamType.Player || building.Team == TeamType.Neutral;
-    }
 
+        return building.Team == TeamType.Enemy;
+    }
+    public bool IsValidCaptureTarget(Building building)
+    {
+        if (building == null) return false;
+
+        NeutralBuilding neutralBuilding = building as NeutralBuilding;
+        if (neutralBuilding == null) return false;
+
+        return neutralBuilding.IsRecapturable &&
+               (neutralBuilding.Team == TeamType.Neutral || neutralBuilding.Team == TeamType.NeutralEnemy);
+    }
     public override  bool PerformCapture(Building building)
     {
         NeutralBuilding neutralBuilding = building as NeutralBuilding;
-        if (neutralBuilding == null || !neutralBuilding.IsRecapturable || (neutralBuilding.Team != TeamType.Neutral && neutralBuilding.Team != TeamType.Enemy))
+        if (neutralBuilding == null || !neutralBuilding.IsRecapturable || (neutralBuilding.Team != TeamType.Neutral && neutralBuilding.Team != TeamType.NeutralEnemy))
         {
             if (enableVerboseLogging) Debug.Log($"[{name}] Cannot capture {building.name}. Not Neutral or Enemy Recapturable.");
             return false;

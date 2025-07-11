@@ -112,8 +112,9 @@ public class TutorialManager : MonoBehaviour
 
         // On désactive l'interrupteur et on notifie que c'est terminé.
         IsTutorialActive = false;
-        OnTutorialCompleted?.Invoke();
-        HideAllTutorialHUD(); // Assure que l'UI du tuto est bien cachée.
+        OnTutorialCompleted?.Invoke(); 
+        
+        
     }
 
     private void SubscribeToCurrentTrigger()
@@ -250,16 +251,34 @@ public class TutorialManager : MonoBehaviour
         }
     }
 
-    public void HideAllTutorialHUD()
+    private void SetGroupVisibility(List<GameObject> uiObjects, bool visible)
     {
-        //invocationUIObjects.ForEach(obj => { if (obj != null) obj.SetActive(false); });
-        //comboUIObjects.ForEach(obj => { if (obj != null) obj.SetActive(false); });
-        //goldUIObjects.ForEach(obj => { if (obj != null) obj.SetActive(false); });
-        //unitsAndSpellsUIObjects.ForEach(obj => { if (obj != null) obj.SetActive(false); });
+        foreach (var obj in uiObjects)
+        {
+            if (obj != null)
+            {
+                CanvasGroup canvasGroup = obj.GetComponent<CanvasGroup>();
+                if (canvasGroup == null)
+                {
+                    canvasGroup = obj.AddComponent<CanvasGroup>();
+                }
+                canvasGroup.alpha = visible ? 1f : 0f;
+                canvasGroup.interactable = visible;
+                canvasGroup.blocksRaycasts = visible;
+            }
+        }
     }
 
-    public void ShowInvocationUI() { HideAllTutorialHUD(); invocationUIObjects.ForEach(obj => { if (obj != null) obj.SetActive(true); });}
-    public void ShowComboUI() { HideAllTutorialHUD(); comboUIObjects.ForEach(obj => { if (obj != null) obj.SetActive(true); }); }
-    public void ShowGoldUI() { HideAllTutorialHUD(); goldUIObjects.ForEach(obj => { if (obj != null) obj.SetActive(true); });}
-    public void ShowUnitsAndSpellsUI() { HideAllTutorialHUD(); unitsAndSpellsUIObjects.ForEach(obj => { if (obj != null) obj.SetActive(true); });}
+    public void HideAllTutorialHUD()
+    {
+        SetGroupVisibility(invocationUIObjects, false);
+        SetGroupVisibility(comboUIObjects, false);
+        SetGroupVisibility(goldUIObjects, false);
+        SetGroupVisibility(unitsAndSpellsUIObjects, false);
+    }
+
+    public void ShowInvocationUI() { SetGroupVisibility(invocationUIObjects, true); }
+    public void ShowComboUI() { SetGroupVisibility(comboUIObjects, true); }
+    public void ShowGoldUI() { SetGroupVisibility(goldUIObjects, true); }
+    public void ShowUnitsAndSpellsUI() { SetGroupVisibility(unitsAndSpellsUIObjects, true); }
 }

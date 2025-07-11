@@ -243,6 +243,9 @@ public class LevelScenarioManager : MonoBehaviour
                 else
                     Debug.LogError("[LevelScenarioManager] WinLoseController.Instance non trouvé pour TriggerVictory !");
                 break;
+            case ActionType.SpawnPrefabAtLocation:
+                ExecuteSpawnPrefabAction(scenarioEvent.actionParameter_SpawnData);
+                break;
             case ActionType.TriggerDefeat:
                 if (WinLoseController.Instance != null)
                     WinLoseController.Instance.TriggerLoseCondition();

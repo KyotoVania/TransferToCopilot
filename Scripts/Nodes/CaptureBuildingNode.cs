@@ -266,7 +266,6 @@ public class CaptureBuildingNode : Unity.Behavior.Action
         }
     }
 
-    // Supprimé: private void CheckAndSignalObjectiveCompletion()
 
     private void LogNodeMessage(string message, bool isError = false, bool forceLog = false)
     {
@@ -277,6 +276,10 @@ public class CaptureBuildingNode : Unity.Behavior.Action
         if (isError)
         {
             Debug.LogError($"{logPrefix} {message}", GameObject);
+        }
+        else
+        {
+            Debug.Log($"{logPrefix} {message}", GameObject);
         }
     }
 }

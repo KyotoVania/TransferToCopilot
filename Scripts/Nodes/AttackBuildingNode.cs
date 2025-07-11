@@ -74,7 +74,18 @@ public class AttackBuildingNode : Unity.Behavior.Action
 
         if (!selfUnitInstance.IsValidBuildingTarget(currentTargetBuildingForThisNode))
         {
-            LogNodeMessage($"OnStart: Target Building '{currentTargetBuildingForThisNode.name}' (H:{currentTargetBuildingForThisNode.CurrentHealth}, T:{currentTargetBuildingForThisNode.Team}) N'EST PAS une cible valide selon {selfUnitInstance.name}.IsValidBuildingTarget(). Node FAILURE.", isError: false, forceLog: true);
+            // Vérifier si c'est un bâtiment neutre qui devrait être capturé
+            if (currentTargetBuildingForThisNode is NeutralBuilding neutralBuilding &&
+                neutralBuilding.IsRecapturable)
+            {
+                LogNodeMessage($"Target Building '{currentTargetBuildingForThisNode.name}' is a capturable neutral building, not attackable.cNode FAILURE.", isError: false, forceLog: true);
+            }
+            else
+            {
+                LogNodeMessage($"Target Building '{currentTargetBuildingForThisNode.name}' is not a valid attack target. Node FAILURE.",
+                    isError: false, forceLog: true);
+            }
+
             SetIsAttackingBlackboardVar(false);
             return Status.Failure;
         }

@@ -253,7 +253,7 @@ protected override Status OnUpdate()
             } else { LogNodeMessage($"Défensif: Joueur Détecté {detectedPlayer.name} n'a pas de tuile.", true); }
         }
         else if (detectedLocalBuilding != null && detectedLocalBuilding.CurrentHealth > 0 &&
-                 (detectedLocalBuilding.Team == TeamType.Player || detectedLocalBuilding.Team == TeamType.Neutral)) // L'ennemi attaque Joueur/Neutre en défense
+                 (detectedLocalBuilding.Team == TeamType.Player || detectedLocalBuilding.Team == TeamType.Neutral || detectedLocalBuilding.Team == TeamType.NeutralPlayer))
         {
             interactionBuilding = detectedLocalBuilding; // Cible le bâtiment détecté localement
             Tile buildingTile = detectedLocalBuilding.GetOccupiedTile();
