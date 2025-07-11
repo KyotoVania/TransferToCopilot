@@ -32,7 +32,26 @@ public enum ActionType
     TriggerVictory,
     TriggerDefeat,
     TriggerGameObject,
-    ShowBossWarningBanner
+    ShowBossWarningBanner,
+    SpawnPrefabAtLocation
+}
+
+// --- Classes sérialisables pour les données d'action ---
+
+/// <summary>
+/// Contient les données nécessaires pour faire apparaître un préfabriqué à une position spécifique.
+/// </summary>
+[System.Serializable]
+public class SpawnActionData
+{
+    [Tooltip("Le préfabriqué à faire apparaître (unité ou bâtiment).")]
+    public GameObject prefabToSpawn;
+    
+    [Tooltip("La position où faire apparaître le préfabriqué.")]
+    public Vector3 spawnPosition;
+    
+    [Tooltip("La rotation du préfabriqué (angles d'Euler).")]
+    public Vector3 spawnRotation;
 }
 
 // --- Classe sérialisable pour un événement ---
@@ -67,6 +86,9 @@ public class ScenarioEvent
     // ----- MODIFICATION ICI -----
     [Tooltip("Le nom EXACT du GameObject cible pour les actions comme TriggerGameObject, StartWave, ActivateSpawnerBuilding, etc.")]
     public string actionParameter_GameObjectName;
+    
+    [Tooltip("Liste des objets à faire apparaître (si ActionType = SpawnPrefabAtLocation).")]
+    public List<SpawnActionData> actionParameter_SpawnData = new List<SpawnActionData>();
     // ---------------------------
 }
 

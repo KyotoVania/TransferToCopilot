@@ -99,9 +99,6 @@ public class BoardButtonInteraction : MonoBehaviour,
         // Click feedback animation
         StartCoroutine(ClickFeedbackAnimation());
 
-        // Reset Time.timeScale before loading
-        Time.timeScale = 1f;
-
         if (GameManager.Instance == null)
         {
             Debug.LogError("[BoardButtonInteraction] GameManager.Instance non trouvé!", this);

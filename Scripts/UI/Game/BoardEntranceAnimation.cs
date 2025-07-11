@@ -82,7 +82,7 @@ public class BoardEntranceAnimation : MonoBehaviour
     private IEnumerator AnimateBoardUpwards()
     {
         _isAnimating = true;
-        Debug.Log($"[{gameObject.name} COROUTINE START] Animation 'AnimateBoardUpwards'. startDelay: {startDelay}. Time.timeScale: {Time.timeScale}", this);
+        Debug.Log($"[{gameObject.name} COROUTINE START] Animation 'AnimateBoardUpwards'. startDelay: {startDelay}.", this);
 
         if (startDelay > 0f)
         {

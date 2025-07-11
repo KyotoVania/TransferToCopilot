@@ -60,7 +60,6 @@ public class EnemyUnit : Unit
     // OnEnable est appelé quand l'unité est activée. C'est ici que l'on va mettre la condition.
     protected override void OnEnable()
     {
-        // --- LA CORRECTION PRINCIPALE EST ICI ---
         // On n'active la logique de l'IA (Behavior Graph) que si l'unité N'EST PAS hardcodée.
         if (!IsHardcoded)
         {
@@ -80,11 +79,20 @@ public class EnemyUnit : Unit
              if (enableVerboseLogging) Debug.Log($"[{name}] Agent de comportement NON activé car IsHardcoded est true.");
         }
     }
+	protected override void Awake()
+  	{
+      if (EnemyRegistry.Instance != null)
+      {
+          EnemyRegistry.Instance.Register(this);
+          if (enableVerboseLogging) Debug.Log($"[{name}] EnemyUnit.Awake: Enregistrement immédiat dans EnemyRegistry.");
+      }
 
+      base.Awake();
+  	}
     protected override IEnumerator Start()
     {
         if (m_Agent == null) m_Agent = GetComponent<BehaviorGraphAgent>();
-
+		Debug.Log($"[{name}] EnemyUnit.Start: Composant BehaviorGraphAgent récupéré");
         // Si l'unité EST hardcodée, on désactive l'agent pour être absolument sûr qu'il ne s'exécute pas.
         if(IsHardcoded && m_Agent != null)
         {
@@ -105,16 +113,19 @@ public class EnemyUnit : Unit
         if (enableVerboseLogging) Debug.Log($"[{name}] EnemyUnit.Start: Début du processus d'initialisation. IsHardcoded: {IsHardcoded}");
 
         yield return StartCoroutine(base.Start());
+	
+		Debug.Log($"[{name}] EnemyUnit.Start: Processus de base terminé. devrait etre entrain de start les CharacterStatSheets.");
 
         if (CharacterStatSheets != null)
         {
             InitializeFromCharacterStatsSheets(CharacterStatSheets);
+			Debug.Log($"[{name}] EnemyUnit.Start: Initialisation des CharacterStatSheets terminée.");
         }
         else
         {
             Debug.LogError($"[{name}] EnemyUnit.Start: Aucun CharacterStatSheets n'est assigné !", gameObject);
             yield break;
-        }
+        }	
 
         if (this.isAttached)
         {
@@ -131,10 +142,6 @@ public class EnemyUnit : Unit
             Debug.LogError($"[{name}] EnemyUnit.Start: ÉCHEC de l'attachement à une tuile.", gameObject);
         }
 
-        if (EnemyRegistry.Instance != null)
-        {
-            EnemyRegistry.Instance.Register(this);
-        }
 
         if (enableVerboseLogging)
             Debug.Log($"[{name}] EnemyUnit.Start: Processus d'initialisation terminé.");

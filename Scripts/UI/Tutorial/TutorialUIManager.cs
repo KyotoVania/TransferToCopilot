@@ -80,7 +80,6 @@ public class TutorialUIManager : MonoBehaviour
         while (elapsedTime < fadeDuration)
         {
             // Utiliser unscaledDeltaTime est une bonne pratique pour les animations d'UI
-            // qui ne doivent pas être affectées par un Time.timeScale modifié.
             elapsedTime += Time.unscaledDeltaTime;
             canvasGroup.alpha = Mathf.Lerp(startAlpha, targetAlpha, elapsedTime / fadeDuration);
             yield return null;

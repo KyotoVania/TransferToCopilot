@@ -173,7 +173,6 @@ public abstract class Unit : MonoBehaviour, ITileReservationObserver, ITargetabl
 
         SetState(UnitState.Idle);
 
-        // --- LOGIQUE FUSIONNÉE : Abonnement au système de Fever amélioré ---
         if (FeverManager.Instance != null)
         {
             // Si le mode Fever est déjà à son niveau maximum lors de l'apparition de l'unité,
@@ -198,7 +197,10 @@ public abstract class Unit : MonoBehaviour, ITileReservationObserver, ITargetabl
             Debug.LogWarning($"[{name}] TileReservationController not found. Tile reservation features might not work as expected.");
         }
     }
-
+    protected virtual void Awake()
+    {
+        // Méthode Awake virtuelle pour permettre aux classes dérivées de l'override
+    }
     protected virtual void OnEnable()
     {
        if (isAttached && MusicManager.Instance != null)
@@ -1315,7 +1317,7 @@ public abstract class Unit : MonoBehaviour, ITileReservationObserver, ITargetabl
 
         int level = 1;
         List<EquipmentData_SO> equipment = new List<EquipmentData_SO>();
-
+        Debug.Log($"[{name}] InitializeFromCharacterData: Initializing unit with CharacterData_SO");
         if (this is AllyUnit && PlayerDataManager.Instance != null)
         {
             if (PlayerDataManager.Instance.Data.CharacterProgressData.TryGetValue(characterData.CharacterID, out var progress))
@@ -1353,6 +1355,7 @@ public abstract class Unit : MonoBehaviour, ITileReservationObserver, ITargetabl
        }
 
         this.Health = this.CurrentStats.MaxHealth;
+        
     }
 
     // ITargetable implementation

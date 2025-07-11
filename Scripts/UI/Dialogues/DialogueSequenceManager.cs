@@ -202,22 +202,68 @@ public class DialogueSequenceManager : MonoBehaviour
     }
 
     private void SetUnitsGameObjectsActive(bool shouldBeActive)
+{
+    Debug.Log($"[DialogueSequenceManager] SetUnitsGameObjectsActive called with shouldBeActive: {shouldBeActive}");
+
+    if (!shouldBeActive)
     {
-        if (!shouldBeActive)
+        Debug.Log("[DialogueSequenceManager] Deactivating units...");
+        _deactivatedAllyUnits.Clear();
+        _deactivatedEnemyUnits.Clear();
+
+        // La logique pour les alliés ne change pas
+        if (AllyUnitRegistry.Instance != null)
         {
-            _deactivatedAllyUnits.Clear();_deactivatedEnemyUnits.Clear();
-            if (AllyUnitRegistry.Instance != null)
+            foreach (AllyUnit allyUnit in AllyUnitRegistry.Instance.ActiveAllyUnits.ToList())
             {
-                foreach (AllyUnit allyUnit in AllyUnitRegistry.Instance.ActiveAllyUnits.ToList()){ if (allyUnit != null && allyUnit.gameObject.activeSelf){ _deactivatedAllyUnits.Add(allyUnit.gameObject); allyUnit.gameObject.SetActive(false);}}
+                if (allyUnit != null && allyUnit.gameObject.activeSelf)
+                {
+                    _deactivatedAllyUnits.Add(allyUnit.gameObject);
+                    allyUnit.gameObject.SetActive(false);
+                }
             }
-            GameObject[] enemyGameObjects = GameObject.FindGameObjectsWithTag("Enemy");
-            foreach (GameObject unitGO in enemyGameObjects){ if (unitGO != null && unitGO.activeSelf){ _deactivatedEnemyUnits.Add(unitGO); unitGO.gameObject.SetActive(false);}}
         }
-        else
+
+        // --- NOUVELLE LOGIQUE POUR TROUVER TOUS LES ENNEMIS ---
+        // On cherche tous les composants EnemyUnit, même sur les objets inactifs.
+        EnemyUnit[] allEnemiesInScene = FindObjectsOfType<EnemyUnit>(true); // Le 'true' est crucial !
+        Debug.Log($"[DialogueSequenceManager] Found {allEnemiesInScene.Length} total enemy units (active and inactive).");
+
+        foreach (EnemyUnit enemy in allEnemiesInScene)
         {
-            foreach (GameObject unitGO in _deactivatedAllyUnits){ if (unitGO != null) unitGO.SetActive(true); }
-            foreach (GameObject unitGO in _deactivatedEnemyUnits){ if (unitGO != null) unitGO.SetActive(true); }
-            _deactivatedAllyUnits.Clear();_deactivatedEnemyUnits.Clear();
+            // On l'ajoute à la liste pour la réactivation future.
+            _deactivatedEnemyUnits.Add(enemy.gameObject);
+            
+            // Et on s'assure qu'il est bien désactivé maintenant.
+            if (enemy.gameObject.activeSelf)
+            {
+                enemy.gameObject.SetActive(false);
+                Debug.Log($"[DialogueSequenceManager] Deactivated enemy unit: {enemy.gameObject.name}");
+            }
         }
+        Debug.Log($"[DialogueSequenceManager] Stored {_deactivatedEnemyUnits.Count} enemy units for reactivation.");
     }
+    else
+    {
+        Debug.Log("[DialogueSequenceManager] Reactivating units...");
+        // La réactivation ne change pas, mais elle fonctionnera maintenant pour tous les ennemis
+        foreach (GameObject unitGO in _deactivatedAllyUnits)
+        {
+            if (unitGO != null) unitGO.SetActive(true);
+        }
+
+        foreach (GameObject unitGO in _deactivatedEnemyUnits)
+        {
+            if (unitGO != null)
+            {
+                unitGO.SetActive(true); // C'est ici que l'unité inactive de base sera activée pour la 1ère fois.
+                Debug.Log($"[DialogueSequenceManager] Reactivated enemy unit: {unitGO.name}");
+            }
+        }
+
+        _deactivatedAllyUnits.Clear();
+        _deactivatedEnemyUnits.Clear();
+        Debug.Log("[DialogueSequenceManager] Unit reactivation complete, lists cleared");
+    }
+}
 }

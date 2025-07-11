@@ -330,4 +330,128 @@ public class LevelScenarioManager : MonoBehaviour
             Debug.LogWarning($"[LevelScenarioManager] Le GameObject '{name}' a été trouvé, mais il n'a pas de composant implémentant l'interface IScenarioTriggerable.", this);
         }
     }
+
+    private void ExecuteSpawnPrefabAction(List<SpawnActionData> spawnDataList)
+    {
+        if (spawnDataList == null || spawnDataList.Count == 0)
+        {
+            Debug.LogWarning("[LevelScenarioManager] Aucune donnée de spawn fournie pour l'action SpawnPrefabAtLocation.", this);
+            return;
+        }
+
+        foreach (var spawnData in spawnDataList)
+        {
+            if (spawnData.prefabToSpawn == null)
+            {
+                Debug.LogWarning("[LevelScenarioManager] Un prefab à spawner est null dans la liste SpawnActionData.", this);
+                continue;
+            }
+
+            try
+            {
+                GameObject spawnedObject = Instantiate(spawnData.prefabToSpawn, spawnData.spawnPosition, Quaternion.Euler(spawnData.spawnRotation));
+                
+                Debug.Log($"[LevelScenarioManager] Objet '{spawnData.prefabToSpawn.name}' spawné à la position {spawnData.spawnPosition}.");
+
+                EnemyUnit enemyUnit = spawnedObject.GetComponent<EnemyUnit>();
+                if (enemyUnit != null)
+                {
+                    if (EnemyRegistry.Instance != null)
+                    {
+                        EnemyRegistry.Instance.Register(enemyUnit);
+                        Debug.Log($"[LevelScenarioManager] Unité ennemie '{enemyUnit.name}' enregistrée auprès du EnemyRegistry.");
+                    }
+                    else
+                    {
+                        Debug.LogWarning("[LevelScenarioManager] EnemyRegistry.Instance est null. L'unité ennemie ne peut pas être enregistrée.");
+                    }
+                }
+
+                BossUnit bossUnit = spawnedObject.GetComponent<BossUnit>();
+                if (bossUnit != null)
+                {
+                    bossUnit.OnUnitDestroyed += HandleBossDeath;
+                    Debug.Log($"[LevelScenarioManager] Boss '{bossUnit.name}' enregistré pour les événements de mort.");
+                    
+                    AnimateBossSpawn(spawnedObject);
+                }
+                else
+                {
+                    Building building = spawnedObject.GetComponent<Building>();
+                    if (building != null)
+                    {
+                        AnimateBuildingSpawn(spawnedObject);
+                    }
+                }
+            }
+            catch (System.Exception ex)
+            {
+                Debug.LogError($"[LevelScenarioManager] Erreur lors du spawn de '{spawnData.prefabToSpawn.name}': {ex.Message}", this);
+            }
+        }
+    }
+
+    private void AnimateBossSpawn(GameObject bossObject)
+    {
+        Vector3 originalPosition = bossObject.transform.position;
+        Vector3 airPosition = originalPosition + Vector3.up * 15f;
+        
+        bossObject.transform.position = airPosition;
+        
+        if (bossObject.GetComponent<Rigidbody>() != null)
+        {
+            Debug.Log($"[LevelScenarioManager] Boss '{bossObject.name}' fait une entrée dramatique depuis les airs!");
+        }
+        else
+        {
+            StartCoroutine(AnimateBossFall(bossObject, airPosition, originalPosition));
+        }
+    }
+
+    private System.Collections.IEnumerator AnimateBossFall(GameObject bossObject, Vector3 startPos, Vector3 endPos)
+    {
+        float duration = 2f;
+        float elapsedTime = 0f;
+        
+        while (elapsedTime < duration)
+        {
+            elapsedTime += Time.deltaTime;
+            float t = elapsedTime / duration;
+            t = 1f - (1f - t) * (1f - t);
+            
+            bossObject.transform.position = Vector3.Lerp(startPos, endPos, t);
+            yield return null;
+        }
+        
+        bossObject.transform.position = endPos;
+        Debug.Log($"[LevelScenarioManager] Boss '{bossObject.name}' a atterri!");
+    }
+
+    private void AnimateBuildingSpawn(GameObject buildingObject)
+    {
+        Vector3 originalScale = buildingObject.transform.localScale;
+        buildingObject.transform.localScale = new Vector3(originalScale.x, 0f, originalScale.z);
+        
+        StartCoroutine(AnimateBuildingRise(buildingObject, originalScale));
+    }
+
+    private System.Collections.IEnumerator AnimateBuildingRise(GameObject buildingObject, Vector3 targetScale)
+    {
+        float duration = 1.5f;
+        float elapsedTime = 0f;
+        Vector3 startScale = buildingObject.transform.localScale;
+        
+        while (elapsedTime < duration)
+        {
+            elapsedTime += Time.deltaTime;
+            float t = elapsedTime / duration;
+            t = t * t * (3f - 2f * t);
+            
+            buildingObject.transform.localScale = Vector3.Lerp(startScale, targetScale, t);
+            yield return null;
+        }
+        
+        buildingObject.transform.localScale = targetScale;
+        Debug.Log($"[LevelScenarioManager] Bâtiment '{buildingObject.name}' a émergé du sol!");
+    }
 }

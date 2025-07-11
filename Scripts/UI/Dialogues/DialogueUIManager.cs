@@ -89,7 +89,6 @@ public class DialogueUIManager : MonoBehaviour
 
         _shouldReactivateControls = shouldReactivateControls;
 
-        // AJOUT : Désactiver les contrôles de jeu
         DisableGameplayControls();
 
         _isDisplayingDialogue = true;
