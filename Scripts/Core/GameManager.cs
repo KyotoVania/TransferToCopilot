@@ -37,6 +37,10 @@ public class GameManager : SingletonPersistent<GameManager>
     [SerializeField] private LevelData_SO mainMenuSceneData;
     [SerializeField] private LevelData_SO hubSceneData;
     public static LevelData_SO CurrentLevelToLoad { get; private set; }
+    
+    [Header("Scene Loading")]
+    [SerializeField] private string loadingSceneName = "LoadingScene";
+    [SerializeField] private float minLoadingTime = 2.0f;
 
     // Configuration des états du jeu
     private static readonly Dictionary<GameState, GameStateConfig> _gameStateConfigs = new Dictionary<GameState, GameStateConfig>
@@ -192,26 +196,206 @@ public class GameManager : SingletonPersistent<GameManager>
 
         Debug.Log($"[GameManager] LoadSceneByName: Reçu demande pour '{sceneName}'. État actuel: {CurrentState}, Scène active actuelle: '{_currentActiveSceneName}'.");
 
-        if (CurrentState == GameState.Loading && _currentActiveSceneName == sceneName)
+        if (CurrentState == GameState.Loading)
         {
-            Debug.LogWarning($"[GameManager] La scène '{sceneName}' est déjà en cours de chargement ou est la scène active (et état Loading). Aucune action.");
+            Debug.LogWarning($"[GameManager] Un chargement est déjà en cours. Aucune action pour '{sceneName}'.");
             return;
         }
+
         if (CurrentState != GameState.Loading && _currentActiveSceneName == sceneName)
         {
             Debug.LogWarning($"[GameManager] La scène '{sceneName}' est déjà chargée et active. Passage à l'état {targetStateAfterLoad}.");
-            SetState(targetStateAfterLoad); // Change juste l'état si la scène est déjà la bonne
+            SetState(targetStateAfterLoad);
             return;
         }
 
         if (_loadSceneCoroutine != null)
         {
-            Debug.LogWarning($"[GameManager] Un chargement de scène ('{_currentActiveSceneName}' vers une nouvelle) est déjà en cours. Annulation du nouveau chargement pour '{sceneName}'.");
+            Debug.LogWarning($"[GameManager] Un chargement de scène est déjà en cours. Annulation du nouveau chargement pour '{sceneName}'.");
             return;
         }
-        _loadSceneCoroutine = StartCoroutine(LoadSceneRoutine(sceneName, targetStateAfterLoad));
+
+        _loadSceneCoroutine = StartCoroutine(LoadSceneWithLoadingScreen(sceneName, targetStateAfterLoad));
     }
 
+    /// <summary>
+    /// Coroutine principale qui gère le chargement de scène avec écran de chargement asynchrone.
+    /// Cette méthode orchestre tout le processus de transition entre scènes.
+    /// </summary>
+    private IEnumerator LoadSceneWithLoadingScreen(string sceneNameToLoad, GameState targetStateAfterLoad)
+    {
+        Debug.Log($"[GameManager] LoadSceneWithLoadingScreen: DÉBUT pour '{sceneNameToLoad}'.");
+        
+        // Étape 1 : Passer en état Loading
+        SetState(GameState.Loading);
+
+        // Étape 2 : Charger la scène de chargement
+        Debug.Log($"[GameManager] Chargement de la scène de chargement '{loadingSceneName}'.");
+        AsyncOperation loadingSceneLoad = SceneManager.LoadSceneAsync(loadingSceneName, LoadSceneMode.Additive);
+        
+        if (loadingSceneLoad == null)
+        {
+            Debug.LogError($"[GameManager] Impossible de charger la scène de chargement '{loadingSceneName}'. Fallback vers chargement direct.");
+            yield return StartCoroutine(LoadSceneRoutineFallback(sceneNameToLoad, targetStateAfterLoad));
+            yield break;
+        }
+
+        yield return loadingSceneLoad;
+        Debug.Log($"[GameManager] Scène de chargement '{loadingSceneName}' chargée.");
+
+        // Étape 3 : Décharger l'ancienne scène si elle existe
+        if (!string.IsNullOrEmpty(_currentActiveSceneName) && _currentActiveSceneName != sceneNameToLoad)
+        {
+            Scene sceneToUnload = SceneManager.GetSceneByName(_currentActiveSceneName);
+            if (sceneToUnload.IsValid() && sceneToUnload.isLoaded)
+            {
+                Debug.Log($"[GameManager] Déchargement de la scène '{_currentActiveSceneName}'.");
+                AsyncOperation asyncUnload = SceneManager.UnloadSceneAsync(_currentActiveSceneName);
+                yield return asyncUnload;
+                Debug.Log($"[GameManager] Scène '{_currentActiveSceneName}' déchargée.");
+            }
+        }
+
+        // Étape 4 : Lancer le chargement de la nouvelle scène (LA LIGNE CLÉ)
+        Debug.Log($"[GameManager] Début du chargement asynchrone de '{sceneNameToLoad}'.");
+        AsyncOperation asyncLoad = SceneManager.LoadSceneAsync(sceneNameToLoad, LoadSceneMode.Additive);
+        
+        if (asyncLoad == null)
+        {
+            Debug.LogError($"[GameManager] Échec du chargement de '{sceneNameToLoad}'. Retour au menu principal.");
+            yield return StartCoroutine(UnloadLoadingScreenAndFallback());
+            yield break;
+        }
+
+        // ⭐ LIGNE MAGIQUE : Empêcher l'activation automatique de la scène
+        asyncLoad.allowSceneActivation = false;
+
+        // Étape 5 : Simuler la progression et respecter le délai minimum
+        float startTime = Time.time;
+        LoadingScreenManager loadingManager = FindFirstObjectByType<LoadingScreenManager>();
+
+        // Mettre à jour la progression jusqu'à 90%
+        while (asyncLoad.progress < 0.9f)
+        {
+            float progress = asyncLoad.progress;
+            if (loadingManager != null)
+            {
+                loadingManager.UpdateProgress(progress);
+            }
+            Debug.Log($"[GameManager] Progression du chargement : {(progress * 100):F1}%");
+            yield return null;
+        }
+
+        // La scène est chargée à 90%, mais pas encore activée
+        Debug.Log("[GameManager] Scène chargée à 90%. Attente du délai minimum...");
+        
+        // Attendre le délai minimum restant
+        float elapsedTime = Time.time - startTime;
+        float remainingTime = minLoadingTime - elapsedTime;
+        
+        if (remainingTime > 0)
+        {
+            // Simuler la progression jusqu'à 100% pendant l'attente
+            float simulationTime = 0f;
+            while (simulationTime < remainingTime)
+            {
+                simulationTime += Time.deltaTime;
+                float simulatedProgress = Mathf.Lerp(0.9f, 1.0f, simulationTime / remainingTime);
+                
+                if (loadingManager != null)
+                {
+                    loadingManager.UpdateProgress(simulatedProgress);
+                }
+                
+                yield return null;
+            }
+        }
+
+        // Étape 6 : Activer la nouvelle scène (Le moment magique!)
+        Debug.Log($"[GameManager] Activation de la scène '{sceneNameToLoad}'.");
+        asyncLoad.allowSceneActivation = true;
+
+        // Attendre que l'activation soit complètement terminée
+        yield return asyncLoad;
+
+        // Étape 7 : Finaliser la transition
+        Scene newActiveScene = SceneManager.GetSceneByName(sceneNameToLoad);
+        if (newActiveScene.IsValid() && newActiveScene.isLoaded)
+        {
+            SceneManager.SetActiveScene(newActiveScene);
+            _currentActiveSceneName = newActiveScene.name;
+            Debug.Log($"[GameManager] Scène '{_currentActiveSceneName}' définie comme active.");
+        }
+        else
+        {
+            Debug.LogError($"[GameManager] Impossible de définir '{sceneNameToLoad}' comme scène active.");
+        }
+
+        // Étape 8 : Nettoyage - Décharger la scène de chargement
+        Debug.Log($"[GameManager] Déchargement de la scène de chargement '{loadingSceneName}'.");
+        AsyncOperation unloadLoadingScreen = SceneManager.UnloadSceneAsync(loadingSceneName);
+        yield return unloadLoadingScreen;
+
+        // Étape 9 : Mettre à jour l'état final
+        yield return new WaitForSeconds(0.1f); // Petit délai pour l'initialisation
+        Debug.Log($"[GameManager] Transition terminée. Passage à l'état {targetStateAfterLoad}.");
+        SetState(targetStateAfterLoad);
+        
+        _loadSceneCoroutine = null;
+    }
+
+    /// <summary>
+    /// Méthode de fallback en cas d'échec du chargement de l'écran de chargement
+    /// </summary>
+    private IEnumerator LoadSceneRoutineFallback(string sceneNameToLoad, GameState targetStateAfterLoad)
+    {
+        Debug.Log($"[GameManager] LoadSceneRoutineFallback: Chargement direct de '{sceneNameToLoad}'.");
+
+        // Décharger l'ancienne scène si elle existe
+        if (!string.IsNullOrEmpty(_currentActiveSceneName) && _currentActiveSceneName != sceneNameToLoad)
+        {
+            Scene sceneToUnload = SceneManager.GetSceneByName(_currentActiveSceneName);
+            if (sceneToUnload.IsValid() && sceneToUnload.isLoaded)
+            {
+                AsyncOperation asyncUnload = SceneManager.UnloadSceneAsync(_currentActiveSceneName);
+                yield return asyncUnload;
+            }
+        }
+
+        // Charger la nouvelle scène
+        AsyncOperation asyncLoad = SceneManager.LoadSceneAsync(sceneNameToLoad, LoadSceneMode.Additive);
+        if (asyncLoad != null)
+        {
+            yield return asyncLoad;
+            
+            Scene newActiveScene = SceneManager.GetSceneByName(sceneNameToLoad);
+            if (newActiveScene.IsValid() && newActiveScene.isLoaded)
+            {
+                SceneManager.SetActiveScene(newActiveScene);
+                _currentActiveSceneName = newActiveScene.name;
+            }
+        }
+
+        yield return new WaitForSeconds(0.1f);
+        SetState(targetStateAfterLoad);
+        _loadSceneCoroutine = null;
+    }
+
+    /// <summary>
+    /// Décharge l'écran de chargement et retourne au menu principal en cas d'erreur
+    /// </summary>
+    private IEnumerator UnloadLoadingScreenAndFallback()
+    {
+        AsyncOperation unloadLoadingScreen = SceneManager.UnloadSceneAsync(loadingSceneName);
+        yield return unloadLoadingScreen;
+        
+        SetState(GameState.MainMenu);
+        _currentActiveSceneName = (mainMenuSceneData != null && !string.IsNullOrEmpty(mainMenuSceneData.SceneName)) 
+            ? mainMenuSceneData.SceneName : "MainMenu";
+        _loadSceneCoroutine = null;
+    }
+
+    // Garder l'ancienne méthode pour compatibilité, mais simplifiée
     private IEnumerator LoadSceneRoutine(string sceneNameToLoad, GameState targetStateAfterLoad)
     {
         Debug.Log($"[GameManager] LoadSceneRoutine: DÉBUT pour '{sceneNameToLoad}'. _currentActiveSceneName AVANT déchargement: '{_currentActiveSceneName}'.");

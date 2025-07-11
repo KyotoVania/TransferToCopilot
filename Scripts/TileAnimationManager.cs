@@ -211,4 +211,54 @@ public class TileAnimationManager : MonoBehaviour
         if (curve == null || string.IsNullOrEmpty(curveName)) return;
         curveCache[curveName] = curve;
     }
+
+    /// <summary>
+    /// Nettoie toutes les animations actives. Utilisé lors des transitions de niveau
+    /// pour éviter que les animations d'un niveau continuent dans le suivant.
+    /// </summary>
+    public void ClearAllAnimations()
+    {
+        Debug.Log($"[TileAnimationManager] Nettoyage de {currentActiveAnimations} animations actives.");
+        
+        // Parcourir toutes les animations actives et les compléter proprement
+        for (int i = 0; i < activeAnimations.Count; i++)
+        {
+            if (activeAnimations[i].isActive)
+            {
+                var anim = activeAnimations[i];
+                
+                // Positionner les transforms à leur état final si ils existent encore
+                if (anim.transform != null)
+                {
+                    anim.transform.position = anim.isShakeAnimation ? anim.startPosition : anim.targetPosition;
+                    anim.transform.localScale = anim.targetScale;
+                }
+                
+                // Appeler le callback si il existe
+                try
+                {
+                    anim.onCompleteCallback?.Invoke();
+                }
+                catch (System.Exception ex)
+                {
+                    Debug.LogWarning($"[TileAnimationManager] Erreur lors de l'appel du callback d'animation : {ex.Message}");
+                }
+                
+                // Marquer comme inactif
+                anim.isActive = false;
+                activeAnimations[i] = anim;
+                
+                // Remettre l'index dans la queue des indices libres
+                freeIndices.Enqueue(i);
+            }
+        }
+        
+        // Réinitialiser le compteur
+        currentActiveAnimations = 0;
+        
+        // Nettoyer aussi le cache de courbes si nécessaire
+        curveCache.Clear();
+        
+        Debug.Log("[TileAnimationManager] Toutes les animations ont été nettoyées.");
+    }
 }

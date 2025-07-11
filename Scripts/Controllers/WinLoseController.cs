@@ -31,6 +31,8 @@ public class WinLoseController : MonoBehaviour
     [SerializeField] private GameObject nextLevelBoardObject;
     [Tooltip("Le support du panneau pour le niveau suivant.")]
     [SerializeField] private GameObject nextLevelBoardSleeveObject;
+    [Tooltip("Le conteneur global des éléments 3D de victoire/défaite (à masquer pendant les transitions).")]
+    [SerializeField] private GameObject winScreenGlobalPositionner;
 
     [Header("Dépendances")]
     [SerializeField] private RhythmGameCameraController gameCameraController;
@@ -56,6 +58,8 @@ public class WinLoseController : MonoBehaviour
         {
             Instance = this;
         }
+
+        SetInitialScreenState();
     }
 
     private void Start()
@@ -76,6 +80,7 @@ public class WinLoseController : MonoBehaviour
         if (lobbyBoardSleeveObject != null) lobbyBoardSleeveObject.SetActive(false);
         if (nextLevelBoardObject != null) nextLevelBoardObject.SetActive(false);
         if (nextLevelBoardSleeveObject != null) nextLevelBoardSleeveObject.SetActive(false);
+        if (winScreenGlobalPositionner != null) winScreenGlobalPositionner.SetActive(false); // Masquer le conteneur global
 
         // Activer l'interface de jeu
         if (inGameUiCanvas != null) inGameUiCanvas.SetActive(true);
@@ -108,7 +113,7 @@ public class WinLoseController : MonoBehaviour
         HandleRewards();
 
         DeactivateAllUnitGameObjects();
-
+        if (winScreenGlobalPositionner != null) winScreenGlobalPositionner.SetActive(true);
         if (winBannerObject != null) winBannerObject.SetActive(true);
         if (lobbyBoardObject != null) lobbyBoardObject.SetActive(true);
         if (lobbyBoardSleeveObject != null) lobbyBoardSleeveObject.SetActive(true);
@@ -130,6 +135,7 @@ public class WinLoseController : MonoBehaviour
         DisableTargetingSystemOnGameOver();
 
         DeactivateAllUnitGameObjects();
+        if (winScreenGlobalPositionner != null) winScreenGlobalPositionner.SetActive(true);
 
         if (loseBannerObject != null) loseBannerObject.SetActive(true);
         if (lobbyBoardObject != null) lobbyBoardObject.SetActive(true);
@@ -275,6 +281,26 @@ public class WinLoseController : MonoBehaviour
             gameCameraController.UnlockZoomOnly();
             gameCameraController.ResetCameraToInitialState();
         }
+    }
+
+    /// <summary>
+    /// Masque immédiatement tous les éléments d'écran de fin de partie sans réinitialiser l'état du jeu.
+    /// Utilisé pendant les transitions pour éviter l'affichage temporaire des éléments 3D.
+    /// </summary>
+    public void HideWinLoseElementsImmediately()
+    {
+        Debug.Log("[WinLoseController] Masquage immédiat de tous les éléments d'écran de fin.", this);
+        
+        if (gameOverOverlayPanel != null) gameOverOverlayPanel.SetActive(false);
+        if (winBannerObject != null) winBannerObject.SetActive(false);
+        if (loseBannerObject != null) loseBannerObject.SetActive(false);
+        if (lobbyBoardObject != null) lobbyBoardObject.SetActive(false);
+        if (lobbyBoardSleeveObject != null) lobbyBoardSleeveObject.SetActive(false);
+        if (nextLevelBoardObject != null) nextLevelBoardObject.SetActive(false);
+        if (nextLevelBoardSleeveObject != null) nextLevelBoardSleeveObject.SetActive(false);
+        if (winScreenGlobalPositionner != null) winScreenGlobalPositionner.SetActive(false);
+        
+        IsGameOverScreenActive = false;
     }
 
     private void OnDestroy()

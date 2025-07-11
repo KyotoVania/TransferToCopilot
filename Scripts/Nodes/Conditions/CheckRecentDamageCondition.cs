@@ -101,9 +101,9 @@ public class CheckRecentDamageCondition : Unity.Behavior.Condition
 
         if (!blackboard.GetVariable(BB_SELF_UNIT, out bbSelfUnit)) success = false;
         if (!blackboard.GetVariable(BB_INTERACTION_TARGET_UNIT, out bbInteractionTargetUnit)) success = false;
-        Debug.Log($"[{GameObject?.name}] CheckRecentDamageCondition: Variables Blackboard mises en cache : " +
-                  $"{(bbSelfUnit != null ? BB_SELF_UNIT : "non trouvé")}, " +
-                  $"{(bbInteractionTargetUnit != null ? BB_INTERACTION_TARGET_UNIT : "non trouvé")}");
+        //Debug.Log($"[{GameObject?.name}] CheckRecentDamageCondition: Variables Blackboard mises en cache : " +
+        //          $"{(bbSelfUnit != null ? BB_SELF_UNIT : "non trouvé")}, " +
+        //          $"{(bbInteractionTargetUnit != null ? BB_INTERACTION_TARGET_UNIT : "non trouvé")}");
         blackboardVariablesCached = success;
         return success;
     }

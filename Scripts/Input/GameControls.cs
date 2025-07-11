@@ -416,6 +416,17 @@ public partial class @GameControls: IInputActionCollection2, IDisposable
                 },
                 {
                     ""name"": """",
+                    ""id"": ""d65e9ffd-a57f-43e7-9794-5595144858ca"",
+                    ""path"": ""<Keyboard>/space"",
+                    ""interactions"": """",
+                    ""processors"": """",
+                    ""groups"": """",
+                    ""action"": ""ToggleCameraLock"",
+                    ""isComposite"": false,
+                    ""isPartOfComposite"": false
+                },
+                {
+                    ""name"": """",
                     ""id"": ""ddcb90cd-2372-43f2-94fc-8b146ae4a9dd"",
                     ""path"": ""<Gamepad>/leftStick"",
                     ""interactions"": """",
