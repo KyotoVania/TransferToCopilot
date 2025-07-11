@@ -69,12 +69,12 @@ public class MenuManager : MonoBehaviour
         
         if (timelineManager == null)
         {
-            timelineManager = FindObjectOfType<TimelineManager>();
+            timelineManager = FindFirstObjectByType<TimelineManager>();
         }
         
         if (cameraManager == null)
         {
-            cameraManager = FindObjectOfType<MenuCameraManager>();
+            cameraManager = FindFirstObjectByType<MenuCameraManager>();
         }
         
         // Sélectionner le bouton Play par défaut
@@ -98,7 +98,7 @@ public class MenuManager : MonoBehaviour
         // Trouver l'OptionsManager si non assigné
         if (optionsManager == null)
         {
-            optionsManager = FindObjectOfType<OptionsManager>();
+            optionsManager = FindFirstObjectByType<OptionsManager>();
         }
     }
 

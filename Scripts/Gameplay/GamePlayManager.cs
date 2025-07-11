@@ -15,9 +15,7 @@ namespace Gameplay
         
         private GlobalSpellManager globalSpellManager;
         private UnitSpawner unitSpawner;
-        [Header("Configuration")]
-        [SerializeField] private string globalSpellsResourcePath = "Data/GlobalSpells";
-        
+                
 
         // Les cooldowns des unités sont maintenant gérés par UnitSpawner
         public IReadOnlyDictionary<string, float> UnitCooldowns => unitSpawner?.UnitCooldowns;
@@ -173,7 +171,7 @@ namespace Gameplay
 
         private void TriggerCombatState()
         {
-            var gameStateManager = FindObjectOfType<GameStateManager>();
+            var gameStateManager = FindFirstObjectByType<GameStateManager>();
             if (gameStateManager != null && gameStateManager.CurrentState == GameStateManager.GameState.Exploration)
             {
                 gameStateManager.UpdateGameState(GameStateManager.GameState.Combat);

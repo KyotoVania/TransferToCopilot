@@ -43,9 +43,7 @@ public partial class FindSmartStepNode : Unity.Behavior.Action
     private string nodeInstanceId;
 
     [Header("Node Debug Options")]
-    [SerializeField] private bool debugStandableCheckLog = false;
     [SerializeField] private bool debugEngagementTileSearchLog = false;
-    [SerializeField] private bool debugAStarStepsLog = false;
 
     // Classe interne pour A* (inchangée)
     private class PathNode : IComparable<PathNode>

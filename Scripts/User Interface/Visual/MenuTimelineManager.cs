@@ -13,7 +13,6 @@ public class MenuTimelineManager : MonoBehaviour
     [SerializeField] private Color sunsetFogColor = new Color(1f, 0.6f, 0.2f);
     [SerializeField] private float dayFogDensity = 0.01f;
     [SerializeField] private float sunsetFogDensity = 0.02f;
-    [SerializeField] private float fogTransitionDuration = 2f;
 
     [Header("Lighting Settings")]
     [SerializeField] private Light mainLight;

@@ -35,7 +35,7 @@ public class TimelineManager : MonoBehaviour
 
     private void FindAllPlayableDirectors()
     {
-        PlayableDirector[] foundDirectors = FindObjectsOfType<PlayableDirector>();
+        PlayableDirector[] foundDirectors = FindObjectsByType<PlayableDirector>(FindObjectsSortMode.None);
         playableDirectors = foundDirectors;
         
         Debug.Log($"Trouvé {foundDirectors.Length} PlayableDirectors dans la scène");

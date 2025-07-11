@@ -60,8 +60,8 @@ public class DialogueUIManager : MonoBehaviour
         dialoguePanel.SetActive(false);
         _currentSequenceQueue = new Queue<DialogueEntry>();
 
-        _sequenceController = FindObjectOfType<SequenceController>();
-        _inputTargetingManager = FindObjectOfType<InputTargetingManager>();
+        _sequenceController = FindFirstObjectByType<SequenceController>();
+        _inputTargetingManager = FindFirstObjectByType<InputTargetingManager>();
     }
 
     void Start()

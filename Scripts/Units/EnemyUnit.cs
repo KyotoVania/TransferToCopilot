@@ -18,8 +18,7 @@ public class EnemyUnit : Unit
 
     [Header("Enemy Settings")]
     [SerializeField] public bool enableVerboseLogging = true;
-    [Tooltip("Si true, l'unité attaquera les bâtiments joueurs en priorité.")]
-    [SerializeField] private bool prioritizePlayerBuildings = true;
+   
 
     [Tooltip("Mode de comportement initial de l'unité.")]
     [SerializeField] private CurrentBehaviorMode initialBehaviorMode = CurrentBehaviorMode.Defensive;

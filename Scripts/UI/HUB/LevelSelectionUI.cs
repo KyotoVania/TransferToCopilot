@@ -135,7 +135,6 @@ public class LevelSelectionUI : MonoBehaviour
         EventSystem.current.RaycastAll(pointerData, results);
         
         // Vérifier si on hover un item de niveau
-        bool foundHoveredItem = false;
         foreach (var result in results)
         {
             LevelSelectItemUI itemUI = result.gameObject.GetComponentInParent<LevelSelectItemUI>();
@@ -143,7 +142,6 @@ public class LevelSelectionUI : MonoBehaviour
             {
                 // Sélectionner automatiquement l'item survolé
                 EventSystem.current.SetSelectedGameObject(itemUI.gameObject);
-                foundHoveredItem = true;
                 break;
             }
         }

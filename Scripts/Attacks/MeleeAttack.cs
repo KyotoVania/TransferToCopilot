@@ -22,7 +22,7 @@ public class MeleeAttack : MonoBehaviour, IAttack
 
     private void Awake()
     {
-        musicManager = FindObjectOfType<MusicManager>();
+		musicManager = FindFirstObjectByType<MusicManager>();
         if (musicManager == null && syncToBeats)
         {
             Debug.LogWarning($"[{name}] MusicManager not found but syncToBeats is enabled. Attack timing might be inconsistent.");

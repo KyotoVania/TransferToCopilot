@@ -20,9 +20,6 @@ public class RangedAttack : MonoBehaviour, IAttack
     [Header("Debug")]
     [SerializeField] private bool showAttackLogs = true;
 
-    [Header("Fever Mode")]
-    [Tooltip("Angle de dispersion pour les projectiles supplémentaires en Mode Fever.")]
-    [SerializeField] private float feverSpreadAngle = 10f;
 
     [Header("Fever Mode")]
     [Tooltip("L'effet visuel d'impact à utiliser quand le mode Fever est actif.")]

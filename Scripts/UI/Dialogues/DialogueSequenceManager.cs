@@ -42,7 +42,7 @@ public class DialogueSequenceManager : MonoBehaviour
 
     void Awake()
     {
-        playerCameraController = FindObjectOfType<RhythmGameCameraController>();
+        playerCameraController = FindFirstObjectByType<RhythmGameCameraController>();
         if (cinemachineBrain == null && Camera.main != null)
         {
             cinemachineBrain = Camera.main.GetComponent<CinemachineBrain>();
@@ -161,7 +161,7 @@ public class DialogueSequenceManager : MonoBehaviour
         if (cinemachineBrain != null) cinemachineBrain.enabled = false;
         if (playerCameraController != null) playerCameraController.controlsLocked = false;
 
-        TutorialManager tutorialManager = FindObjectOfType<TutorialManager>();
+        TutorialManager tutorialManager = FindFirstObjectByType<TutorialManager>();
         if (tutorialManager != null)
         {
             tutorialManager.StartTutorial();

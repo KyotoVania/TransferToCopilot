@@ -76,7 +76,7 @@ public class GlobalSpellsUIController : MonoBehaviour
     {
         // Récupérer les instances des managers.
         globalSpellManager = FindFirstObjectByType<GlobalSpellManager>();
-        _sequenceController = FindObjectOfType<SequenceController>();
+        _sequenceController = FindFirstObjectByType<SequenceController>();
         _inputManager = InputManager.Instance; // NOUVEAU
 
         // Valider que les managers nécessaires ont été trouvés.

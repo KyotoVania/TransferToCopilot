@@ -62,10 +62,6 @@ public class RhythmGameCameraController : MonoBehaviour
     [Tooltip("Maximum Y position (zoom) for perspective camera")]
     [SerializeField] private float perspectiveMaxY = 50f;
 
-    [TitleGroup("Debug")]
-    [ReadOnly]
-    [SerializeField] private bool isDragging = false;
-
     [TitleGroup("Lock Mode Settings")]
     [SerializeField] private float lockFollowSpeed = 5f;
     [SerializeField] private float lockDistance = 10f;
@@ -167,7 +163,6 @@ public class RhythmGameCameraController : MonoBehaviour
         
         if (isCurrentlyDragging)
         {
-            isDragging = true;
 
             float horizontalMovement = -cameraPanInput.x * mousePanSpeed * 0.01f;
             float verticalMovement = -cameraPanInput.y * mousePanSpeed * 0.01f;
@@ -187,7 +182,6 @@ public class RhythmGameCameraController : MonoBehaviour
         }
         else
         {
-            isDragging = false;
         }
     }
     
@@ -390,7 +384,6 @@ public class RhythmGameCameraController : MonoBehaviour
         isCameraLocked = false;
         currentTarget = null;
         
-        // MODIFIÉ : Au lieu de retourner à la position pré-lock, on reste où on est et on fait juste un dézoom
         if (_cameraAnimationCoroutine != null) StopCoroutine(_cameraAnimationCoroutine);
         _cameraAnimationCoroutine = StartCoroutine(AnimateUnlockZoomCoroutine());
     }

@@ -19,8 +19,6 @@
         [Tooltip("Durée du fade in/out")]
         [SerializeField] private float fadeDuration = 0.3f;
         
-        [Tooltip("Nombre de clignotements")]
-        [SerializeField] private int blinkCount = 4;
 
         // S'abonne aux événements quand le manager est activé.
         private void OnEnable()

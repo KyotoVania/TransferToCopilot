@@ -44,7 +44,6 @@ public class SequenceController : MonoBehaviour
     public float goodTolerancePercent = 0.4f;
 
     private bool _hasInputForCurrentBeat = false;
-    private bool isSequenceActive = false;
     private float lastBeatTime;
     private float _currentBeatDuration = 1f;
     private bool isResponding = false;
@@ -177,7 +176,6 @@ public class SequenceController : MonoBehaviour
 
         if (timeToClosestBeat <= perfectToleranceInSeconds)
         {
-            isSequenceActive = true;
             _hasInputForCurrentBeat = true;
             perfectCount++;
             SetSwitchAndPlay(inputSounds.perfectSwitch, "Perfect", playSwitchContainerEvent, keySwitch); // Appel audio
@@ -186,7 +184,6 @@ public class SequenceController : MonoBehaviour
         }
         else if (timeToClosestBeat <= goodToleranceInSeconds)
         {
-            isSequenceActive = true;
             _hasInputForCurrentBeat = true;
             SetSwitchAndPlay(inputSounds.goodSwitch, "Good", playSwitchContainerEvent, keySwitch); // Appel audio
             currentSequence.Add(key);
@@ -281,7 +278,6 @@ public class SequenceController : MonoBehaviour
 
     private void ResetSequence()
     {
-        isSequenceActive = false;
         perfectCount = 0;
         currentSequence.Clear();
         OnSequenceDisplayCleared?.Invoke();

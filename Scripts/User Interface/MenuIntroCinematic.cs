@@ -27,11 +27,6 @@ public class MenuIntroCinematic : MonoBehaviour, IMenuObserver
     [SerializeField] private CinemachineCamera startCamera;
     [SerializeField] private CinemachineCamera impactCamera;
     [SerializeField] private CinemachineCamera endCamera;
-    [SerializeField] private float cameraBlendTime = 1.5f;
-
-    // MODIFICATION: Plus besoin de gameSceneName ici si on appelle directement LoadHub()
-    // [Header("Scene Transition")]
-    // [SerializeField] private string gameSceneName = "GameScene"; // Remplacé par un appel direct à GameManager.LoadHub()
     [SerializeField] private float transitionDelay = 1f;
 
     // Internal state
@@ -105,8 +100,7 @@ public class MenuIntroCinematic : MonoBehaviour, IMenuObserver
             {
                 impactCamera.Priority = 30;
             }
-                // Pas besoin d'attendre cameraBlendTime ici si le son/spawn est immédiat après le switch
-                // yield return new WaitForSeconds(cameraBlendTime);
+        
             PlaySoundEffect(meteorSoundEffect);
             GameObject meteor = Instantiate(meteorPrefab, meteorSpawnPoint.position, meteorSpawnPoint.rotation);
             spawnedObjects.Add(meteor);
@@ -132,8 +126,7 @@ public class MenuIntroCinematic : MonoBehaviour, IMenuObserver
         if (endCamera != null)
         {
             endCamera.Priority = 40;
-            // Pas besoin d'attendre cameraBlendTime ici si la suite est la fin de la cinématique
-            // yield return new WaitForSeconds(cameraBlendTime);
+       
         }
 
         // La durée restante est gérée par cinematicDuration. S'assurer que les actions ci-dessus ne la dépassent pas.
