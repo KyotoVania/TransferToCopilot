@@ -23,6 +23,9 @@ public class MusicManager : MonoBehaviour
     public AK.Wwise.Switch hubSwitch; 
     [Tooltip("Switch Wwise pour l'état de fin de partie (victoire/défaite).")]
     public AK.Wwise.Switch endGameSwitch;
+    
+
+    
 
     [Header("Wwise RTPCs")]
     [Tooltip("RTPC pour l'intensité du mode Fever.")]

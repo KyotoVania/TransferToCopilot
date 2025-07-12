@@ -82,8 +82,8 @@ namespace ScriptableObjects
     public GameObject MenuAnimationPrefab;
     [Title("Audio (Wwise)")]
     [InfoBox("Assigner les Events Wwise spécifiques à ce personnage.")]
-    public AK.Wwise.Event InvocationSound; // Décommenté - Assigne tes events Wwise ici
     public AK.Wwise.Event SelectionSound;
+    public AK.Wwise.Switch CharacterSwitch; // Switch pour les personnages, utile pour les sons de sélection
     // Ajouter d'autres sons si nécessaire (attaque, capacité spéciale, etc.)
 
     [Title("Statut Initial")]

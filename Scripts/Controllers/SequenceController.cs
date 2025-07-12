@@ -24,9 +24,10 @@ public class InputSoundVariantsKey
     public AK.Wwise.Switch VSwitch;
 }
 
+
+
 public class SequenceController : MonoBehaviour
 {
-    // --- Variables de Séquence et de Timing (inchangées) ---
     private List<CharacterData_SO> availablePlayerCharactersInTeam = new List<CharacterData_SO>();
     private List<GlobalSpellData_SO> availableGlobalSpells = new List<GlobalSpellData_SO>();
 
