@@ -23,6 +23,10 @@ public class DialogueStep
 
 public class DialogueSequenceManager : MonoBehaviour
 {
+    [Header("Debug/Dev")]
+    [Tooltip("Active ce booléen pour bypasser complètement les dialogues et le tutoriel en mode debug.")]
+    [SerializeField] private bool bypassDialoguesAndTutorial = false;
+
     [Header("Étapes de la Séquence")]
     [SerializeField] private List<DialogueStep> dialogueSteps = new List<DialogueStep>();
 
@@ -105,6 +109,35 @@ public class DialogueSequenceManager : MonoBehaviour
     private IEnumerator PlayFullSequence()
     {
         isSequenceRunning = true;
+
+        // Si le mode bypass est activé, on skip tout et on va directement à la fin
+        if (bypassDialoguesAndTutorial)
+        {
+            Debug.Log("[DialogueSequenceManager] Mode bypass activé - Skip des dialogues et du tutoriel");
+            
+            // On réactive tout ce qui doit l'être
+            SetUnitsGameObjectsActive(true);
+            SetMainUIChildrenActive(true); // AJOUT : Réactiver l'UI principale
+            
+            if (cinemachineBrain != null) cinemachineBrain.enabled = false;
+            if (playerCameraController != null) playerCameraController.controlsLocked = false;
+            
+            // On désactive le fade si il était actif
+            if (fadeToBlackImage != null)
+            {
+                fadeToBlackImage.gameObject.SetActive(false);
+            }
+            
+            // AJOUT : On force la réactivation des contrôles de gameplay si DialogueUIManager est présent
+            if (DialogueUIManager.Instance != null)
+            {
+                DialogueUIManager.Instance.ForceEnableGameplayControls();
+            }
+            
+            isSequenceRunning = false;
+            Debug.Log("Séquence de dialogue bypassée.");
+            yield break;
+        }
 
         if (playerCameraController != null) playerCameraController.controlsLocked = true;
         //SetMainUIChildrenActive(false);

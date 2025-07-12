@@ -4,6 +4,10 @@ using ScriptableObjects;
 
 public class TutorialManager : MonoBehaviour
 {
+    [Header("Debug/Dev")]
+    [Tooltip("Active ce booléen pour bypasser complètement le tutoriel en mode debug.")]
+    [SerializeField] private bool bypassTutorial = false;
+
     [Header("Configuration du Tuto")]
     [SerializeField] private TutorialUIManager uiManager;
     [SerializeField] private TutorialSequence_SO sequenceToPlay;
@@ -68,6 +72,33 @@ public class TutorialManager : MonoBehaviour
 
     public void StartTutorial()
     {
+        // Si le mode bypass est activé, on skip complètement le tutoriel
+        if (bypassTutorial)
+        {
+            Debug.Log("[TutorialManager] Mode bypass activé - Skip du tutoriel");
+            
+            // On s'assure que le panel de tutoriel est caché
+            if (uiManager != null)
+            {
+                uiManager.HidePanel();
+            }
+            
+            // On affiche tous les éléments d'UI du tutoriel immédiatement
+            ShowInvocationUI();
+            ShowComboUI();
+            ShowGoldUI();
+            ShowUnitsAndSpellsUI();
+            
+            // On s'assure que le tutoriel n'est pas marqué comme actif
+            IsTutorialActive = false;
+            
+            // On déclenche l'événement de fin de tutoriel pour que les autres systèmes sachent qu'on a "terminé"
+            OnTutorialCompleted?.Invoke();
+            
+            Debug.Log("Tutoriel bypassé - Tous les éléments UI sont maintenant visibles.");
+            return;
+        }
+
         if (IsTutorialActive || (tutorialQueue != null && tutorialQueue.Count > 0)) return;
         if (TutorialBannerObserver.Instance != null) TutorialBannerObserver.Instance.ResetStatus();
 

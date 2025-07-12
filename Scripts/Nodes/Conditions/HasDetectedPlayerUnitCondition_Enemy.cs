@@ -14,10 +14,8 @@ using Unity.Properties;
 )]
 public partial class HasDetectedPlayerUnitCondition_Enemy : Unity.Behavior.Condition
 {
-    // --- CORRECTION PRINCIPALE ICI ---
-    // On change le type de AllyUnit vers Unit pour correspondre au nœud de scan.
+   
     private BlackboardVariable<Unit> bbDetectedPlayerUnit;
-    // --- FIN DE LA CORRECTION ---
 
     private bool blackboardVariableCached = false;
     private BehaviorGraphAgent agent;

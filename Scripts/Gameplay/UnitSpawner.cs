@@ -49,7 +49,7 @@
                 Debug.LogWarning("[UnitSpawner] Tentative d'invocation avec un CharacterData_SO nul.");
                 return;
             }
-
+            Debug.Log($"[UnitSpawner] Tentative d'invocation de l'unité : {characterData.DisplayName} (ID: {characterData.CharacterID} avec perfectCount: {perfectCount})");
             // 1. Vérification du Cooldown
             if (_unitCooldowns.ContainsKey(characterData.CharacterID) && Time.time < _unitCooldowns[characterData.CharacterID])
             {

@@ -383,7 +383,7 @@ public abstract class Unit : MonoBehaviour, ITileReservationObserver, ITargetabl
         HandleMovementOnBeat();
         if (!IsMoving)
         {
-            HandleAttackOnBeat();
+            //HandleAttackOnBeat();
         }
         else
         {
@@ -741,29 +741,23 @@ public abstract class Unit : MonoBehaviour, ITileReservationObserver, ITargetabl
 
     public virtual void TakeDamage(int damage, Unit attacker = null)
     {
-        if (debugUnitCombat) Debug.Log($"[{name}] TakeDamage called with {damage} damage from {attacker?.name ?? "unknown attacker"}.");
-        if (damage <= 0) return;
+         if (debugUnitCombat) Debug.Log($"[{name}] TakeDamage called with {damage} damage from {attacker?.name ?? "unknown attacker"}.");
+    if (damage <= 0) return;
 
-        if (attacker != null)
+    if (attacker != null)
+    {
+        OnUnitAttacked?.Invoke(attacker, this, damage);
+        int actualDamage = Mathf.Max(1, damage - this.Defense);
+        Health -= actualDamage;
+        LastAttackerInfo = new LastDamageEvent { Attacker = attacker, Time = Time.time };
+        if (debugUnitCombat)
         {
-            OnUnitAttacked?.Invoke(attacker, this, damage);
-            float levelDifference = attacker.Level - this.Level;
-            float damageMultiplier = 1.0f + (levelDifference * 0.1f);
-            damageMultiplier = Mathf.Max(0.1f, damageMultiplier);
-            int modifiedDamage = Mathf.RoundToInt(damage * damageMultiplier);
-            int actualDamage = Mathf.Max(1, modifiedDamage - this.Defense);
-            Health -= actualDamage;
-            LastAttackerInfo = new LastDamageEvent { Attacker = attacker, Time = Time.time };
-            if (debugUnitCombat)
-            {
-                Debug.Log($"[{name}] Attaquant Lvl {attacker.Level} vs Défenseur Lvl {this.Level}. " +
-                          $"Multiplicateur: {damageMultiplier:F2}. Dégâts modifiés: {modifiedDamage}. " +
-                          $"Dégâts finaux après défense ({this.Defense}): {actualDamage}. " +
-                          $"PV restants: {Health}/{CurrentStats.MaxHealth}");
-            }
+            Debug.Log($"[{name}] Dégâts finaux après défense ({this.Defense}): {actualDamage}. " +
+                      $"PV restants: {Health}/{CurrentStats.MaxHealth}");
         }
-        else
-        {
+    }
+    else
+    {
             int actualDamage = Mathf.Max(1, damage - this.Defense);
             Health -= actualDamage;
             if (debugUnitCombat) Debug.Log($"[{name}] a subi {actualDamage} dégâts environnementaux. PV restants: {Health}/{CurrentStats.MaxHealth}");
@@ -779,7 +773,6 @@ public abstract class Unit : MonoBehaviour, ITileReservationObserver, ITargetabl
         }
     }
 
-    // --- FEATURE DU FICHIER 1 : Méthode Die() modifiée ---
     protected virtual void Die()
     {
         if (debugUnitCombat) Debug.Log($"[{name}] Died.");

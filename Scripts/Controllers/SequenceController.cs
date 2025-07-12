@@ -70,7 +70,6 @@ public class SequenceController : MonoBehaviour
         availableGlobalSpells = new List<GlobalSpellData_SO>();
     }
 
-    // --- MISE À JOUR MAJEURE : Abonnement au nouveau Input System ---
     private void OnEnable()
     {
         // On s'abonne directement aux actions du InputManager
@@ -86,7 +85,6 @@ public class SequenceController : MonoBehaviour
         }
     }
 
-    // --- MISE À JOUR MAJEURE : Se désabonner proprement ---
     private void OnDisable()
     {
         if (MusicManager.Instance != null)
@@ -103,7 +101,6 @@ public class SequenceController : MonoBehaviour
 
     private void Start()
     {
-        // Utilisation du singleton pour plus de robustesse
         musicManager = MusicManager.Instance;
         if (musicManager == null)
         {
@@ -119,13 +116,11 @@ public class SequenceController : MonoBehaviour
         Debug.Log($"[SequenceController] Initialized with {availablePlayerCharactersInTeam.Count} character(s) in team and {availableGlobalSpells.Count} global spell(s).");
     }
 
-    // SUPPRIMÉ : La méthode Update() n'est plus utilisée pour les inputs.
 
     #endregion
 
     #region Gestion des Inputs
 
-    // --- NOUVEAU : Méthodes de rappel pour le nouveau Input System ---
     private void OnRhythmInput_Left(InputAction.CallbackContext context)
     {
         ProcessInput(KeyCode.X);
@@ -141,7 +136,6 @@ public class SequenceController : MonoBehaviour
         ProcessInput(KeyCode.V);
     }
 
-    // --- AMÉLIORATION : ProcessInput intègre maintenant la logique audio Wwise ---
     private void ProcessInput(KeyCode key)
     {
         if (isResponding) return;
@@ -209,7 +203,7 @@ public class SequenceController : MonoBehaviour
         // La longueur de la séquence peut varier, donc on vérifie après chaque touche
         // si une séquence valide est complétée.
         bool sequenceMatched = false;
-
+        Debug.Log($"[SequenceController] Validating sequence: {string.Join("-", currentSequence)}");
         foreach (CharacterData_SO characterData in availablePlayerCharactersInTeam)
         {
             if (characterData?.InvocationSequence != null &&
