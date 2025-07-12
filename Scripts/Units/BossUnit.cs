@@ -6,7 +6,6 @@ using ScriptableObjects;
 [RequireComponent(typeof(AudioSource))]
 public class BossUnit : EnemyUnit
 {
-    // --- NOUVEAU : Machine à états pour le cycle d'action ---
     private enum BossActionState { Waiting, Preparing, Impacting, Moving }
     private BossActionState _currentActionState = BossActionState.Waiting;
 

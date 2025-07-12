@@ -225,7 +225,10 @@ public class DialogueSequenceManager : MonoBehaviour
         }
 
         // On cherche tous les composants EnemyUnit, même sur les objets inactifs.
-        EnemyUnit[] allEnemiesInScene = FindObjectsOfType<EnemyUnit>(true); // Le 'true' est crucial !
+        EnemyUnit[] allEnemiesInScene = FindObjectsByType<EnemyUnit>(
+            FindObjectsInactive.Include,
+            FindObjectsSortMode.None
+        );
         Debug.Log($"[DialogueSequenceManager] Found {allEnemiesInScene.Length} total enemy units (active and inactive).");
 
         foreach (EnemyUnit enemy in allEnemiesInScene)

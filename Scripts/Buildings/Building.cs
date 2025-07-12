@@ -12,7 +12,16 @@ public abstract class Building : MonoBehaviour, ITargetable
 
     [Header("Combat")]
     [SerializeField] protected bool debugBuildingCombat = true;
-    public virtual bool IsTargetable => true; // Most buildings should be targetable by default
+    
+    [Header("Targeting")]
+    [Tooltip("Si true, ce bâtiment peut être ciblé par défaut (souris, manette, bannière)")]
+    [SerializeField] private bool isTargetableByDefault = true;
+    
+    // État actuel de ciblage (peut changer pendant le jeu)
+    private bool _isCurrentlyTargetable;
+    
+    // Propriété publique pour l'interface ITargetable
+    public virtual bool IsTargetable => _isCurrentlyTargetable;
 
     [Header("Effects")]
     [SerializeField] protected GameObject destructionVFXPrefab; // Prefab for destruction visual effect
@@ -46,6 +55,17 @@ public abstract class Building : MonoBehaviour, ITargetable
 
     // Protected accessor for use in derived classes.
     protected BuildingStats Stats => buildingStats;
+
+    protected virtual void Awake()
+    {
+        // Initialiser l'état de ciblage avec la valeur par défaut
+        _isCurrentlyTargetable = isTargetableByDefault;
+        
+        if (debugBuildingCombat)
+        {
+            Debug.Log($"[BUILDING] {gameObject.name} initialized with IsTargetable = {_isCurrentlyTargetable}");
+        }
+    }
 
     protected virtual IEnumerator Start()
     {
@@ -83,6 +103,30 @@ public abstract class Building : MonoBehaviour, ITargetable
             }
             yield return new WaitForSeconds(0.2f);
         }
+    }
+
+    /// <summary>
+    /// Active ou désactive la possibilité de cibler ce bâtiment
+    /// </summary>
+    public void SetTargetable(bool targetable)
+    {
+        if (_isCurrentlyTargetable != targetable)
+        {
+            _isCurrentlyTargetable = targetable;
+            
+            if (debugBuildingCombat)
+            {
+                Debug.Log($"[BUILDING] {gameObject.name} targetable state changed to: {targetable}");
+            }
+        }
+    }
+
+    /// <summary>
+    /// Inverse l'état de ciblage actuel
+    /// </summary>
+    public void ToggleTargetable()
+    {
+        SetTargetable(!_isCurrentlyTargetable);
     }
 
     // Method to handle incoming damage

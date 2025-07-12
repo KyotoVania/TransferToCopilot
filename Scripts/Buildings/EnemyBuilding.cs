@@ -15,8 +15,7 @@ public class EnemyBuilding : Building
     private Slider healthBarSlider;
     private TextMeshProUGUI healthText;
 
-    // Override for targetability
-    public override bool IsTargetable => true;
+
 
     // Effects for damage and destruction
     [Header("Effects")]

@@ -390,6 +390,7 @@ public class RhythmGameCameraController : MonoBehaviour
 
     /// <summary>
     /// NOUVEAU : Anime un dézoom fluide lors de l'unlock au lieu de retourner à la position pré-lock
+    /// ET restaure la rotation pré-lock pour éviter la désorientation du joueur
     /// </summary>
     private IEnumerator AnimateUnlockZoomCoroutine()
     {
@@ -397,6 +398,10 @@ public class RhythmGameCameraController : MonoBehaviour
         
         float duration = unlockAnimationDuration * 0.5f; // Dézoom plus rapide que l'animation complète
         float elapsedTime = 0f;
+        
+        // Sauvegarder la rotation actuelle pour l'interpolation
+        Quaternion startRotation = transform.rotation;
+        Quaternion targetRotation = _preLockRotation; // Restaurer la rotation pré-lock
         
         if (isOrthographic)
         {
@@ -408,6 +413,8 @@ public class RhythmGameCameraController : MonoBehaviour
                 elapsedTime += Time.deltaTime;
                 float t = Mathf.SmoothStep(0, 1, elapsedTime / duration);
                 cameraComponent.orthographicSize = Mathf.Lerp(startSize, targetSize, t);
+                // Restaurer progressivement la rotation
+                transform.rotation = Quaternion.Slerp(startRotation, targetRotation, t);
                 yield return null;
             }
             
@@ -425,11 +432,16 @@ public class RhythmGameCameraController : MonoBehaviour
                 elapsedTime += Time.deltaTime;
                 float t = Mathf.SmoothStep(0, 1, elapsedTime / duration);
                 transform.position = Vector3.Lerp(startPosition, targetPosition, t);
+                // Restaurer progressivement la rotation
+                transform.rotation = Quaternion.Slerp(startRotation, targetRotation, t);
                 yield return null;
             }
             
             transform.position = targetPosition;
         }
+        
+        // S'assurer que la rotation finale est exactement celle pré-lock
+        transform.rotation = targetRotation;
         
         controlsLocked = false;
         _cameraAnimationCoroutine = null;
@@ -472,4 +484,3 @@ public class RhythmGameCameraController : MonoBehaviour
 
     public bool IsLocked => isCameraLocked;
 }
-
