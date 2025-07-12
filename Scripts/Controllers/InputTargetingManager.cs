@@ -312,22 +312,58 @@ public class InputTargetingManager : MonoBehaviour
     private void ScanForTargetableObjects()
     {
         targetableObjects.Clear();
-        
-        // Find all objects that implement ITargetable interface
-        var allTargetables = FindObjectsByType<MonoBehaviour>(FindObjectsSortMode.None).OfType<ITargetable>()
+
+        var allTargetables = FindObjectsByType<MonoBehaviour>(FindObjectsSortMode.None)
+            .OfType<ITargetable>()
             .Where(t => t != null && t.IsTargetable && t.GameObject != null)
             .Select(t => t.GameObject);
 
         targetableObjects.AddRange(allTargetables);
 
-        // Sort by position for consistent cycling
+        // NOUVELLE LOGIQUE DE TRI
         targetableObjects = targetableObjects
-            .OrderBy(obj => obj.transform.position.x)
-            .ThenBy(obj => obj.transform.position.z)
+            .Select(obj => new
+            {
+                GameObject = obj,
+                Tile = GetTileFromTarget(obj) // Helper pour récupérer la tuile
+            })
+            .Where(x => x.Tile != null) // Ne garder que les objets sur une tuile
+            .OrderBy(x => x.Tile.row)   // Trier par ligne (row) d'abord
+            .ThenBy(x => x.Tile.column) // Puis par colonne (column)
+            .Select(x => x.GameObject)  // Resélectionner le GameObject
             .ToList();
 
-        if(debugLogs) Debug.Log($"[InputTargetingManager] Found {targetableObjects.Count} targetable objects (buildings + boss units) for gamepad cycling.");
+        if (debugLogs)
+        {
+            Debug.Log($"[InputTargetingManager] Trouvé {targetableObjects.Count} objets ciblables pour le gamepad. Ordre de cycle :");
+            for(int i = 0; i < targetableObjects.Count; i++)
+            {
+                var tile = GetTileFromTarget(targetableObjects[i]);
+                Debug.Log($"  {i+1}: {targetableObjects[i].name} sur la tuile ({tile.column}, {tile.row})");
+            }
+        }
     }
+    
+    // Helper pour récupérer la tuile d'un objet
+    private Tile GetTileFromTarget(GameObject target)
+    {
+        if (target == null) return null;
+
+        var unit = target.GetComponent<Unit>();
+        if (unit != null)
+        {
+            return unit.GetOccupiedTile();
+        }
+
+        var building = target.GetComponent<Building>();
+        if (building != null)
+        {
+            return building.GetOccupiedTile();
+        }
+
+        return null;
+    }
+
 
     private void SelectClosestTargetAsDefault()
     {
