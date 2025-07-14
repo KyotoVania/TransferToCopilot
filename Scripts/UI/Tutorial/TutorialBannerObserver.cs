@@ -41,7 +41,7 @@ public class TutorialBannerObserver : MonoBehaviour, Game.Observers.IBannerObser
         
         // --- LOGIQUE DU ZAP APPLIQUÉE ICI ---
         // On vérifie si l'équipe du bâtiment est Ennemie ou Neutre.
-        if (targetBuilding.Team == TeamType.Enemy || targetBuilding.Team == TeamType.Neutral)
+        if (targetBuilding.Team == TeamType.Enemy || targetBuilding.Team == TeamType.Neutral || targetBuilding.Team == TeamType.NeutralEnemy)
         {
             Debug.Log($"[TutorialBannerObserver] Le joueur a placé la bannière sur une cible valide : {targetBuilding.name} (Équipe: {targetBuilding.Team}). L'étape du tutoriel est validée !");
             

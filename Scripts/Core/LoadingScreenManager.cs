@@ -64,7 +64,7 @@ public class LoadingScreenManager : MonoBehaviour
         {
             // La progression de LoadSceneAsync s'arrête à 0.9. On la mappe sur 1.0 pour que la barre aille jusqu'au bout.
             float displayProgress = Mathf.Clamp01(progress / 0.9f);
-            loadingProgressBar.value = displayProgress *10; // Convertir en pourcentage
+            loadingProgressBar.value = Mathf.CeilToInt(progress * 100);
             Debug.Log($"[LoadingScreenManager] Mise à jour de la progression : {displayProgress * 100}%");
         }
 

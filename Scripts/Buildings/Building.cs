@@ -201,6 +201,11 @@ public abstract class Building : MonoBehaviour, ITargetable
         // Destroy the gameObject
         Destroy(gameObject);
     }
+	//make a puclic method to call die from outside
+	public void CallDie()
+    {
+        Die();
+    }
 
     protected void AttachToTile(Tile tile)
     {

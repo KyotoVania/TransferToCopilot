@@ -13,7 +13,7 @@ public class HexGridManager : MonoBehaviour
     [Tooltip("La coordonnée de ligne logique la plus en bas (peut être négative).")]
     public int minRow = 0;    // NOUVEAU
     [Tooltip("La coordonnée de ligne logique la plus en haut.")]
-    public int maxRow = 9;    // ANCIENNEMENT 'rows', renommé pour clarté
+    public int maxRow = 9;    // ANCIENNEMENT 
 
     [Header("Tile Physical Settings")] // MODIFIÉ: Titre de section
     public float tileWidth = 1f;

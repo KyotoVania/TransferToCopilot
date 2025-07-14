@@ -53,6 +53,7 @@ public class BossUnit : EnemyUnit
         if (IsMoving || _isAttacking) return;
         
         _beatCounter++;
+        Debug.Log($"[BossUnit] Beat {_beatCounter} sur {MovementDelay}.");
 
         // --- CYCLE D'ATTENTE ---
         // Si le boss est en attente, on vérifie s'il est temps de commencer l'attaque.
@@ -202,7 +203,6 @@ public class BossUnit : EnemyUnit
         if (_currentHitCounter >= HitsToStun)
         {
             _currentActionState = BossActionState.Waiting; // Interrompt l'attaque en cours si stun
-            _beatCounter = 0;
             StopAllCoroutines();
             IsMoving = false;
             _isAttacking = false;
@@ -249,17 +249,22 @@ public class BossUnit : EnemyUnit
     
     private void DestroyTargetBuilding()
     {
+        if (TargetBuildingToDestroy == null)
+        {
+            TargetBuildingToDestroy = FindClosestAllyBuilding();
+        }
+
         if (TargetBuildingToDestroy != null)
         {
             if (enableVerboseLogging) Debug.Log($"[BossUnit] Destination atteinte ! Destruction de la cible principale : {TargetBuildingToDestroy.name}");
-            
+        
             // On détruit directement l'objet référencé.
-            Destroy(TargetBuildingToDestroy.gameObject);
+            TargetBuildingToDestroy.CallDie();
         }
         else
         {
-            // Message d'erreur si aucune cible n'est définie, pour aider au débogage.
-            Debug.LogWarning("[BossUnit] Le boss a atteint sa destination, mais aucune 'TargetBuildingToDestroy' n'a été assignée dans l'inspecteur !");
+            // Message d'erreur si aucune cible n'est trouvée, même après recherche automatique
+            Debug.LogError("[BossUnit] Le boss a atteint sa destination, mais aucun bâtiment allié n'a pu être trouvé à proximité pour être détruit !");
         }
     }
 	
@@ -358,5 +363,54 @@ public class BossUnit : EnemyUnit
         }
         return finalAttackableTiles;
     }
+    
+/// <summary>
+/// Trouve le bâtiment allié (PlayerBuilding) le plus proche du boss.
+/// Fix sauvage pour les cas où TargetBuildingToDestroy n'est pas assigné.
+/// </summary>
+private PlayerBuilding FindClosestAllyBuilding()
+{
+    if (enableVerboseLogging) Debug.Log("[BossUnit] Recherche automatique du bâtiment allié le plus proche...");
+    
+    // Trouver tous les PlayerBuilding dans la scène
+    PlayerBuilding[] allPlayerBuildings = FindObjectsByType<PlayerBuilding>(FindObjectsSortMode.None);
+    
+    if (allPlayerBuildings.Length == 0)
+    {
+        Debug.LogWarning("[BossUnit] Aucun PlayerBuilding trouvé dans la scène !");
+        return null;
+    }
+
+    PlayerBuilding closestBuilding = null;
+    float closestDistance = float.MaxValue;
+    Vector3 bossPosition = transform.position;
+
+    foreach (PlayerBuilding building in allPlayerBuildings)
+    {
+        if (building == null || building.gameObject == null) continue;
+        
+        // Vérifier que le bâtiment est bien de l'équipe Player
+        if (building.Team != TeamType.Player) continue;
+
+        float distance = Vector3.Distance(bossPosition, building.transform.position);
+        
+        if (distance < closestDistance)
+        {
+            closestDistance = distance;
+            closestBuilding = building;
+        }
+    }
+
+    if (closestBuilding != null)
+    {
+        if (enableVerboseLogging) Debug.Log($"[BossUnit] Bâtiment allié le plus proche trouvé : {closestBuilding.name} à {closestDistance:F2} unités de distance.");
+    }
+    else
+    {
+        Debug.LogWarning("[BossUnit] Aucun bâtiment allié valide trouvé !");
+    }
+
+    return closestBuilding;
+}
     #endregion
 }

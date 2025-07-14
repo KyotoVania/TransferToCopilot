@@ -4,7 +4,13 @@
     using System.Collections.Generic;
     using System.Linq;
     using ScriptableObjects;
-
+    [System.Serializable]
+    public class InvocationQualityVariants
+    {
+        public AK.Wwise.Switch PerfectSwitch;
+        public AK.Wwise.Switch GreatSwitch;
+        public AK.Wwise.Switch FailedSwitch;
+    }
     /// <summary>
     /// Gère la logique spécifique de l'invocation d'unités,
     /// incluant la vérification des coûts, des cooldowns et la recherche de tuiles de spawn.
@@ -18,6 +24,14 @@
         // Références aux contrôleurs nécessaires
         private GoldController _goldController;
         private MusicManager _musicManager;
+        
+        
+        [Header("Wwise Invocation Settings")]
+        [Tooltip("Événement Wwise principal à jouer pour l'invocation.")]
+        public AK.Wwise.Event PlayUnitInvocationEvent;
+
+        [Tooltip("Contient les références aux Switchs Wwise pour la qualité de l'invocation.")]
+        public InvocationQualityVariants InvocationSounds;
 
         // Dictionnaires pour gérer les cooldowns
         private Dictionary<string, float> _unitCooldowns = new Dictionary<string, float>();
@@ -83,7 +97,32 @@
             // 4. Dépenser l'or
             _goldController.RemoveGold(characterData.GoldCost);
             Debug.Log($"[UnitSpawner] Or dépensé : {characterData.GoldCost}. Or restant : {_goldController.GetCurrentGold()}");
-            
+            AK.Wwise.Switch qualitySwitch;
+
+            if (perfectCount >= 3)
+            {
+                qualitySwitch = InvocationSounds.PerfectSwitch;
+            }
+            else if (perfectCount == 2)
+            {
+                qualitySwitch = InvocationSounds.GreatSwitch;
+            }
+            else
+            {
+                qualitySwitch = InvocationSounds.FailedSwitch;
+            }
+            AK.Wwise.Switch unitTypeSwitch = characterData.CharacterSwitch;
+        
+            // S'assurer que les références ne sont pas nulles avant de les utiliser
+            if (PlayUnitInvocationEvent == null || qualitySwitch == null || unitTypeSwitch == null)
+            {
+                Debug.LogError("Configuration Wwise manquante sur le UnitSpawner ou le CharacterData_SO. Veuillez vérifier les références dans l'inspecteur.");
+                return;
+            }
+            unitTypeSwitch.SetValue(gameObject);
+            qualitySwitch.SetValue(gameObject);
+            PlayUnitInvocationEvent.Post(gameObject);
+
             // 5. Instancier et initialiser l'unité
             Vector3 spawnPosition = spawnTile.transform.position + Vector3.up * 0.1f; // Léger offset Y
             GameObject unitGO = Instantiate(characterData.GameplayUnitPrefab, spawnPosition, Quaternion.identity);
