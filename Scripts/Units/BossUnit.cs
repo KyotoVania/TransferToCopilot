@@ -3,47 +3,110 @@ using System.Collections.Generic;
 using UnityEngine;
 using ScriptableObjects;
 
+/// <summary>
+/// Represents a boss enemy unit with hardcoded AI logic and unique mechanics.
+/// Handles stun, movement, and destruction behaviors, and overrides standard AI behavior tree usage.
+/// </summary>
 [RequireComponent(typeof(AudioSource))]
 public class BossUnit : EnemyUnit
 {
+    /// <summary>
+    /// Defines the possible action states for the boss.
+    /// </summary>
     private enum BossActionState { Waiting, Preparing, Impacting, Moving }
+    /// <summary>
+    /// Current action state of the boss.
+    /// </summary>
     private BossActionState _currentActionState = BossActionState.Waiting;
 
-    // --- L'INTERRUPTEUR ---
+    /// <summary>
+    /// Indicates that this unit uses hardcoded logic instead of behavior trees.
+    /// </summary>
     protected override bool IsHardcoded => true;
 
     [Header("Boss Settings")]
+    /// <summary>
+    /// Final destination coordinates for the boss unit.
+    /// </summary>
     public Vector2Int FinalDestinationCoordinates;
-	[Tooltip("Faites glisser ici le bâtiment principal que le boss doit détruire à la fin.")]
+    /// <summary>
+    /// The main building the boss must destroy at the end of its sequence.
+    /// </summary>
+    [Tooltip("Assign the main building for the boss to destroy.")]
     public Building TargetBuildingToDestroy;
     
-	[Header("Stun Mechanic")]
-    [Tooltip("Nombre de coups reçus avant que le boss ne soit étourdi.")]
+    [Header("Stun Mechanic")]
+    /// <summary>
+    /// Number of hits required to stun the boss.
+    /// </summary>
+    [Tooltip("Number of hits before the boss is stunned.")]
     public int HitsToStun = 10;
-    [Tooltip("Durée de l'étourdissement en nombre de battements (beats).")]
+    /// <summary>
+    /// Duration of the stun in beats.
+    /// </summary>
+    [Tooltip("Stun duration in beats.")]
     public int StunDurationInBeats = 8;
 
     [Header("Stun Effects")]
+    /// <summary>
+    /// Visual effect prefab for stun.
+    /// </summary>
     [SerializeField] private GameObject stunVFX;
+    /// <summary>
+    /// Audio clip played when stunned.
+    /// </summary>
     [SerializeField] private AudioClip stunSFX;
+    /// <summary>
+    /// Vertical offset for stun VFX placement.
+    /// </summary>
     [SerializeField] private float stunVFX_Y_Offset = 2.5f;
 
     [Header("Destruction Effects")]
+    /// <summary>
+    /// Visual effect prefab for destruction.
+    /// </summary>
     [SerializeField] private GameObject destructionVFX;
+    /// <summary>
+    /// Audio clip played on destruction.
+    /// </summary>
     [SerializeField] private AudioClip destructionSFX;
     
-    // --- Variables privées ---
+    // --- Private Variables ---
+    /// <summary>
+    /// Tracks the current number of hits received.
+    /// </summary>
     private int _currentHitCounter = 0;
+    /// <summary>
+    /// Tracks the number of beats remaining while stunned.
+    /// </summary>
     private int _stunBeatCounter = 0;
+    /// <summary>
+    /// Indicates whether the boss is currently stunned.
+    /// </summary>
     private bool _isStunned = false;
+    /// <summary>
+    /// Maximum health value for the boss.
+    /// </summary>
     private int _maximumHealth = 0;
 
-    // --- Références aux composants ---
+    // --- Component References ---
+    /// <summary>
+    /// Reference to the boss movement system.
+    /// </summary>
     private BossMovementSystem bossMovementSystem;
+    /// <summary>
+    /// Reference to the audio source component.
+    /// </summary>
     private AudioSource audioSource;
+    /// <summary>
+    /// Gets the target position for the boss.
+    /// </summary>
     protected override Vector2Int? TargetPosition => FinalDestinationCoordinates;
 
-    // --- GESTION DU RYTHME (LOGIQUE PRINCIPALE REFACTORISÉE) ---
+    /// <summary>
+    /// Handles rhythm beat events and manages boss state transitions.
+    /// </summary>
+    /// <param name="beatDuration">Duration of the current beat.</param>
     protected override void OnRhythmBeat(float beatDuration)
     {
         // On gère d'abord les états qui interrompent le cycle normal (stun, destination atteinte).
@@ -98,8 +161,11 @@ public class BossUnit : EnemyUnit
         }
     }
     
-    // --- PHASES D'ACTION EN COROUTINES ---
-
+    /// <summary>
+    /// Executes the preparation phase of the boss's attack sequence.
+    /// </summary>
+    /// <param name="beatDuration">Duration of the current beat.</param>
+    /// <returns>Coroutine for preparation animation.</returns>
     private IEnumerator ExecutePreparationPhase(float beatDuration)
     {
         _isAttacking = true;
@@ -111,6 +177,11 @@ public class BossUnit : EnemyUnit
         _isAttacking = false;
     }
 
+    /// <summary>
+    /// Executes the impact phase of the boss's attack sequence.
+    /// </summary>
+    /// <param name="beatDuration">Duration of the current beat.</param>
+    /// <returns>Coroutine for impact animation and damage.</returns>
     private IEnumerator ExecuteImpactPhase(float beatDuration)
     {
         _isAttacking = true;
@@ -121,6 +192,10 @@ public class BossUnit : EnemyUnit
         _isAttacking = false;
     }
 
+    /// <summary>
+    /// Executes the movement phase of the boss's action sequence.
+    /// </summary>
+    /// <returns>Coroutine for movement logic.</returns>
     private IEnumerator ExecuteMovePhase()
     {
         Tile nextCentralTile = GetNextTileTowardsDestination();
@@ -135,8 +210,10 @@ public class BossUnit : EnemyUnit
         SetState(UnitState.Idle);
     }
 
-    // --- GESTION DES ÉTATS ET AUTRES MÉTHODES (peu de changements ici) ---
-
+    /// <summary>
+    /// Handles interrupt states such as stun or reaching the target location.
+    /// </summary>
+    /// <returns>True if an interrupt state is active; otherwise, false.</returns>
     private bool HandleInterruptStates()
     {
         if (_isStunned)
@@ -163,7 +240,6 @@ public class BossUnit : EnemyUnit
         return false;
     }
     
-    // Le reste du script (Die, TakeDamage, StunSequence, etc.) reste inchangé.
     #region Unchanged Methods
     public void TakePercentageDamage(float percentage)
     {
@@ -365,49 +441,42 @@ public class BossUnit : EnemyUnit
     }
     
 /// <summary>
-/// Trouve le bâtiment allié (PlayerBuilding) le plus proche du boss.
-/// Fix sauvage pour les cas où TargetBuildingToDestroy n'est pas assigné.
+/// Finds the closest allied building (PlayerBuilding) to the boss.
+/// Used as a fallback if TargetBuildingToDestroy is not assigned.
 /// </summary>
+/// <returns>The closest PlayerBuilding if found; otherwise, null.</returns>
 private PlayerBuilding FindClosestAllyBuilding()
 {
-    if (enableVerboseLogging) Debug.Log("[BossUnit] Recherche automatique du bâtiment allié le plus proche...");
-    
-    // Trouver tous les PlayerBuilding dans la scène
+    if (enableVerboseLogging) Debug.Log("[BossUnit] Automatically searching for the closest allied building...");
+    // Finds all PlayerBuilding objects in the scene
     PlayerBuilding[] allPlayerBuildings = FindObjectsByType<PlayerBuilding>(FindObjectsSortMode.None);
-    
     if (allPlayerBuildings.Length == 0)
     {
-        Debug.LogWarning("[BossUnit] Aucun PlayerBuilding trouvé dans la scène !");
+        Debug.LogWarning("[BossUnit] No PlayerBuilding found in the scene!");
         return null;
     }
-
     PlayerBuilding closestBuilding = null;
     float closestDistance = float.MaxValue;
     Vector3 bossPosition = transform.position;
-
     foreach (PlayerBuilding building in allPlayerBuildings)
     {
         if (building == null || building.gameObject == null) continue;
-        
-        // Vérifier que le bâtiment est bien de l'équipe Player
+        // Ensure the building belongs to the Player team
         if (building.Team != TeamType.Player) continue;
-
         float distance = Vector3.Distance(bossPosition, building.transform.position);
-        
         if (distance < closestDistance)
         {
             closestDistance = distance;
             closestBuilding = building;
         }
     }
-
     if (closestBuilding != null)
     {
-        if (enableVerboseLogging) Debug.Log($"[BossUnit] Bâtiment allié le plus proche trouvé : {closestBuilding.name} à {closestDistance:F2} unités de distance.");
+        if (enableVerboseLogging) Debug.Log($"[BossUnit] Closest allied building found: {closestBuilding.name} at {closestDistance:F2} units distance.");
     }
     else
     {
-        Debug.LogWarning("[BossUnit] Aucun bâtiment allié valide trouvé !");
+        Debug.LogWarning("[BossUnit] No valid allied building found!");
     }
 
     return closestBuilding;

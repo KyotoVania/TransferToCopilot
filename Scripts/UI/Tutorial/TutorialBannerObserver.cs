@@ -1,15 +1,34 @@
 using UnityEngine;
 
-// Cette classe est un Singleton simple qui écoute les événements de la bannière
-// et déclenche son propre événement pour le TutorialManager.
+/// <summary>
+/// Singleton observer class that monitors banner placement events and triggers tutorial progression.
+/// Implements the IBannerObserver interface to listen for banner placement actions during tutorial sequences.
+/// Ensures that banner placement on valid enemy or neutral buildings advances the tutorial state.
+/// </summary>
 public class TutorialBannerObserver : MonoBehaviour, Game.Observers.IBannerObserver
 {
+    /// <summary>
+    /// Singleton instance for global access to the tutorial banner observer.
+    /// Ensures only one instance exists throughout the application lifecycle.
+    /// </summary>
     public static TutorialBannerObserver Instance { get; private set; }
     
+    /// <summary>
+    /// Event triggered when the player successfully places a banner on a valid building during tutorial.
+    /// Tutorial systems can subscribe to this event to advance tutorial progression.
+    /// </summary>
     public event System.Action OnBannerPlacedOnBuilding;
 
+    /// <summary>
+    /// Flag to track whether the banner has been placed once during the tutorial.
+    /// Prevents multiple triggers of the tutorial advancement event.
+    /// </summary>
     private bool hasBeenPlacedOnce = false;
 
+    /// <summary>
+    /// Initializes the singleton instance and ensures only one TutorialBannerObserver exists.
+    /// Destroys duplicate instances to maintain singleton pattern integrity.
+    /// </summary>
     private void Awake()
     {
         if (Instance == null)
@@ -22,6 +41,13 @@ public class TutorialBannerObserver : MonoBehaviour, Game.Observers.IBannerObser
         }
     }
 
+    /// <summary>
+    /// Handles banner placement events from the banner system.
+    /// Validates that the banner is placed on appropriate tutorial targets (enemy/neutral buildings).
+    /// Triggers tutorial progression event when valid placement occurs.
+    /// </summary>
+    /// <param name="column">The grid column where the banner was placed.</param>
+    /// <param name="row">The grid row where the banner was placed.</param>
     public void OnBannerPlaced(int column, int row)
     {
         // On récupère le bâtiment ciblé directement depuis le singleton BannerController.
@@ -39,8 +65,6 @@ public class TutorialBannerObserver : MonoBehaviour, Game.Observers.IBannerObser
             return;
         }
         
-        // --- LOGIQUE DU ZAP APPLIQUÉE ICI ---
-        // On vérifie si l'équipe du bâtiment est Ennemie ou Neutre.
         if (targetBuilding.Team == TeamType.Enemy || targetBuilding.Team == TeamType.Neutral || targetBuilding.Team == TeamType.NeutralEnemy)
         {
             Debug.Log($"[TutorialBannerObserver] Le joueur a placé la bannière sur une cible valide : {targetBuilding.name} (Équipe: {targetBuilding.Team}). L'étape du tutoriel est validée !");
@@ -56,7 +80,6 @@ public class TutorialBannerObserver : MonoBehaviour, Game.Observers.IBannerObser
         }
     }
 
-    // Méthode pour réinitialiser le statut si un nouveau tutoriel commence
     public void ResetStatus()
     {
         hasBeenPlacedOnce = false;

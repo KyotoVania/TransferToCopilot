@@ -162,6 +162,7 @@ public class PlayerBuilding : Building
         audioSource.spatialBlend = 1.0f; // 3D sound
         audioSource.rolloffMode = AudioRolloffMode.Linear;
         audioSource.maxDistance = 20f;
+        yield return StartCoroutine(base.Start());
 
         // Setup health bar if needed
         if (showHealthBar && healthBarPrefab != null)
@@ -172,15 +173,12 @@ public class PlayerBuilding : Building
         // Subscribe to the damage event
         Building.OnBuildingDamaged += OnAnyBuildingDamaged;
 
-        // --- NOUVEAU ---
         // Vérifier l'état du tutoriel au démarrage. Si le manager n'existe pas ou que le tuto est déjà fini, on active l'or.
         if (TutorialManager.Instance == null || !TutorialManager.IsTutorialActive)
         {
             isGoldGenerationActive = true;
         }
-        // --- FIN NOUVEAU ---
 
-        yield return StartCoroutine(base.Start());
 
         // Initialize reserve tiles system
         InitializeReserveTiles();
@@ -459,6 +457,11 @@ public class PlayerBuilding : Building
         {
             healthBarSlider.maxValue = MaxHealth;
             healthBarSlider.value = CurrentHealth;
+			Debug.Log($"[ALLY BUILDING] {gameObject.name} health bar updated: {CurrentHealth}/{MaxHealth}");
+        }
+        else
+        {
+            Debug.LogWarning($"[ALLY BUILDING] {gameObject.name} health bar slider is null, cannot update health bar.");
         }
 
         if (healthText != null)

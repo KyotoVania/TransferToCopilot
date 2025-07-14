@@ -123,15 +123,14 @@ public class MenuIntroCinematic : MonoBehaviour, IMenuObserver
             }
         }
 
-        if (endCamera != null)
-        {
-            endCamera.Priority = 40;
-       
-        }
+        // Removed the transition to endCamera - staying on impactCamera
+        // if (endCamera != null)
+        // {
+        //     endCamera.Priority = 40;
+        // }
 
-        // La durée restante est gérée par cinematicDuration. S'assurer que les actions ci-dessus ne la dépassent pas.
-        // On peut calculer le temps déjà écoulé pour ajuster l'attente.
-        float timeElapsedSoFar = 0.5f + (meteorPrefab != null ? fireDelay : fireDelay) + (endCamera != null ? 0f : 0f) ; // Simplification, ajuster si blendTimes sont réintroduits
+        // Calculate remaining wait time without endCamera transition
+        float timeElapsedSoFar = 0.5f + (meteorPrefab != null ? fireDelay : fireDelay);
 
         float remainingWait = cinematicDuration - timeElapsedSoFar;
         if (remainingWait > 0)

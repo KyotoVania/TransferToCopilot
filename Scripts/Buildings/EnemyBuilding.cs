@@ -68,18 +68,18 @@ public class EnemyBuilding : Building
         audioSource.rolloffMode = AudioRolloffMode.Linear;
         audioSource.maxDistance = 20f;
 
-        // Setup health bar if needed
-        if (showHealthBar && healthBarPrefab != null)
-        {
-            CreateHealthBar();
-        }
+   
 
         // Subscribe to the damage event
         Building.OnBuildingDamaged += OnAnyBuildingDamaged;
 
         // Call base implementation to handle tile attachment, etc.
         yield return StartCoroutine(base.Start());
-
+        // Setup health bar if needed
+        if (showHealthBar && healthBarPrefab != null)
+        {
+            CreateHealthBar();
+        }
         Debug.Log($"[ENEMY BUILDING] {gameObject.name} initialized as {Team} team and ready for combat!");
     }
 
