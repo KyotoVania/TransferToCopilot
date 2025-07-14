@@ -99,6 +99,10 @@ public class BossUnit : EnemyUnit
     /// </summary>
     private AudioSource audioSource;
     /// <summary>
+    /// Reference to the health bar controller for displaying boss health.
+    /// </summary>
+    private HealthBarController healthBarController;
+    /// <summary>
     /// Gets the target position for the boss.
     /// </summary>
     protected override Vector2Int? TargetPosition => FinalDestinationCoordinates;
@@ -247,6 +251,9 @@ public class BossUnit : EnemyUnit
         int damageToTake = Mathf.RoundToInt(_maximumHealth * (percentage / 100f));
         Health -= damageToTake;
 
+        // Update health bar after taking damage
+        UpdateHealthBar();
+
         if (Health <= 0)
         {
             Health = 0;
@@ -276,6 +283,10 @@ public class BossUnit : EnemyUnit
     {
         if (_isStunned) return;
         _currentHitCounter++;
+        
+        // Update health bar after taking damage
+        UpdateHealthBar();
+        
         if (_currentHitCounter >= HitsToStun)
         {
             _currentActionState = BossActionState.Waiting; // Interrompt l'attaque en cours si stun
@@ -317,10 +328,33 @@ public class BossUnit : EnemyUnit
         yield return base.Start();
         bossMovementSystem = GetComponent<BossMovementSystem>();
         audioSource = GetComponent<AudioSource>();
+        
+        // Initialize health bar controller
+        healthBarController = GetComponent<HealthBarController>();
+        if (healthBarController == null)
+        {
+            Debug.LogWarning($"[BossUnit] HealthBarController not found on {gameObject.name}. Health bar will not be displayed.");
+        }
+        
         _maximumHealth = Health;
+        
+        // Update health bar with initial values
+        UpdateHealthBar();
+        
         if (bossMovementSystem == null) Debug.LogError("Le composant BossMovementSystem est manquant !");
         yield return new WaitForEndOfFrame();
         OccupyAdjacentTiles();
+    }
+    
+    /// <summary>
+    /// Updates the health bar display with current health values.
+    /// </summary>
+    private void UpdateHealthBar()
+    {
+        if (healthBarController != null)
+        {
+            healthBarController.UpdateHealth(Health, _maximumHealth);
+        }
     }
     
     private void DestroyTargetBuilding()
