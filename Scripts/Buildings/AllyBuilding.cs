@@ -5,84 +5,153 @@ using UnityEngine.UI;
 using TMPro;
 using Sirenix.OdinInspector;
 
+/// <summary>
+/// Represents a building controlled by the player.
+/// Features unit production, gold generation, health visualization, and reserve tile management.
+/// Supports defensive positioning system for allied units.
+/// </summary>
 public class PlayerBuilding : Building
 {
+    /// <summary>
+    /// Serializable class representing a unit production sequence.
+    /// </summary>
     [System.Serializable]
     public class UnitSequence
     {
+        /// <summary>
+        /// The key sequence required to produce this unit.
+        /// </summary>
         [ListDrawerSettings(ShowFoldout = true)]
         public List<KeyCode> sequence;
+        /// <summary>
+        /// The unit prefab to instantiate when sequence is completed.
+        /// </summary>
         public GameObject unitPrefab;
     }
 
+    /// <summary>
+    /// List of unit sequences this building can produce.
+    /// </summary>
     [SerializeField, ListDrawerSettings(ShowFoldout = true)]
     private List<UnitSequence> unitSequences;
 
+    /// <summary>
+    /// Counter for tracking beats for gold generation timing.
+    /// </summary>
     private int beatCounter = 0;
 
+    /// <summary>
+    /// Whether gold generation is currently active (disabled during tutorial).
+    /// </summary>
     private bool isGoldGenerationActive = false;
-    // --- FIN NOUVEAU ---
 
     [Header("Visual Feedback")]
+    /// <summary>
+    /// Prefab for the health bar UI element.
+    /// </summary>
     [SerializeField] private GameObject healthBarPrefab;
+    /// <summary>
+    /// Vertical offset for health bar positioning.
+    /// </summary>
     [SerializeField] private float healthBarOffset = 1.5f;
+    /// <summary>
+    /// Whether to display the health bar.
+    /// </summary>
     [SerializeField] private bool showHealthBar = true;
 
-    // Health bar components
+    /// <summary>
+    /// Instance of the health bar GameObject.
+    /// </summary>
     private GameObject healthBarInstance;
+    /// <summary>
+    /// Slider component for health bar.
+    /// </summary>
     private Slider healthBarSlider;
+    /// <summary>
+    /// Text component for health display.
+    /// </summary>
     private TextMeshProUGUI healthText;
 
-    // Effects for damage and repair
     [Header("Effects")]
+    /// <summary>
+    /// Visual effect prefab for damage events.
+    /// </summary>
     [SerializeField] private GameObject damageVFXPrefab;
+    /// <summary>
+    /// Visual effect prefab for repair events.
+    /// </summary>
     [SerializeField] private GameObject repairVFXPrefab;
+    /// <summary>
+    /// Audio clip for damage sound effects.
+    /// </summary>
     [SerializeField] private AudioClip damageSound;
+    /// <summary>
+    /// Audio clip for repair sound effects.
+    /// </summary>
     [SerializeField] private AudioClip repairSound;
 
-    // Audio source for SFX
+    /// <summary>
+    /// Audio source component for playing sound effects.
+    /// </summary>
     private AudioSource audioSource;
 
-    // NOUVEAU: Système de cases de réserves
     [Header("Reserve System")]
+    /// <summary>
+    /// Tiles linked to this building where units can be positioned in defensive mode.
+    /// </summary>
     [Tooltip("Tiles linked to this building where units can be positioned in defensive mode")]
     [SerializeField] private List<Tile> reserveTiles = new List<Tile>();
     
+    /// <summary>
+    /// Whether to show visual indicators for reserve tiles in scene view.
+    /// </summary>
     [Tooltip("Visual indicator for reserve tiles in scene view")]
     [SerializeField] private bool showReserveTilesGizmos = true;
     
+    /// <summary>
+    /// Color for reserve tile gizmos in scene view.
+    /// </summary>
     [SerializeField] private Color reserveTileGizmoColor = Color.cyan;
 
-    // Dictionnaire pour tracker quelles cases de réserves sont occupées
+    /// <summary>
+    /// Dictionary to track which reserve tiles are occupied by which units.
+    /// </summary>
     private Dictionary<Tile, Unit> occupiedReserveTiles = new Dictionary<Tile, Unit>();
 
+    /// <summary>
+    /// Subscribes to beat events for gold generation and tutorial completion events.
+    /// </summary>
     private void OnEnable()
     {
-        // --- MODIFICATION : Utilisation de MusicManager ---
+        // Subscribe to music beat events
         if (MusicManager.Instance != null)
         {
             MusicManager.Instance.OnBeat += HandleBeat;
         }
-        // --- NOUVEAU ---
-        // S'abonner à l'événement de fin du tutoriel
+        // Subscribe to tutorial completion event
         TutorialManager.OnTutorialCompleted += EnableGoldGeneration;
-        // --- FIN NOUVEAU ---
     }
 
+    /// <summary>
+    /// Unsubscribes from beat events and tutorial completion events.
+    /// </summary>
     private void OnDisable()
     {
-        // --- MODIFICATION : Utilisation de MusicManager ---
+        // Unsubscribe from music beat events
         if (MusicManager.Instance != null)
         {
             MusicManager.Instance.OnBeat -= HandleBeat;
         }
-        if (TutorialManager.Instance != null) // Bonne pratique
+        if (TutorialManager.Instance != null)
         {
             TutorialManager.OnTutorialCompleted -= EnableGoldGeneration;
         }
-        // --- FIN MODIFIÉ ---
     }
 
+    /// <summary>
+    /// Initializes the player building with team assignment, audio, health bar, and reserve tiles.
+    /// </summary>
+    /// <returns>Coroutine for initialization process.</returns>
     protected override IEnumerator Start()
     {
         // Set the team to Player right at the start
@@ -119,21 +188,22 @@ public class PlayerBuilding : Building
         Debug.Log($"[ALLY BUILDING] {gameObject.name} initialized as {Team} team with {reserveTiles.Count} reserve tiles!");
     }
 
-    // --- NOUVELLE MÉTHODE ---
     /// <summary>
-    /// Cette méthode est appelée par l'événement OnTutorialCompleted du TutorialManager.
+    /// Enables gold generation when the tutorial is completed.
+    /// Called by the TutorialManager's OnTutorialCompleted event.
     /// </summary>
     private void EnableGoldGeneration()
     {
-        Debug.Log($"[{gameObject.name}] Tutoriel terminé. La génération d'or est maintenant activée.");
+        Debug.Log($"[{gameObject.name}] Tutorial completed. Gold generation is now active.");
         isGoldGenerationActive = true;
 
-        // On peut aussi réinitialiser le compteur pour que la première génération
-        // ait lieu après le délai normal suivant la fin du tuto.
+        // Reset counter so first generation happens after normal delay following tutorial end
         beatCounter = 0;
     }
-    // --- FIN NOUVELLE MÉTHODE ---
-
+    /// <summary>
+    /// Handles beat events for gold generation timing.
+    /// </summary>
+    /// <param name="beatDuration">Duration of the current beat.</param>
     private void HandleBeat(float beatDuration)
     {
         if (!isGoldGenerationActive)
@@ -154,6 +224,9 @@ public class PlayerBuilding : Building
 
     #region Reserve Tiles System
 
+    /// <summary>
+    /// Initializes the reserve tiles system by clearing and setting up the occupied tiles dictionary.
+    /// </summary>
     private void InitializeReserveTiles()
     {
         occupiedReserveTiles.Clear();
@@ -167,55 +240,59 @@ public class PlayerBuilding : Building
     }
 
     /// <summary>
-    /// Trouve une case de réserve libre pour une unité spécifique.
-    /// Si l'unité occupe déjà une case de réserve de ce bâtiment, cette case est retournée.
+    /// Finds a free reserve tile for a specific unit.
+    /// If the unit already occupies a reserve tile of this building, that tile is returned.
     /// </summary>
+    /// <param name="unitSeekingReserve">The unit seeking a reserve position.</param>
+    /// <returns>An available reserve tile, or null if none available.</returns>
     public Tile GetAvailableReserveTileForUnit(Unit unitSeekingReserve)
     {
         if (unitSeekingReserve == null) return null;
 
-        // 1. Vérifier si l'unité occupe déjà une des cases de réserve de CE bâtiment
+        // 1. Check if the unit already occupies one of THIS building's reserve tiles
         foreach (var kvp in occupiedReserveTiles)
         {
             if (kvp.Value == unitSeekingReserve && kvp.Key != null && reserveTiles.Contains(kvp.Key))
             {
-                // L'unité est déjà sur une de nos cases de réserve, elle est "disponible" pour elle-même.
+                // The unit is already on one of our reserve tiles, it's "available" for itself
                 return kvp.Key;
             }
         }
 
-        // 2. Sinon, chercher une case de réserve réellement libre.
+        // 2. Otherwise, look for a truly free reserve tile
         foreach (Tile tile in reserveTiles)
         {
-            // IsReserveTileAvailable vérifie si la tuile est dans reserveTiles,
-            // n'est pas occupée physiquement (par une autre unité sur Tile.currentUnit),
-            // et est marquée comme libre dans notre dictionnaire occupiedReserveTiles.
+            // IsReserveTileAvailable checks if the tile is in reserveTiles,
+            // is not physically occupied (by another unit on Tile.currentUnit),
+            // and is marked as free in our occupiedReserveTiles dictionary
             if (tile != null && IsReserveTileAvailable(tile))
             {
                 return tile;
             }
         }
-        return null; // Aucune case de réserve disponible pour cette unité.
+        return null; // No reserve tile available for this unit
     }
 
     /// <summary>
-    /// Vérifie si une case de réserve spécifique est disponible de manière générale (non assignée et non occupée physiquement).
+    /// Checks if a specific reserve tile is generally available (not assigned and not physically occupied).
     /// </summary>
+    /// <param name="tile">The tile to check availability for.</param>
+    /// <returns>True if the tile is available for reservation.</returns>
     public bool IsReserveTileAvailable(Tile tile)
     {
-        if (tile == null || !reserveTiles.Contains(tile)) // Doit être une de nos cases de réserve connues
+        if (tile == null || !reserveTiles.Contains(tile)) // Must be one of our known reserve tiles
             return false;
 
-        // Vérifier l'occupation physique sur la tuile elle-même (par une *autre* unité que celle qui pourrait être dans notre dictionnaire)
+        // Check physical occupation on the tile itself (by a *different* unit than the one that might be in our dictionary)
         if (tile.currentUnit != null && (!occupiedReserveTiles.ContainsKey(tile) || occupiedReserveTiles[tile] != tile.currentUnit) )
         {
-            return false; // Occupée physiquement par une unité non enregistrée ici ou une autre unité
+            return false; // Physically occupied by an unregistered unit or another unit
         }
-        if (tile.currentBuilding != null && tile.currentBuilding != this) // Occupée par un autre bâtiment
+        if (tile.currentBuilding != null && tile.currentBuilding != this) // Occupied by another building
         {
             return false;
         }
-        if (tile.currentEnvironment != null && tile.currentEnvironment.IsBlocking) // Environnement bloquant
+        if (tile.currentEnvironment != null && tile.currentEnvironment.IsBlocking) // Blocking environment
         {
             return false;
         }
@@ -223,6 +300,12 @@ public class PlayerBuilding : Building
         return occupiedReserveTiles.ContainsKey(tile) && occupiedReserveTiles[tile] == null;
     }
 
+    /// <summary>
+    /// Assigns a unit to a specific reserve tile.
+    /// </summary>
+    /// <param name="unit">The unit to assign.</param>
+    /// <param name="newReserveTile">The reserve tile to assign the unit to.</param>
+    /// <returns>True if assignment was successful.</returns>
     public bool AssignUnitToReserveTile(Unit unit, Tile newReserveTile)
     {
         if (unit == null || newReserveTile == null || !reserveTiles.Contains(newReserveTile))
@@ -272,6 +355,11 @@ public class PlayerBuilding : Building
         }
     }
 
+    /// <summary>
+    /// Releases a reserve tile from a specific unit.
+    /// </summary>
+    /// <param name="reserveTile">The tile to release.</param>
+    /// <param name="unit">The unit releasing the tile.</param>
     public void ReleaseReserveTile(Tile reserveTile, Unit unit)
     {
         if (unit == null || reserveTile == null) return;
@@ -283,6 +371,10 @@ public class PlayerBuilding : Building
         }
     }
 
+    /// <summary>
+    /// Checks if this building has any available reserve tiles.
+    /// </summary>
+    /// <returns>True if there are available reserve tiles.</returns>
     public bool HasAvailableReserveTiles()
     {
         foreach (Tile tile in reserveTiles)
@@ -296,11 +388,21 @@ public class PlayerBuilding : Building
         return false;
     }
 
+    /// <summary>
+    /// Gets a copy of the reserve tiles list.
+    /// </summary>
+    /// <returns>A copy of the reserve tiles list.</returns>
     public List<Tile> GetReserveTiles()
     {
-        return new List<Tile>(reserveTiles); // Retourne une copie
+        return new List<Tile>(reserveTiles); // Returns a copy
     }
     #endregion
+    /// <summary>
+    /// Compares two key sequences for equality.
+    /// </summary>
+    /// <param name="seq1">First sequence to compare.</param>
+    /// <param name="seq2">Second sequence to compare.</param>
+    /// <returns>True if sequences are equal.</returns>
     private bool AreSequencesEqual(List<KeyCode> seq1, List<KeyCode> seq2)
     {
         if (seq1.Count != seq2.Count) return false;
@@ -311,6 +413,10 @@ public class PlayerBuilding : Building
         return true;
     }
 
+    /// <summary>
+    /// Produces a unit by instantiating the unit prefab on an adjacent tile.
+    /// </summary>
+    /// <param name="unitPrefab">The unit prefab to instantiate.</param>
     private void ProduceUnit(GameObject unitPrefab)
     {
         if (unitPrefab == null)
@@ -331,6 +437,9 @@ public class PlayerBuilding : Building
         Debug.LogWarning("No available adjacent tiles to spawn unit!");
     }
 
+    /// <summary>
+    /// Creates and initializes the health bar UI element.
+    /// </summary>
     private void CreateHealthBar()
     {
         healthBarInstance = Instantiate(healthBarPrefab, transform);
@@ -341,6 +450,9 @@ public class PlayerBuilding : Building
         UpdateHealthBar();
     }
 
+    /// <summary>
+    /// Updates the health bar display with current health values.
+    /// </summary>
     private void UpdateHealthBar()
     {
         if (healthBarSlider != null)
@@ -355,6 +467,12 @@ public class PlayerBuilding : Building
         }
     }
 
+    /// <summary>
+    /// Handles damage events for this building specifically.
+    /// </summary>
+    /// <param name="building">The building that was damaged.</param>
+    /// <param name="newHealth">The new health value.</param>
+    /// <param name="damage">The amount of damage taken.</param>
     private void OnAnyBuildingDamaged(Building building, int newHealth, int damage)
     {
         if (building != this) return;
@@ -362,6 +480,10 @@ public class PlayerBuilding : Building
         PlayDamageEffects(damage);
     }
 
+    /// <summary>
+    /// Plays visual and audio effects for damage events.
+    /// </summary>
+    /// <param name="damage">The amount of damage taken.</param>
     private void PlayDamageEffects(int damage)
     {
         if (damageSound != null && audioSource != null)
@@ -381,6 +503,10 @@ public class PlayerBuilding : Building
         }
     }
 
+    /// <summary>
+    /// Repairs the building by the specified amount.
+    /// </summary>
+    /// <param name="amount">The amount of health to restore.</param>
     public void Repair(int amount)
     {
         if (CurrentHealth >= MaxHealth)
@@ -408,6 +534,10 @@ public class PlayerBuilding : Building
         UpdateHealthBar();
     }
 
+    /// <summary>
+    /// Plays visual and audio effects for repair events.
+    /// </summary>
+    /// <param name="amount">The amount of health restored.</param>
     private void PlayRepairEffects(int amount)
     {
         // Play repair sound
@@ -430,7 +560,10 @@ public class PlayerBuilding : Building
         }
     }
 
-    // Override team change visuals
+    /// <summary>
+    /// Handles visual changes when the building's team changes.
+    /// </summary>
+    /// <param name="newTeam">The new team this building belongs to.</param>
     protected override void OnTeamChanged(TeamType newTeam)
     {
         base.OnTeamChanged(newTeam);
@@ -453,6 +586,9 @@ public class PlayerBuilding : Building
         }
     }
 
+    /// <summary>
+    /// Draws gizmos for reserve tiles when the building is selected in the editor.
+    /// </summary>
     private void OnDrawGizmosSelected()
     {
         if (!showReserveTilesGizmos || reserveTiles == null) return;
@@ -472,6 +608,9 @@ public class PlayerBuilding : Building
         }
     }
 
+    /// <summary>
+    /// Cleans up event subscriptions when the building is destroyed.
+    /// </summary>
     public override void OnDestroy()
     {
         // Unsubscribe from events
@@ -486,6 +625,11 @@ public class PlayerBuilding : Building
         base.OnDestroy();
     }
 
+    /// <summary>
+    /// Handles damage to the building and alerts reserve units.
+    /// </summary>
+    /// <param name="damage">The amount of damage to apply.</param>
+    /// <param name="attacker">The unit that attacked this building.</param>
     public override void TakeDamage(int damage, Unit attacker = null)
     {
         base.TakeDamage(damage, attacker);
@@ -496,6 +640,10 @@ public class PlayerBuilding : Building
         }
     }
 
+    /// <summary>
+    /// Alerts all units in reserve positions that this building is under attack.
+    /// </summary>
+    /// <param name="attacker">The unit attacking this building.</param>
     private void AlertReserveUnitsOfAttack(Unit attacker)
     {
         foreach (var kvp in occupiedReserveTiles)

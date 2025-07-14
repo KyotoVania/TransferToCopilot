@@ -1,28 +1,34 @@
 using UnityEngine;
 
 /// <summary>
-/// Composant de données pour les projectiles qui doivent suivre une trajectoire en arc (lob).
-/// S'ajoute dynamiquement aux projectiles tirés par les tours.
+/// Data component for projectiles that should follow an arched (lob) trajectory.
+/// This is dynamically added to projectiles fired by towers.
 /// </summary>
 public class LobProjectileData : MonoBehaviour
 {
-    [Tooltip("Hauteur maximale de l'arc (plus haut = arc plus prononcé).")]
+    /// <summary>
+    /// The maximum height of the arc (higher value = more pronounced arc).
+    /// </summary>
+    [Tooltip("Maximum height of the arc (higher = more pronounced arc).")]
     public float lobHeight = 5f;
     
-    [Tooltip("Indique si ce projectile doit utiliser une trajectoire en arc.")]
+    /// <summary>
+    /// Indicates if this projectile should use a lob trajectory.
+    /// </summary>
+    [Tooltip("Indicates if this projectile should use a lob trajectory.")]
     public bool useLobTrajectory = true;
     
-    // Variables internes pour calculer la trajectoire
+    // Internal variables for calculating the trajectory
     [HideInInspector] public Vector3 startPosition;
     [HideInInspector] public Vector3 targetPosition;
     [HideInInspector] public float totalDistance;
     [HideInInspector] public bool isInitialized = false;
     
     /// <summary>
-    /// Initialise les données pour la trajectoire lob.
+    /// Initializes the data for the lob trajectory.
     /// </summary>
-    /// <param name="start">Position de départ</param>
-    /// <param name="target">Position cible</param>
+    /// <param name="start">The starting position.</param>
+    /// <param name="target">The target position.</param>
     public void Initialize(Vector3 start, Vector3 target)
     {
         startPosition = start;
@@ -32,33 +38,33 @@ public class LobProjectileData : MonoBehaviour
     }
     
     /// <summary>
-    /// Calcule la position sur la trajectoire lob basée sur le pourcentage de progression.
+    /// Calculates the position on the lob trajectory based on the progress percentage.
     /// </summary>
-    /// <param name="progress">Progression de 0 à 1</param>
-    /// <returns>Position calculée avec l'arc</returns>
+    /// <param name="progress">Progress from 0 to 1.</param>
+    /// <returns>The calculated position with the arc.</returns>
     public Vector3 GetLobPosition(float progress)
     {
         if (!isInitialized) return Vector3.zero;
         
-        // Position linéaire entre start et target
+        // Linear position between start and target
         Vector3 linearPosition = Vector3.Lerp(startPosition, targetPosition, progress);
         
-        // Calcul de la hauteur de l'arc (parabole)
-        // Maximum à 50% de la progression
+        // Calculate the height of the arc (parabola)
+        // Maximum at 50% of the progress
         float arcHeight = lobHeight * 4 * progress * (1 - progress);
         
-        // Ajouter la hauteur de l'arc
+        // Add the arc height
         linearPosition.y += arcHeight;
         
         return linearPosition;
     }
     
     /// <summary>
-    /// Calcule la direction du projectile à un point donné de la trajectoire.
+    /// Calculates the direction of the projectile at a given point on the trajectory.
     /// </summary>
-    /// <param name="progress">Progression actuelle</param>
-    /// <param name="deltaProgress">Petit increment pour calculer la direction</param>
-    /// <returns>Direction normalisée</returns>
+    /// <param name="progress">The current progress.</param>
+    /// <param name="deltaProgress">A small increment to calculate the direction.</param>
+    /// <returns>The normalized direction.</returns>
     public Vector3 GetLobDirection(float progress, float deltaProgress = 0.01f)
     {
         if (!isInitialized) return Vector3.forward;

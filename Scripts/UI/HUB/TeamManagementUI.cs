@@ -10,52 +10,180 @@ using ScriptableObjects;
 using UnityEngine.EventSystems;
 using UnityEngine.InputSystem;
 
+/// <summary>
+/// Manages the team composition interface in the Hub, allowing players to view, select, and organize their active team.
+/// Provides navigation between character details, equipment panels, and character selection screens.
+/// Implements focus memory system for seamless navigation between sub-panels.
+/// </summary>
 public class TeamManagementUI : MonoBehaviour
 {
+    #region Manager References
+    
     [Header("Références des Managers")]
+    /// <summary>
+    /// Reference to the PlayerDataManager singleton for accessing player progression and unlocked characters.
+    /// </summary>
     private PlayerDataManager _playerDataManager;
+    
+    /// <summary>
+    /// Reference to the TeamManager singleton for managing active team composition and character assignments.
+    /// </summary>
     private TeamManager _teamManager;
+    
+    /// <summary>
+    /// Reference to the HubManager for controlling navigation flow and UI state management within the Hub.
+    /// </summary>
     private HubManager _hubManager;
 
+    #endregion
+
+    #region UI Prefabs
+    
     [Header("Prefabs UI")]
+    /// <summary>
+    /// Prefab template for team slot UI elements. Must contain a TeamSlotUI component.
+    /// Used to instantiate the 4 active team slots dynamically.
+    /// </summary>
     [Tooltip("Prefab pour un slot de l'équipe active (le nouveau prefab avec le script TeamSlotUI).")]
     [SerializeField] private GameObject teamSlotPrefab;
 
+    #endregion
+
+    #region UI Containers
+    
     [Header("Conteneurs UI")]
+    /// <summary>
+    /// Parent transform for the 4 active team slots. Should have a Horizontal Layout Group component.
+    /// Team slot prefabs will be instantiated as children of this container.
+    /// </summary>
     [Tooltip("Parent des 4 slots de l'équipe active. Doit avoir un Horizontal Layout Group.")]
     [SerializeField] private Transform activeTeamSlotsContainer;
 
+    #endregion
+
+    #region Character Details Panel
+    
     [Header("Panel de Détails Personnage (Optionnel)")]
+    /// <summary>
+    /// Optional panel that displays detailed information about the currently selected character.
+    /// Can be null if character details are handled by another system.
+    /// </summary>
     [SerializeField] private GameObject characterDetailsPanel;
+    
+    /// <summary>
+    /// Text component displaying the selected character's display name.
+    /// </summary>
     [SerializeField] private TextMeshProUGUI detailCharacterNameText;
+    
+    /// <summary>
+    /// Image component showing the selected character's portrait or icon.
+    /// </summary>
     [SerializeField] private Image detailCharacterIconImage;
+    
+    /// <summary>
+    /// Text component displaying the selected character's lore description.
+    /// </summary>
     [SerializeField] private TextMeshProUGUI detailCharacterDescriptionText;
+    
+    /// <summary>
+    /// Text component showing the selected character's combat statistics and abilities.
+    /// </summary>
     [SerializeField] private TextMeshProUGUI detailCharacterStatsText;
 
+    #endregion
+
+    #region UI Buttons
+    
     [Header("Boutons UI")]
+    /// <summary>
+    /// Button to return to the previous Hub screen or close the team management panel.
+    /// </summary>
     [SerializeField] private Button backButton;
+    
+    /// <summary>
+    /// Button to confirm team composition and proceed to level selection or gameplay.
+    /// </summary>
     [SerializeField] private Button readyButton;
+
+    #endregion
+
+    #region Connected Panels
     
     [Header("Panels Connectés")]
+    /// <summary>
+    /// Reference to the character selection panel for adding new characters to the team.
+    /// Used for seamless navigation between team management and character recruitment.
+    /// </summary>
     [SerializeField] private GameObject characterSelectionPanel;
+    
+    /// <summary>
+    /// Reference to the equipment management panel for customizing character loadouts.
+    /// Allows players to modify weapons, armor, and abilities for team members.
+    /// </summary>
     [SerializeField] private EquipmentPanelUI equipmentPanel;
 
+    #endregion
+
+    #region Navigation System
+    
     [Header("Navigation à la manette")]
+    /// <summary>
+    /// The default UI element to select when the panel is first opened.
+    /// Ensures proper gamepad/keyboard navigation initialization.
+    /// </summary>
     [Tooltip("Le premier élément sélectionné quand on ouvre le panel")]
     [SerializeField] private GameObject defaultSelectedObject;
 
-    private readonly List<TeamSlotUI> _instantiatedTeamSlots = new List<TeamSlotUI>();
-    private CharacterData_SO _selectedCharacterForDetails = null;
+    #endregion
+
+    #region Private Fields
     
-    // === NOUVEAU SYSTÈME DE MÉMORISATION DU FOCUS ===
+    /// <summary>
+    /// Collection of instantiated team slot UI components for dynamic management.
+    /// Cleared and repopulated when the team composition changes.
+    /// </summary>
+    private readonly List<TeamSlotUI> _instantiatedTeamSlots = new List<TeamSlotUI>();
+    
+    /// <summary>
+    /// Currently selected character for detailed view. Can be null if no character is selected.
+    /// Used to populate the character details panel and track selection state.
+    /// </summary>
+    private CharacterData_SO _selectedCharacterForDetails = null;
+
+    #endregion
+
+    #region Focus Memory System
+    
+    /// <summary>
+    /// Data structure for remembering UI focus state when transitioning between panels.
+    /// Enables seamless navigation experience by restoring the previous selection when returning from sub-panels.
+    /// </summary>
     [System.Serializable]
     private class FocusMemory
     {
+        /// <summary>
+        /// Index of the last selected team slot. -1 indicates no slot was selected.
+        /// </summary>
         public int lastSelectedSlotIndex = -1;
+        
+        /// <summary>
+        /// Whether the last selected slot was empty (add character slot) or contained a character.
+        /// </summary>
         public bool wasLastSelectedSlotEmpty = false;
+        
+        /// <summary>
+        /// Whether the back button was the last selected UI element.
+        /// </summary>
         public bool wasBackButtonSelected = false;
+        
+        /// <summary>
+        /// Whether the ready button was the last selected UI element.
+        /// </summary>
         public bool wasReadyButtonSelected = false;
         
+        /// <summary>
+        /// Resets all focus memory values to their default state.
+        /// </summary>
         public void Reset()
         {
             lastSelectedSlotIndex = -1;
@@ -64,14 +192,28 @@ public class TeamManagementUI : MonoBehaviour
             wasReadyButtonSelected = false;
         }
         
+        /// <summary>
+        /// Checks if there is valid focus information stored in memory.
+        /// </summary>
+        /// <returns>True if there is a valid focus state to restore, false otherwise.</returns>
         public bool HasValidMemory()
         {
             return lastSelectedSlotIndex >= 0 || wasBackButtonSelected || wasReadyButtonSelected;
         }
     }
     
+    /// <summary>
+    /// Instance of the focus memory system for tracking UI navigation state.
+    /// </summary>
     private FocusMemory _focusMemory = new FocusMemory();
+    
+    /// <summary>
+    /// Flag indicating whether we're currently transitioning to a sub-panel.
+    /// Prevents the Hub controls from being re-enabled prematurely.
+    /// </summary>
     private bool _isTransitioningToSubPanel = false;
+
+    #endregion
 
     #region Cycle de Vie Unity
 

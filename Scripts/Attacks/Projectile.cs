@@ -1,39 +1,61 @@
 using UnityEngine;
 using System.Collections;
 
+/// <summary>
+/// Represents a projectile fired by a unit or building.
+/// </summary>
 public class Projectile : MonoBehaviour
 {
     private Transform targetTransform;
     private int damage;
     private float speed;
     private GameObject impactVFXPrefab;
-    private Transform attackerTransform; // Pour éviter de se toucher soi-même si l'attaquant a un collider
-    private Unit attacker; // Référence à l'attaquant
+    private Transform attackerTransform;
+    private Unit attacker;
 
     private bool initialized = false;
     private Vector3 lastKnownTargetPosition;
     
-    // Variables pour la trajectoire lob
     private LobProjectileData lobData;
     private float lobProgress = 0f;
     private Vector3 lobStartPosition;
 
-    [Tooltip("Distance à laquelle le projectile est considéré comme ayant atteint la cible (pour les cibles mobiles).")]
+    /// <summary>
+    /// The distance at which the projectile is considered to have hit the target.
+    /// </summary>
+    [Tooltip("Distance at which the projectile is considered to have hit the target (for moving targets).")]
     [SerializeField] private float hitThreshold = 0.5f;
-    [Tooltip("Durée de vie maximale du projectile en secondes, pour éviter qu'il ne vole indéfiniment si la cible est détruite.")]
+    /// <summary>
+    /// The maximum lifetime of the projectile in seconds.
+    /// </summary>
+    [Tooltip("Maximum lifetime of the projectile in seconds, to prevent it from flying indefinitely if the target is destroyed.")]
     [SerializeField] private float maxLifetime = 5f;
-    [Tooltip("Le projectile doit-il suivre la cible (homing) ou aller en ligne droite vers la position initiale de la cible ?")]
+    /// <summary>
+    /// Whether the projectile should home in on the target or fly in a straight line.
+    /// </summary>
+    [Tooltip("Should the projectile follow the target (homing) or go in a straight line to the initial target position?")]
     [SerializeField] private bool isHoming = true;
-    [Tooltip("Que faire quand la cible disparaît : 0 = disparaître, 1 = continuer vers la dernière position connue")]
+    /// <summary>
+    /// What to do when the target disappears: 0 = disappear, 1 = continue to last known position.
+    /// </summary>
+    [Tooltip("What to do when the target disappears: 0 = disappear, 1 = continue to last known position")]
     [SerializeField] private int targetDestroyedBehavior = 1;
 
+    /// <summary>
+    /// Initializes the projectile with its target, damage, speed, and visual effects.
+    /// </summary>
+    /// <param name="target">The target transform.</param>
+    /// <param name="projectileDamage">The damage the projectile will inflict.</param>
+    /// <param name="projectileSpeed">The speed of the projectile.</param>
+    /// <param name="vfxPrefab">The prefab for the impact visual effect.</param>
+    /// <param name="attacker">The unit that fired the projectile.</param>
     public void Initialize(Transform target, int projectileDamage, float projectileSpeed, GameObject vfxPrefab, Unit attacker)
     {
         targetTransform = target;
         damage = projectileDamage;
         speed = projectileSpeed;
         impactVFXPrefab = vfxPrefab;
-        this.attacker = attacker; // Update to store the Unit attacker
+        this.attacker = attacker;
         
         if (showAttackLogs) Debug.Log($"[Projectile] Initialize: VFX Prefab = {(vfxPrefab != null ? vfxPrefab.name : "NULL")}");
 
@@ -43,14 +65,13 @@ public class Projectile : MonoBehaviour
         }
         else
         {
-            Debug.LogWarning("[Projectile] Cible nulle à l'initialisation. Le projectile s'autodétruira.");
+            Debug.LogWarning("[Projectile] Target is null on initialization. Projectile will self-destruct.");
             Destroy(gameObject, 0.1f);
             return;
         }
 
         initialized = true;
         
-        // Vérifier s'il y a des données de trajectoire lob
         lobData = GetComponent<LobProjectileData>();
         if (lobData != null && lobData.useLobTrajectory)
         {
@@ -59,72 +80,63 @@ public class Projectile : MonoBehaviour
             lobProgress = 0f;
         }
         
-        Destroy(gameObject, maxLifetime); // Autodestruction après un certain temps pour éviter les projectiles perdus
+        Destroy(gameObject, maxLifetime);
     }
 
+    /// <summary>
+    /// Unity's Update method. Moves the projectile towards its target.
+    /// </summary>
     void Update()
     {
         if (!initialized) return;
 
         bool targetDestroyed = false;
         
-        // Vérifier si la cible existe toujours
         if (targetTransform != null && targetTransform.gameObject.activeInHierarchy)
         {
-            lastKnownTargetPosition = targetTransform.position; // Mettre à jour la dernière position connue
+            lastKnownTargetPosition = targetTransform.position;
         }
         else
         {
             targetDestroyed = true;
             
-            // Si la cible est détruite, agir en fonction du comportement configuré
-            if (targetDestroyedBehavior == 0) // Disparaître
+            if (targetDestroyedBehavior == 0)
             {
                 HandleImpact(null);
                 return;
             }
-            // Sinon (comportement == 1), continuer vers la dernière position connue
         }
 
         Vector3 targetPositionToChase;
         
         if (targetDestroyed)
         {
-            // Si la cible est détruite, continuer vers la dernière position connue quelle que soit l'option homing
             targetPositionToChase = lastKnownTargetPosition;
         }
         else if (isHoming)
         {
-            // Projectile téléguidé qui suit la cible
             targetPositionToChase = lastKnownTargetPosition;
         }
         else
         {
-            // Projectile non téléguidé qui va en ligne droite vers la position initiale
             targetPositionToChase = lastKnownTargetPosition;
         }
 
-
-        // Gérer le mouvement selon le type de trajectoire
         if (lobData != null && lobData.useLobTrajectory && lobData.isInitialized)
         {
-            // Trajectoire en arc (lob)
             float distanceToTarget = Vector3.Distance(lobStartPosition, lastKnownTargetPosition);
             float progressIncrement = (speed * Time.deltaTime) / distanceToTarget;
             lobProgress += progressIncrement;
             
             if (lobProgress >= 1f)
             {
-                // Atteint la cible
                 transform.position = lastKnownTargetPosition;
                 HandleImpact(targetTransform != null && targetTransform.gameObject.activeInHierarchy ? targetTransform.GetComponent<Collider>() : null);
                 return;
             }
             
-            // Calculer la nouvelle position sur l'arc
             Vector3 newPosition = lobData.GetLobPosition(lobProgress);
             
-            // Calculer la direction pour la rotation
             Vector3 direction = lobData.GetLobDirection(lobProgress);
             if (direction != Vector3.zero)
             {
@@ -135,7 +147,6 @@ public class Projectile : MonoBehaviour
         }
         else
         {
-            // Trajectoire en ligne droite (comportement original)
             Vector3 direction = (targetPositionToChase - transform.position).normalized;
 
             if (direction != Vector3.zero)
@@ -145,7 +156,6 @@ public class Projectile : MonoBehaviour
 
             transform.position += direction * speed * Time.deltaTime;
 
-            // Vérifier la distance par rapport à la dernière position connue de la cible
             if (Vector3.Distance(transform.position, lastKnownTargetPosition) < hitThreshold)
             {
                 HandleImpact(targetTransform != null && targetTransform.gameObject.activeInHierarchy ? targetTransform.GetComponent<Collider>() : null);
@@ -153,41 +163,39 @@ public class Projectile : MonoBehaviour
         }
     }
 
-    // Gérer la collision du projectile
+    /// <summary>
+    /// Handles the collision of the projectile.
+    /// </summary>
+    /// <param name="other">The collider the projectile collided with.</param>
     void OnTriggerEnter(Collider other)
     {
         if (!initialized) return;
 
-        // Éviter la collision avec l'attaquant lui-même juste après le lancement
         if (attackerTransform != null && other.transform == attackerTransform)
         {
             return;
         }
 
-        // Vérifier si la collision est avec la cible désignée OU si la cible n'existe plus et qu'on touche quelque chose
         if ((targetTransform != null && other.transform == targetTransform) || (targetTransform == null && other.gameObject.layer != gameObject.layer))
         {
             HandleImpact(other);
         }
-        // Optionnel : gérer les collisions avec d'autres objets (par exemple, des obstacles)
-        // else if (other.gameObject.layer != LayerMask.NameToLayer("IgnoreProjectile")) // Exemple de couche à ignorer
-        // {
-        //     Debug.Log($"[Projectile] Collision avec un objet inattendu: {other.name}");
-        //     HandleImpact(null); // Détruire le projectile, instancier VFX d'impact générique
-        // }
     }
 
+    /// <summary>
+    /// Handles the impact of the projectile, applying damage and visual effects.
+    /// </summary>
+    /// <param name="hitCollider">The collider that was hit.</param>
     private void HandleImpact(Collider hitCollider)
     {
-        if (!initialized) return; // S'assurer que le projectile n'est pas déjà en train d'être détruit
+        if (!initialized) return;
 
-        initialized = false; // Empêcher les impacts multiples
+        initialized = false;
 
-        if (showAttackLogs) Debug.Log($"[Projectile] Impact avec {(hitCollider != null ? hitCollider.name : "cible détruite/position")}.");
+        if (showAttackLogs) Debug.Log($"[Projectile] Impact with {(hitCollider != null ? hitCollider.name : "destroyed target/position")}.");
 
-        if (hitCollider != null) // Si on a touché un collider valide (pas juste atteint une position)
+        if (hitCollider != null)
         {
-            // Essayer d'appliquer des dégâts si la cible est une unité ou un bâtiment
             Unit unitTarget = hitCollider.GetComponent<Unit>();
             if (unitTarget == null) unitTarget = hitCollider.GetComponentInParent<Unit>();
 
@@ -196,44 +204,39 @@ public class Projectile : MonoBehaviour
 
             if (unitTarget != null)
             {
-                // Vérifier s'il y a des données spéciales pour les boss
                 BossProjectileData bossData = GetComponent<BossProjectileData>();
                 if (bossData != null && unitTarget is BossUnit bossTarget)
                 {
-                    // Appliquer des dégâts en pourcentage pour les boss
                     if (showAttackLogs) 
-                        Debug.Log($"[Projectile] Application de {bossData.damagePercentage}% de dégâts au boss {bossTarget.name} {(bossData.isFromTower ? "(depuis une tour)" : "")}.");
+                        Debug.Log($"[Projectile] Applying {bossData.damagePercentage}% damage to boss {bossTarget.name} {(bossData.isFromTower ? "(from a tower)" : "")}.");
                     
                     bossTarget.TakePercentageDamage(bossData.damagePercentage);
                 }
                 else
                 {
-                    // Dégâts normaux pour les autres unités
-                    if (showAttackLogs) Debug.Log($"[Projectile] Application de {damage} dégâts à l'unité {unitTarget.name}.");
-                    unitTarget.TakeDamage(damage, attacker); // Passer l'attaquant
+                    if (showAttackLogs) Debug.Log($"[Projectile] Applying {damage} damage to unit {unitTarget.name}.");
+                    unitTarget.TakeDamage(damage, attacker);
                 }
             }
             else if (buildingTarget != null)
             {
-                if (showAttackLogs) Debug.Log($"[Projectile] Application de {damage} dégâts au bâtiment {buildingTarget.name}.");
-                buildingTarget.TakeDamage(damage, attacker); // Passer l'attaquant
+                if (showAttackLogs) Debug.Log($"[Projectile] Applying {damage} damage to building {buildingTarget.name}.");
+                buildingTarget.TakeDamage(damage, attacker);
             }
         }
 
-        // Instancier l'effet visuel d'impact si défini
         if (impactVFXPrefab != null)
         {
-            if (showAttackLogs) Debug.Log($"[Projectile] Instanciation du VFX d'impact : {impactVFXPrefab.name} à la position {transform.position}");
-            Instantiate(impactVFXPrefab, transform.position, Quaternion.LookRotation(-transform.forward)); // Tourné vers l'arrière pour l'explosion
+            if (showAttackLogs) Debug.Log($"[Projectile] Instantiating impact VFX: {impactVFXPrefab.name} at position {transform.position}");
+            Instantiate(impactVFXPrefab, transform.position, Quaternion.LookRotation(-transform.forward));
         }
         else
         {
-            if (showAttackLogs) Debug.Log($"[Projectile] Aucun VFX d'impact défini (impactVFXPrefab est null)");
+            if (showAttackLogs) Debug.Log($"[Projectile] No impact VFX defined (impactVFXPrefab is null)");
         }
 
-        // Détruire le projectile
         Destroy(gameObject);
     }
 
-    private static bool showAttackLogs = true; // Pourrait être synchronisé avec RangedAttack, mais simple pour l'instant
+    private static bool showAttackLogs = true;
 }

@@ -7,37 +7,59 @@ using Unity.Properties;
 using System.Collections.Generic;
 using ScriptableObjects;
 
+/// <summary>
+/// Unity Behavior Graph action node for performing unit attacks.
+/// Handles rhythmic combat with attack delays, range checking, and target validation.
+/// Supports both single-tile and multi-tile target units (bosses).
+/// </summary>
 [Serializable]
 [GeneratePropertyBag]
 [NodeDescription(
     name: "Attack Unit",
     story: "Performs an attack on the InteractionTargetUnit from the Blackboard, respecting the unit's AttackDelay.",
     category: "Unit Actions",
-    id: "Action_AttackUnit_v4" // Nouvelle version avec délai
+    id: "Action_AttackUnit_v4"
 )]
 public class AttackUnitNode : Unity.Behavior.Action
 {
-    // --- NOMS DES VARIABLES BLACKBOARD ---
+    // --- BLACKBOARD VARIABLE NAMES ---
+    /// <summary>Blackboard variable name for the unit performing the attack.</summary>
     private const string SELF_UNIT_VAR = "SelfUnit";
+    /// <summary>Blackboard variable name for the target unit being attacked.</summary>
     private const string TARGET_UNIT_VAR = "InteractionTargetUnit";
+    /// <summary>Blackboard variable name for attacking state flag.</summary>
     private const string IS_ATTACKING_VAR = "IsAttacking";
-    private const string SELECTED_ACTION_TYPE_VAR = "SelectedActionType"; // Nouvelle variable pour rediriger l'action
+    /// <summary>Blackboard variable name for selected action type (used for action redirection).</summary>
+    private const string SELECTED_ACTION_TYPE_VAR = "SelectedActionType";
 
-    // --- CACHE DES VARIABLES ---
+    // --- CACHED BLACKBOARD VARIABLES ---
+    /// <summary>Cached blackboard reference to the attacking unit.</summary>
     private BlackboardVariable<Unit> bbSelfUnit;
+    /// <summary>Cached blackboard reference to the target unit.</summary>
     private BlackboardVariable<Unit> bbTargetUnit;
+    /// <summary>Cached blackboard reference to attacking state flag.</summary>
     private BlackboardVariable<bool> bbIsAttackingBlackboard;
-    private BlackboardVariable<AIActionType> bbSelectedActionType; // Nouvelle variable
+    /// <summary>Cached blackboard reference to selected action type.</summary>
+    private BlackboardVariable<AIActionType> bbSelectedActionType;
 
-    // --- NOUVELLES VARIABLES POUR GÉRER LE CYCLE D'ATTAQUE ---
+    // --- ATTACK CYCLE MANAGEMENT VARIABLES ---
+    /// <summary>Cached reference to the attacking unit instance.</summary>
     private Unit selfUnitInstance = null;
+    /// <summary>Cached reference to the current target unit for this node.</summary>
     private Unit currentTargetUnitForThisNode = null;
+    /// <summary>Coroutine handling the attack cycle execution.</summary>
     private Coroutine nodeManagedAttackCycleCoroutine = null;
+    /// <summary>Whether the node is currently waiting for attack delay.</summary>
     private bool isWaitingForAttackDelay = false;
+    /// <summary>Current beat counter for attack delay timing.</summary>
     private int currentAttackBeatCounter = 0;
+    /// <summary>Whether the node has subscribed to beat events for attack delay.</summary>
     private bool hasSubscribedToBeatForAttackDelay = false;
-    // --- FIN DES NOUVELLES VARIABLES ---
 
+    /// <summary>
+    /// Initializes the attack node and validates targets.
+    /// </summary>
+    /// <returns>Status indicating node initialization result.</returns>
     protected override Status OnStart()
     {
         ResetNodeInternalState();
@@ -68,6 +90,10 @@ public class AttackUnitNode : Unity.Behavior.Action
 
     }
 
+    /// <summary>
+    /// Updates the attack node, managing attack cycles and range validation.
+    /// </summary>
+    /// <returns>Status indicating current execution state.</returns>
     protected override Status OnUpdate()
     {
         if (selfUnitInstance == null || !selfUnitInstance.gameObject.activeInHierarchy) return Status.Failure;
@@ -76,18 +102,18 @@ public class AttackUnitNode : Unity.Behavior.Action
             return Status.Success;
         }
         
-        // Vérifier si la cible est toujours à portée d'attaque
+        // Check if target is still in attack range
         if (!IsTargetInAttackRange())
         {
-            Debug.Log($"[{selfUnitInstance.name}] Cible {currentTargetUnitForThisNode.name} n'est plus à portée d'attaque. Changement d'action vers MoveToUnit.");
+            Debug.Log($"[{selfUnitInstance.name}] Target {currentTargetUnitForThisNode.name} is no longer in attack range. Switching action to MoveToUnit.");
             
-            // Mettre à jour le Blackboard pour rediriger vers le mouvement
+            // Update blackboard to redirect to movement
             if (bbSelectedActionType != null)
             {
                 bbSelectedActionType.Value = AIActionType.MoveToUnit;
             }
             
-            return Status.Success; // Sortir complètement du nœud
+            return Status.Success; // Exit node completely
         }
 
         if (isWaitingForAttackDelay)
@@ -97,13 +123,17 @@ public class AttackUnitNode : Unity.Behavior.Action
 
         if (nodeManagedAttackCycleCoroutine == null)
         {
-            Debug.Log($"[{selfUnitInstance.name}] Démarrage du cycle d'attaque pour {currentTargetUnitForThisNode.name}.");
+            Debug.Log($"[{selfUnitInstance.name}] Starting attack cycle for {currentTargetUnitForThisNode.name}.");
             nodeManagedAttackCycleCoroutine = selfUnitInstance.StartCoroutine(PerformSingleAttackCycle());
         }
 
         return Status.Running;
     }
 
+    /// <summary>
+    /// Coroutine that performs a single attack cycle with delay management.
+    /// </summary>
+    /// <returns>Coroutine enumerator.</returns>
     private IEnumerator PerformSingleAttackCycle()
     {
         if (currentTargetUnitForThisNode == null || currentTargetUnitForThisNode.Health <= 0)
@@ -139,6 +169,9 @@ public class AttackUnitNode : Unity.Behavior.Action
         nodeManagedAttackCycleCoroutine = null;
     }
 
+    /// <summary>
+    /// Cleans up attack node resources and resets state.
+    /// </summary>
     protected override void OnEnd()
     {
         UnsubscribeFromBeatForAttackDelay();
@@ -150,9 +183,12 @@ public class AttackUnitNode : Unity.Behavior.Action
         ResetNodeInternalState();
     }
 
-    // --- Méthodes pour la gestion du délai ---
+    // --- ATTACK DELAY MANAGEMENT METHODS ---
 
-    // La méthode accepte maintenant un paramètre float pour correspondre à la signature de l'événement MusicManager.OnBeat.
+    /// <summary>
+    /// Handles beat events for attack delay timing.
+    /// </summary>
+    /// <param name="beatDuration">Duration of the current beat.</param>
     private void HandleAttackBeatDelay(float beatDuration)
     {
         if (!isWaitingForAttackDelay)
@@ -169,6 +205,9 @@ public class AttackUnitNode : Unity.Behavior.Action
         }
     }
 
+    /// <summary>
+    /// Subscribes to music beat events for attack delay management.
+    /// </summary>
     private void SubscribeToBeatForAttackDelay()
     {
         if (MusicManager.Instance != null && !hasSubscribedToBeatForAttackDelay)
@@ -178,6 +217,9 @@ public class AttackUnitNode : Unity.Behavior.Action
         }
     }
 
+    /// <summary>
+    /// Unsubscribes from music beat events for attack delay management.
+    /// </summary>
     private void UnsubscribeFromBeatForAttackDelay()
     {
         if (MusicManager.Instance != null && hasSubscribedToBeatForAttackDelay)
@@ -187,8 +229,11 @@ public class AttackUnitNode : Unity.Behavior.Action
         }
     }
 
-    // --- Méthodes utilitaires ---
+    // --- UTILITY METHODS ---
 
+    /// <summary>
+    /// Resets the internal state of the attack node.
+    /// </summary>
     private void ResetNodeInternalState()
     {
         nodeManagedAttackCycleCoroutine = null;
@@ -199,6 +244,10 @@ public class AttackUnitNode : Unity.Behavior.Action
         hasSubscribedToBeatForAttackDelay = false;
     }
 
+    /// <summary>
+    /// Sets the IsAttacking blackboard variable value.
+    /// </summary>
+    /// <param name="value">New attacking state value.</param>
     private void SetIsAttackingBlackboardVar(bool value)
     {
         if(bbIsAttackingBlackboard != null && bbIsAttackingBlackboard.Value != value)
@@ -207,6 +256,10 @@ public class AttackUnitNode : Unity.Behavior.Action
         }
     }
 
+    /// <summary>
+    /// Caches blackboard variable references for performance.
+    /// </summary>
+    /// <returns>True if all required variables were cached successfully.</returns>
     private bool CacheBlackboardVariables()
     {
         var agent = GameObject.GetComponent<BehaviorGraphAgent>();
@@ -218,16 +271,20 @@ public class AttackUnitNode : Unity.Behavior.Action
         if (!blackboard.GetVariable(TARGET_UNIT_VAR, out bbTargetUnit)) success = false;
         if (!blackboard.GetVariable(IS_ATTACKING_VAR, out bbIsAttackingBlackboard)) success = false;
         
-        // Essayer d'obtenir la variable SelectedActionType (optionnelle)
+        // Try to get the SelectedActionType variable (optional)
         if (!blackboard.GetVariable(SELECTED_ACTION_TYPE_VAR, out bbSelectedActionType))
         {
-            Debug.LogWarning($"[{GameObject?.name}] Variable Blackboard '{SELECTED_ACTION_TYPE_VAR}' non trouvée. La redirection d'action ne sera pas disponible.");
+            Debug.LogWarning($"[{GameObject?.name}] Blackboard variable '{SELECTED_ACTION_TYPE_VAR}' not found. Action redirection will not be available.");
         }
 
         return success;
     }
 
-    // --- Méthode pour vérifier la portée d'attaque ---
+    /// <summary>
+    /// Checks if the target unit is within attack range.
+    /// Handles both single-tile and multi-tile (boss) targets.
+    /// </summary>
+    /// <returns>True if target is within attack range.</returns>
     private bool IsTargetInAttackRange()
     {
         if (selfUnitInstance == null || currentTargetUnitForThisNode == null)
@@ -238,16 +295,16 @@ public class AttackUnitNode : Unity.Behavior.Action
         bool isEnemyInRange;
         if (currentTargetUnitForThisNode.GetUnitType() == UnitType.Boss)
         {
-            // C'est la logique robuste de V2, maintenant utilisée spécifiquement pour les boss multi-tuiles.
+            // Robust logic for multi-tile boss targets
             Tile selfTile = selfUnitInstance.GetOccupiedTile();
-            List<Tile> targetTiles = currentTargetUnitForThisNode.GetOccupiedTiles(); // Récupère correctement toutes les tuiles du boss
+            List<Tile> targetTiles = currentTargetUnitForThisNode.GetOccupiedTiles(); // Gets all boss tiles correctly
             if (selfTile == null || targetTiles.Count == 0 || HexGridManager.Instance == null)
             {
-                return false; // Sécurité, si on n'a pas de tuile ou de gestionnaire de grille
+                return false; // Safety check if we don't have tiles or grid manager
             }
-            isEnemyInRange = false; // Aucune partie du boss n'était à portée
+            isEnemyInRange = false; // No part of the boss was in range
 
-            // Vérifie la distance par rapport à chaque tuile du boss
+            // Check distance to each boss tile
             foreach (var targetTile in targetTiles)
             {
                 if (targetTile != null)
@@ -256,7 +313,7 @@ public class AttackUnitNode : Unity.Behavior.Action
                     if (distance <= selfUnitInstance.AttackRange)
                     {
                         isEnemyInRange = true;
-                        break; // Pas besoin de vérifier les autres tuiles
+                        break; // No need to check other tiles
                     }
                 }
             }

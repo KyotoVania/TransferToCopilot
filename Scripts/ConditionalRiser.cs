@@ -1,52 +1,111 @@
 using UnityEngine;
 using System.Collections;
 
+/// <summary>
+/// Manages the animation of an object that "rises" from a hidden position to its final position.
+/// The animation is synchronized with the beats of the MusicManager and can include "wobble" effects.
+/// This script implements IScenarioTriggerable to be activated by the LevelScenarioManager.
+/// </summary>
 public class ConditionalRiser : MonoBehaviour, IScenarioTriggerable
 {
-    [Header("Configuration de Position et Animation")]
-    [Tooltip("De combien l'objet doit descendre initialement par rapport à sa position Y de départ.")]
+    [Header("Position and Animation Configuration")]
+    /// <summary>
+    /// The vertical distance (in Unity units) the object is moved down on initialization.
+    /// The object will start its animation from this lowered position.
+    /// </summary>
+    [Tooltip("How much the object should initially move down from its starting Y position.")]
     public float teleportDownAmount = 10f;
-    [Tooltip("Hauteur supplémentaire au-dessus de la position Y d'origine pendant l'animation de montée.")]
+
+    /// <summary>
+    /// An additional height the object reaches at the peak of its rise animation before settling back to its final position.
+    /// Creates an "overshoot" effect for a more dynamic animation.
+    /// </summary>
+    [Tooltip("Additional height above the original Y position during the rise animation.")]
     public float riseExtraHeight = 2f;
 
-    [Tooltip("Nombre de battements musicaux pour l'animation de montée vers le pic.")]
+    /// <summary>
+    /// The number of music beats required to complete the rise phase of the animation (from the low position to the peak).
+    /// </summary>
+    [Tooltip("Number of musical beats for the animation to rise to the peak.")]
     public int riseToPeakBeats = 4;
-    [Tooltip("Nombre de battements musicaux pour l'animation de descente vers la position d'origine.")]
+
+    /// <summary>
+    /// The number of music beats required for the object to settle from its peak height to its final position.
+    /// </summary>
+    [Tooltip("Number of musical beats for the animation to settle to the original position.")]
     public int settleToOriginalBeats = 3;
 
-    [Header("Configuration du Wobble (Oscillation après chaque pas)")]
-    [Tooltip("Amplitude verticale du wobble.")]
+    [Header("Wobble Configuration (Oscillation after each step)")]
+    /// <summary>
+    /// The vertical amplitude of the wobble effect that occurs after each step of the animation.
+    /// </summary>
+    [Tooltip("Vertical amplitude of the wobble.")]
     public float wobbleAmount = 0.1f;
-    [Tooltip("Durée totale en secondes d'un cycle de wobble (doit être < durée d'un battement).")]
+
+    /// <summary>
+    /// The total duration in seconds of a complete wobble cycle. Should be less than the duration of a beat for an optimal effect.
+    /// </summary>
+    [Tooltip("Total duration in seconds of a wobble cycle (should be < beat duration).")]
     public float wobbleDurationSeconds = 0.25f;
-    [Tooltip("Courbe pour l'effet de wobble.")]
+
+    /// <summary>
+    /// The animation curve used for the wobble effect, defining its acceleration and deceleration.
+    /// </summary>
+    [Tooltip("Curve for the wobble effect.")]
     public AnimationCurve wobbleCurve = AnimationCurve.EaseInOut(0, 0, 1, 1);
 
-    [Header("Durées de Secours")]
-    [Tooltip("Durée de secours en secondes pour la montée si MusicManager n'est pas disponible.")]
+    [Header("Fallback Durations")]
+    /// <summary>
+    /// Duration of the rise animation in seconds, used if the MusicManager is not available.
+    /// </summary>
+    [Tooltip("Fallback duration in seconds for the rise if MusicManager is not available.")]
     public float fallbackRiseDurationSeconds = 1.5f;
-    [Tooltip("Durée de secours en secondes pour la descente si MusicManager n'est pas disponible.")]
+
+    /// <summary>
+    /// Duration of the settle animation in seconds, used if the MusicManager is not available.
+    /// </summary>
+    [Tooltip("Fallback duration in seconds for the settle if MusicManager is not available.")]
     public float fallbackSettleDurationSeconds = 1.0f;
 
+    /// <summary>
+    /// The original world position of the object, saved before the initial downward displacement.
+    /// </summary>
     private Vector3 _originalWorldPosition;
+
+    /// <summary>
+    /// Indicates if an animation is currently in progress.
+    /// </summary>
     private bool _isAnimating = false;
+
+    /// <summary>
+    /// Reference to the current animation coroutine, to be able to stop it if necessary.
+    /// </summary>
     private Coroutine _animationCoroutine;
+
+    /// <summary>
+    /// A flag that becomes true when a music beat is received.
+    /// </summary>
     private bool _beatReceivedForStep;
+
+    /// <summary>
+    /// Cached action to subscribe and unsubscribe to the OnBeat event of the MusicManager.
+    /// </summary>
     private System.Action<float> _onBeatAction;
 
+    /// <summary>
+    /// Unity lifecycle method. Called on initialization.
+    /// Saves the original position and moves the object to its starting (hidden) position.
+    /// </summary>
     void Awake()
     {
-        // On sauvegarde la position finale désirée et on se place en position basse.
         _originalWorldPosition = transform.position;
         Vector3 lowerPosition = _originalWorldPosition - new Vector3(0, teleportDownAmount, 0);
         transform.position = lowerPosition;
-        Debug.Log($"[{gameObject.name}] Initialized. Original Y: {_originalWorldPosition.y}. Teleported down to Y: {transform.position.y}");
-
         _onBeatAction = (_) => _beatReceivedForStep = true;
     }
 
     /// <summary>
-    /// C'est la méthode que le LevelScenarioManager va appeler.
+    /// Triggers the rise animation. This is the method called by the LevelScenarioManager.
     /// </summary>
     public void TriggerAction()
     {
@@ -56,17 +115,14 @@ public class ConditionalRiser : MonoBehaviour, IScenarioTriggerable
             if (_animationCoroutine != null) StopCoroutine(_animationCoroutine);
             _animationCoroutine = StartCoroutine(AnimateRiseAndSettleByBeats());
         }
-        else
-        {
-            Debug.LogWarning($"[{gameObject.name}] A déjà une animation en cours, appel de TriggerAction ignoré.");
-        }
     }
 
-    // La coroutine d'animation reste la même que dans votre script original.
-    // Je la replace ici pour que le script soit complet.
+    /// <summary>
+    /// Main coroutine that manages the rise and settle animation, synchronized to the beats.
+    /// </summary>
+    /// <returns>IEnumerator for the coroutine.</returns>
     IEnumerator AnimateRiseAndSettleByBeats()
     {
-        Debug.Log($"[{gameObject.name}] Starting BEAT-BASED rise and settle animation.");
         _isAnimating = true;
 
         Vector3 startRisePosition = transform.position;
@@ -79,18 +135,15 @@ public class ConditionalRiser : MonoBehaviour, IScenarioTriggerable
         {
             float tempBeatDur = MusicManager.Instance.GetBeatDuration();
             if (tempBeatDur > 0.01f) musicBeatDuration = tempBeatDur;
-            else Debug.LogWarning($"[{gameObject.name}] MusicManager returned invalid beat duration ({tempBeatDur}). Using fallback logic.");
-        } else {
-            Debug.LogWarning($"[{gameObject.name}] MusicManager.Instance not found. Using fallback timing logic.");
         }
 
+        // Rise phase
         if (riseToPeakBeats > 0)
         {
             float totalRiseHeight = peakTargetPosition.y - startRisePosition.y;
             float risePerBeat = totalRiseHeight / riseToPeakBeats;
             Vector3 currentStepTargetPos = startRisePosition;
 
-            Debug.Log($"[{gameObject.name}] Rise Phase: Target Y={peakTargetPosition.y}, Steps={riseToPeakBeats}, RisePerBeatY={risePerBeat}");
             if(MusicManager.Instance != null) MusicManager.Instance.OnBeat += _onBeatAction;
 
             for (int i = 0; i < riseToPeakBeats; i++)
@@ -107,7 +160,6 @@ public class ConditionalRiser : MonoBehaviour, IScenarioTriggerable
                 if (i == riseToPeakBeats - 1) currentStepTargetPos.y = peakTargetPosition.y;
 
                 transform.position = currentStepTargetPos;
-                Debug.Log($"[{gameObject.name}] Rise Step {i + 1}/{riseToPeakBeats}: Moved to Y={transform.position.y}");
 
                 if (wobbleAmount > 0.001f && wobbleDurationSeconds > 0.01f)
                 {
@@ -117,15 +169,14 @@ public class ConditionalRiser : MonoBehaviour, IScenarioTriggerable
             if(MusicManager.Instance != null) MusicManager.Instance.OnBeat -= _onBeatAction;
         }
         transform.position = peakTargetPosition;
-        Debug.Log($"[{gameObject.name}] Reached peak position Y: {transform.position.y}");
 
+        // Settle phase
         if (settleToOriginalBeats > 0)
         {
             float totalSettleHeight = peakTargetPosition.y - finalSettlePosition.y;
             float settlePerBeat = totalSettleHeight / settleToOriginalBeats;
             Vector3 currentStepTargetPos = peakTargetPosition;
 
-            Debug.Log($"[{gameObject.name}] Settle Phase: Target Y={finalSettlePosition.y}, Steps={settleToOriginalBeats}, SettlePerBeatY={settlePerBeat}");
             if(MusicManager.Instance != null) MusicManager.Instance.OnBeat += _onBeatAction;
 
             for (int i = 0; i < settleToOriginalBeats; i++)
@@ -142,7 +193,6 @@ public class ConditionalRiser : MonoBehaviour, IScenarioTriggerable
                  if (i == settleToOriginalBeats - 1) currentStepTargetPos.y = finalSettlePosition.y;
 
                 transform.position = currentStepTargetPos;
-                Debug.Log($"[{gameObject.name}] Settle Step {i + 1}/{settleToOriginalBeats}: Moved to Y={transform.position.y}");
 
                 if (wobbleAmount > 0.001f && wobbleDurationSeconds > 0.01f)
                 {
@@ -152,12 +202,16 @@ public class ConditionalRiser : MonoBehaviour, IScenarioTriggerable
             if(MusicManager.Instance != null) MusicManager.Instance.OnBeat -= _onBeatAction;
         }
         transform.position = finalSettlePosition;
-        Debug.Log($"[{gameObject.name}] Settled at original position Y: {transform.position.y}. Beat-based animation complete.");
 
         _isAnimating = false;
         _animationCoroutine = null;
     }
 
+    /// <summary>
+    /// Coroutine that executes a small wobble effect on the Y axis.
+    /// </summary>
+    /// <param name="basePositionForWobble">The base position around which the wobble should occur.</param>
+    /// <returns>IEnumerator for the coroutine.</returns>
     private IEnumerator PerformWobble(Vector3 basePositionForWobble)
     {
         if (wobbleDurationSeconds <= 0.01f || wobbleAmount <= 0.001f) yield break;
@@ -185,6 +239,10 @@ public class ConditionalRiser : MonoBehaviour, IScenarioTriggerable
         transform.position = basePositionForWobble;
     }
 
+    /// <summary>
+    /// Unity lifecycle method. Called on object destruction.
+    /// Ensures that the coroutine is stopped and that the subscription to the OnBeat event is cancelled.
+    /// </summary>
     void OnDestroy()
     {
         if (_animationCoroutine != null) StopCoroutine(_animationCoroutine);

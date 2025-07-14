@@ -1,5 +1,6 @@
 ﻿using UnityEngine;
 using System;
+using System.Collections;
 
 
 /// <summary>
@@ -40,24 +41,57 @@ public class TutorialMomentumManager : MonoBehaviour
 
     // Stocke la valeur précédente des charges pour comparaison.
     private int previousCharges;
+    // Flag pour savoir si l'abonnement a été fait
+    private bool isSubscribed = false;
 
     #endregion
 
     #region Cycle de Vie Unity
 
-    // L'abonnement aux événements se fait dans OnEnable pour plus de robustesse.
-    private void OnEnable()
+    private void Start()
     {
-        // On vérifie que le MomentumManager existe avant de s'abonner.
-        if (MomentumManager.Instance != null)
+        // Utilise une coroutine pour s'assurer que le MomentumManager est complètement initialisé
+        StartCoroutine(WaitForMomentumManagerAndSubscribe());
+    }
+
+    private IEnumerator WaitForMomentumManagerAndSubscribe()
+    {
+        // Attend que le MomentumManager soit initialisé (après son Start())
+        while (MomentumManager.Instance == null)
+        {
+            yield return null;
+        }
+        
+        // Attend une frame supplémentaire pour s'assurer que le Start() du MomentumManager s'est exécuté
+        yield return null;
+        
+        SubscribeToMomentumManager();
+    }
+
+    private void SubscribeToMomentumManager()
+    {
+        if (MomentumManager.Instance != null && !isSubscribed)
         {
             MomentumManager.Instance.OnMomentumChanged += HandleMomentumChanged;
-            // Initialise la valeur de `previousCharges` avec l'état actuel au moment de l'activation.
+            // Initialise la valeur de `previousCharges` avec l'état actuel au moment de l'abonnement.
             previousCharges = MomentumManager.Instance.CurrentCharges;
+            isSubscribed = true;
+            Debug.Log("[TutorialMomentumManager] Abonnement au MomentumManager réussi.");
         }
-        else
+        else if (MomentumManager.Instance == null)
         {
             Debug.LogError("[TutorialMomentumManager] MomentumManager.Instance non trouvé ! Ce script ne pourra pas fonctionner.", this);
+        }
+    }
+
+    // L'abonnement aux événements se fait maintenant dans Start() via la coroutine.
+    private void OnEnable()
+    {
+        // Si on était déjà abonné et qu'on se réactive, on se réabonne
+        if (isSubscribed && MomentumManager.Instance != null)
+        {
+            MomentumManager.Instance.OnMomentumChanged += HandleMomentumChanged;
+            previousCharges = MomentumManager.Instance.CurrentCharges;
         }
     }
 
@@ -65,10 +99,20 @@ public class TutorialMomentumManager : MonoBehaviour
     private void OnDisable()
     {
         // On vérifie à nouveau que l'instance existe avant de se désabonner.
-        if (MomentumManager.Instance != null)
+        if (MomentumManager.Instance != null && isSubscribed)
         {
             MomentumManager.Instance.OnMomentumChanged -= HandleMomentumChanged;
         }
+    }
+
+    private void OnDestroy()
+    {
+        // Nettoyage final au cas où
+        if (MomentumManager.Instance != null && isSubscribed)
+        {
+            MomentumManager.Instance.OnMomentumChanged -= HandleMomentumChanged;
+        }
+        isSubscribed = false;
     }
 
     #endregion

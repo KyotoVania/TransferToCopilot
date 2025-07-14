@@ -5,38 +5,61 @@ using System;
 using Unity.Properties;
 using Unity.Behavior.GraphFramework; 
 
+/// <summary>
+/// Unity Behavior Graph action node for step-by-step movement to a target position.
+/// Handles movement delays, beat synchronization, and pathfinding for rhythmic movement.
+/// </summary>
 [Serializable]
 [GeneratePropertyBag]
 [NodeDescription(
     name: "Move To Target (Step)",
     story: "Move To Target (Step)",
     category: "My Actions",
-    id: "YOUR_UNIQUE_ID_MoveToTarget_Step1" // ID mis à jour pour une nouvelle version
+    id: "YOUR_UNIQUE_ID_MoveToTarget_Step1"
 )]
 public class MoveToTargetNode_WithInternalBeatWait : Unity.Behavior.Action
 {
-    // --- Blackboard Variable Noms ---
+    // --- BLACKBOARD VARIABLE NAMES ---
+    /// <summary>Blackboard variable name for the moving unit.</summary>
     private const string SELF_UNIT_VAR = "SelfUnit";
+    /// <summary>Blackboard variable name for the movement target position.</summary>
     private const string MOVEMENT_TARGET_POS_VAR = "MovementTargetPosition";
+    /// <summary>Blackboard variable name for the moving state flag.</summary>
     private const string IS_MOVING_BB_VAR = "IsMoving";
 
-    // --- Références Blackboard mises en cache ---
+    // --- CACHED BLACKBOARD VARIABLES ---
+    /// <summary>Cached blackboard reference to the moving unit.</summary>
     private BlackboardVariable<Unit> bbSelfUnit;
+    /// <summary>Cached blackboard reference to the movement target position.</summary>
     private BlackboardVariable<Vector2Int> bbMovementTargetPosition;
+    /// <summary>Cached blackboard reference to the moving state flag.</summary>
     private BlackboardVariable<bool> bbIsMoving;
 
-    // --- État Interne du Nœud ---
+    // --- INTERNAL NODE STATE ---
+    /// <summary>Cached reference to the moving unit instance.</summary>
     private Unit selfUnitInstanceInternal;
+    /// <summary>Internal beat counter for movement delay timing.</summary>
     private int beatCounterInternal = 0;
+    /// <summary>Required movement delay in beats.</summary>
     private int requiredMovementDelayInternal = 0;
+    /// <summary>Whether the node has subscribed to beat events.</summary>
     private bool isSubscribedToBeat = false;
+    /// <summary>Whether the delay phase has been completed.</summary>
     private bool delayPhaseComplete = false;
+    /// <summary>Whether the movement action has been started.</summary>
     private bool movementActionStarted = false;
+    /// <summary>Coroutine handle for the unit step movement.</summary>
     private Coroutine unitStepCoroutineHandle;
 
+    /// <summary>Unique identifier for this node instance for debugging.</summary>
     private string nodeInstanceId;
+    /// <summary>Whether blackboard variables have been successfully cached.</summary>
     private bool blackboardVariablesAreValid = false;
 
+    /// <summary>
+    /// Initializes the movement node and sets up beat synchronization if needed.
+    /// </summary>
+    /// <returns>Status indicating node initialization result.</returns>
     protected override Status OnStart()
     {
         nodeInstanceId = Guid.NewGuid().ToString("N").Substring(0, 6);
@@ -78,6 +101,10 @@ public class MoveToTargetNode_WithInternalBeatWait : Unity.Behavior.Action
         return Status.Running;
     }
 
+    /// <summary>
+    /// Updates the movement node, managing delay phases and movement execution.
+    /// </summary>
+    /// <returns>Status indicating current execution state.</returns>
     protected override Status OnUpdate()
     {
         if (selfUnitInstanceInternal == null)
@@ -101,6 +128,9 @@ public class MoveToTargetNode_WithInternalBeatWait : Unity.Behavior.Action
         }
     }
 
+    /// <summary>
+    /// Cleans up movement node resources and resets state.
+    /// </summary>
     protected override void OnEnd()
     {
         if (isSubscribedToBeat && MusicManager.Instance != null)
@@ -125,6 +155,10 @@ public class MoveToTargetNode_WithInternalBeatWait : Unity.Behavior.Action
         ResetInternalState();
     }
     
+    /// <summary>
+    /// Handles beat events for movement delay timing.
+    /// </summary>
+    /// <param name="beatDuration">Duration of the current beat.</param>
     private void OnBeatReceived(float beatDuration)
     {
         if (selfUnitInstanceInternal == null)
@@ -154,6 +188,10 @@ public class MoveToTargetNode_WithInternalBeatWait : Unity.Behavior.Action
         }
     }
 
+    /// <summary>
+    /// Attempts to perform a single movement step towards the target.
+    /// </summary>
+    /// <returns>Status indicating movement step result.</returns>
     private Status AttemptMovementStep()
     {
         movementActionStarted = true;
@@ -163,12 +201,12 @@ public class MoveToTargetNode_WithInternalBeatWait : Unity.Behavior.Action
 
         if (currentUnitTile == null)
         {
-            LogNodeMessage($"AttemptMovementStep: L'unité {selfUnitInstanceInternal.name} n'est pas sur une tuile valide. Échec.", true, true);
+            LogNodeMessage($"AttemptMovementStep: Unit {selfUnitInstanceInternal.name} is not on a valid tile. Failure.", true, true);
             return Status.Failure;
         }
         if (currentUnitTile.column == finalDestination.x && currentUnitTile.row == finalDestination.y)
         {
-            LogNodeMessage($"AttemptMovementStep: L'unité {selfUnitInstanceInternal.name} est déjà sur la destination finale ({finalDestination.x},{finalDestination.y}).", false, true);
+            LogNodeMessage($"AttemptMovementStep: Unit {selfUnitInstanceInternal.name} is already at final destination ({finalDestination.x},{finalDestination.y}).", false, true);
             return Status.Success;
         }
 
@@ -179,10 +217,10 @@ public class MoveToTargetNode_WithInternalBeatWait : Unity.Behavior.Action
 
         if (nextStepTile == null)
         {
-            LogNodeMessage($"AttemptMovementStep: GetNextTileTowardsDestinationForBG n'a retourné aucun pas valide vers ({finalDestination.x},{finalDestination.y}) depuis ({currentUnitTile.column},{currentUnitTile.row}). Échec du pathfinding pour ce pas.", true, true);
+            LogNodeMessage($"AttemptMovementStep: GetNextTileTowardsDestinationForBG returned no valid step towards ({finalDestination.x},{finalDestination.y}) from ({currentUnitTile.column},{currentUnitTile.row}). Pathfinding failure for this step.", true, true);
             return Status.Failure;
         }
-        LogNodeMessage($"AttemptMovementStep: Prochain pas vers ({finalDestination.x},{finalDestination.y}) est la tuile ({nextStepTile.column},{nextStepTile.row}).", false, true);
+        LogNodeMessage($"AttemptMovementStep: Next step towards ({finalDestination.x},{finalDestination.y}) is tile ({nextStepTile.column},{nextStepTile.row}).", false, true);
 
         if(selfUnitInstanceInternal.gameObject.activeInHierarchy && selfUnitInstanceInternal.enabled)
         {
@@ -202,7 +240,10 @@ public class MoveToTargetNode_WithInternalBeatWait : Unity.Behavior.Action
         return Status.Running;
     }
     
-    // --- Le reste du script reste inchangé (méthodes utilitaires) ---
+    // --- UTILITY METHODS ---
+    /// <summary>
+    /// Resets the internal state of the movement node.
+    /// </summary>
     private void ResetInternalState()
     {
         beatCounterInternal = 0;
@@ -212,6 +253,10 @@ public class MoveToTargetNode_WithInternalBeatWait : Unity.Behavior.Action
         unitStepCoroutineHandle = null;
     }
 
+    /// <summary>
+    /// Caches blackboard variable references for performance.
+    /// </summary>
+    /// <returns>True if all required variables were cached successfully.</returns>
     private bool CacheBlackboardVariables()
     {
         if (blackboardVariablesAreValid) return true;
@@ -229,6 +274,10 @@ public class MoveToTargetNode_WithInternalBeatWait : Unity.Behavior.Action
         return allFound;
     }
 
+    /// <summary>
+    /// Sets the IsMoving blackboard variable value.
+    /// </summary>
+    /// <param name="value">New moving state value.</param>
     private void SetBlackboardIsMoving(bool value)
     {
         if (bbIsMoving != null)
@@ -247,6 +296,12 @@ public class MoveToTargetNode_WithInternalBeatWait : Unity.Behavior.Action
         }
     }
     
+    /// <summary>
+    /// Logs a message from this node with proper formatting and context.
+    /// </summary>
+    /// <param name="message">The message to log.</param>
+    /// <param name="isError">Whether this is an error message.</param>
+    /// <param name="forceLog">Whether to force logging even if not in verbose mode.</param>
     private void LogNodeMessage(string message, bool isError = false, bool forceLog = false)
     {
         if(!blackboardVariablesAreValid && !isError) return;

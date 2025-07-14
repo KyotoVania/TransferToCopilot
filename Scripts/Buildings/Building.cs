@@ -2,58 +2,145 @@ using UnityEngine;
 using System.Collections;
 using Sirenix.OdinInspector;
 
+/// <summary>
+/// Abstract base class for all buildings in the game.
+/// Provides core functionality for health, team affiliation, targeting, and tile attachment.
+/// Implements ITargetable interface for selection and interaction systems.
+/// </summary>
 public abstract class Building : MonoBehaviour, ITargetable
 {
     [Header("Team Settings")]
+    /// <summary>
+    /// The team this building belongs to.
+    /// </summary>
     [SerializeField] private TeamType _team = TeamType.Neutral;
+    /// <summary>
+    /// The tile this building is occupying.
+    /// </summary>
     protected Tile occupiedTile;
-    [SerializeField] private float yOffset = 0f; // Adjustable vertical offset in the editor
+    /// <summary>
+    /// Vertical offset for positioning the building above the tile.
+    /// </summary>
+    [SerializeField] private float yOffset = 0f;
+    /// <summary>
+    /// Whether this building has been successfully attached to a tile.
+    /// </summary>
     private bool isAttached = false;
 
     [Header("Combat")]
+    /// <summary>
+    /// Enable debug logging for building combat events.
+    /// </summary>
     [SerializeField] protected bool debugBuildingCombat = true;
     
     [Header("Targeting")]
+    /// <summary>
+    /// Whether this building can be targeted by default (mouse, controller, banner).
+    /// </summary>
     [Tooltip("Si true, ce bâtiment peut être ciblé par défaut (souris, manette, bannière)")]
     [SerializeField] private bool isTargetableByDefault = true;
     
-    // État actuel de ciblage (peut changer pendant le jeu)
+    /// <summary>
+    /// Current targeting state (can change during gameplay).
+    /// </summary>
     private bool _isCurrentlyTargetable;
     
-    // Propriété publique pour l'interface ITargetable
+    /// <summary>
+    /// Gets whether this building can currently be targeted.
+    /// </summary>
     public virtual bool IsTargetable => _isCurrentlyTargetable;
 
     [Header("Effects")]
-    [SerializeField] protected GameObject destructionVFXPrefab; // Prefab for destruction visual effect
-    [SerializeField] protected float destructionVFXDuration = 3f; // Duration in seconds before the VFX is destroyed
+    /// <summary>
+    /// Prefab for destruction visual effect.
+    /// </summary>
+    [SerializeField] protected GameObject destructionVFXPrefab;
+    /// <summary>
+    /// Duration in seconds before the VFX is destroyed.
+    /// </summary>
+    [SerializeField] protected float destructionVFXDuration = 3f;
 
-    // Reference to the BuildingStats asset.
+    /// <summary>
+    /// Reference to the BuildingStats asset containing health, defense, and resource generation data.
+    /// </summary>
     [InlineEditor(InlineEditorModes.FullEditor)]
     [SerializeField] private BuildingStats buildingStats;
 
-    // Public getters and private health tracking
+    /// <summary>
+    /// Current health of the building.
+    /// </summary>
     private int _currentHealth;
+    /// <summary>
+    /// Gets the current health of the building.
+    /// </summary>
     public int CurrentHealth => _currentHealth;
+    /// <summary>
+    /// Gets the maximum health of the building from stats.
+    /// </summary>
     public int MaxHealth => buildingStats != null ? buildingStats.health : 0;
+    /// <summary>
+    /// Gets the defense value of the building from stats.
+    /// </summary>
     public int Defense => buildingStats != null ? buildingStats.defense : 0;
+    /// <summary>
+    /// Gets the gold generation amount from stats.
+    /// </summary>
     public int GoldGeneration => buildingStats != null ? buildingStats.goldGeneration : 0;
+    /// <summary>
+    /// Gets the gold generation delay from stats.
+    /// </summary>
     public int GoldGenerationDelay => buildingStats != null ? buildingStats.goldGenerationDelay : 1;
+    /// <summary>
+    /// Gets the garrison capacity from stats.
+    /// </summary>
     public int Garrison => buildingStats != null ? buildingStats.Garrison : 0;
 
+    /// <summary>
+    /// Gets the team this building belongs to.
+    /// </summary>
     public TeamType Team => _team;
 
-    // Event for building damage and destruction
+    /// <summary>
+    /// Delegate for building health change events.
+    /// </summary>
+    /// <param name="building">The building that took damage.</param>
+    /// <param name="newHealth">The new health value.</param>
+    /// <param name="damage">The amount of damage taken.</param>
     public delegate void BuildingHealthChangedHandler(Building building, int newHealth, int damage);
+    /// <summary>
+    /// Event triggered when a building takes damage.
+    /// </summary>
     public static event BuildingHealthChangedHandler OnBuildingDamaged;
-    public static event System.Action<Building, Unit> OnBuildingAttackedByUnit; // Building attaqué, par quelle Unit
+    /// <summary>
+    /// Event triggered when a building is attacked by a unit.
+    /// </summary>
+    public static event System.Action<Building, Unit> OnBuildingAttackedByUnit;
 
+    /// <summary>
+    /// Delegate for building destruction events.
+    /// </summary>
+    /// <param name="building">The building that was destroyed.</param>
     public delegate void BuildingDestroyedHandler(Building building);
+    /// <summary>
+    /// Event triggered when a building is destroyed.
+    /// </summary>
     public static event BuildingDestroyedHandler OnBuildingDestroyed;
 
+    /// <summary>
+    /// Delegate for building team change events.
+    /// </summary>
+    /// <param name="building">The building that changed teams.</param>
+    /// <param name="oldTeam">The previous team.</param>
+    /// <param name="newTeam">The new team.</param>
     public delegate void BuildingTeamChangedHandler(Building building, TeamType oldTeam, TeamType newTeam);
-    public static event BuildingTeamChangedHandler OnBuildingTeamChangedGlobal; // Événement global
+    /// <summary>
+    /// Global event triggered when any building changes teams.
+    /// </summary>
+    public static event BuildingTeamChangedHandler OnBuildingTeamChangedGlobal;
 
-    // Protected accessor for use in derived classes.
+    /// <summary>
+    /// Protected accessor for building stats, for use in derived classes.
+    /// </summary>
     protected BuildingStats Stats => buildingStats;
 
     protected virtual void Awake()
@@ -106,8 +193,9 @@ public abstract class Building : MonoBehaviour, ITargetable
     }
 
     /// <summary>
-    /// Active ou désactive la possibilité de cibler ce bâtiment
+    /// Enables or disables the ability to target this building.
     /// </summary>
+    /// <param name="targetable">Whether the building should be targetable.</param>
     public void SetTargetable(bool targetable)
     {
         if (_isCurrentlyTargetable != targetable)
@@ -122,14 +210,18 @@ public abstract class Building : MonoBehaviour, ITargetable
     }
 
     /// <summary>
-    /// Inverse l'état de ciblage actuel
+    /// Toggles the current targeting state.
     /// </summary>
     public void ToggleTargetable()
     {
         SetTargetable(!_isCurrentlyTargetable);
     }
 
-    // Method to handle incoming damage
+    /// <summary>
+    /// Handles incoming damage to the building.
+    /// </summary>
+    /// <param name="damage">The amount of damage to apply.</param>
+    /// <param name="attacker">The unit that attacked this building (optional).</param>
     public virtual void TakeDamage(int damage, Unit attacker = null)
     {
         // Calculate damage after defense
@@ -156,21 +248,29 @@ public abstract class Building : MonoBehaviour, ITargetable
         
     }
 
+    /// <summary>
+    /// Changes the team affiliation of this building.
+    /// </summary>
+    /// <param name="newTeam">The new team to assign to this building.</param>
     public virtual void SetTeam(TeamType newTeam)
     {
         if (_team != newTeam)
         {
-            TeamType oldTeam = _team; // Stocker l'ancienne équipe
+            TeamType oldTeam = _team; // Store the old team
             _team = newTeam;
-            OnTeamChanged(newTeam); // Appel à la méthode virtuelle pour la logique spécifique à la classe dérivée
+            OnTeamChanged(newTeam); // Call virtual method for derived class-specific logic
 
-            // Déclencher l'événement global de changement d'équipe
+            // Trigger global team change event
             OnBuildingTeamChangedGlobal?.Invoke(this, oldTeam, newTeam);
             if(debugBuildingCombat) Debug.Log($"[{gameObject.name}] Global Team Change Event Invoked: {oldTeam} -> {newTeam}");
         }
     }
 
-    // Virtual method for team change events
+    /// <summary>
+    /// Virtual method called when the building's team changes.
+    /// Override in derived classes for special behavior.
+    /// </summary>
+    /// <param name="newTeam">The new team this building belongs to.</param>
     protected virtual void OnTeamChanged(TeamType newTeam)
     {
         // Override in derived classes if you need special behavior
@@ -180,7 +280,9 @@ public abstract class Building : MonoBehaviour, ITargetable
         }
     }
 
-    // Method for destruction logic
+    /// <summary>
+    /// Handles the destruction of the building.
+    /// </summary>
     protected virtual void Die()
     {
         if (debugBuildingCombat)
@@ -201,12 +303,18 @@ public abstract class Building : MonoBehaviour, ITargetable
         // Destroy the gameObject
         Destroy(gameObject);
     }
-	//make a puclic method to call die from outside
-	public void CallDie()
+    /// <summary>
+    /// Public method to trigger building destruction from external sources.
+    /// </summary>
+    public void CallDie()
     {
         Die();
     }
 
+    /// <summary>
+    /// Attaches the building to a specific tile.
+    /// </summary>
+    /// <param name="tile">The tile to attach to.</param>
     protected void AttachToTile(Tile tile)
     {
         occupiedTile = tile;
@@ -224,6 +332,9 @@ public abstract class Building : MonoBehaviour, ITargetable
         tile.AssignBuilding(this);
     }
 
+    /// <summary>
+    /// Called when the building is destroyed. Cleans up tile occupation.
+    /// </summary>
     public virtual void OnDestroy()
     {
         if (occupiedTile != null)
@@ -232,12 +343,19 @@ public abstract class Building : MonoBehaviour, ITargetable
         }
     }
 
-    // Helper method to get the tile this building occupies
+    /// <summary>
+    /// Gets the tile this building is occupying.
+    /// </summary>
+    /// <returns>The occupied tile, or null if not attached.</returns>
     public Tile GetOccupiedTile()
     {
         return occupiedTile;
     }
 
+    /// <summary>
+    /// Sets the current health of the building and triggers appropriate events.
+    /// </summary>
+    /// <param name="newHealth">The new health value to set.</param>
     protected void SetCurrentHealth(int newHealth)
     {
         int oldHealth = _currentHealth;
@@ -261,7 +379,10 @@ public abstract class Building : MonoBehaviour, ITargetable
         }
     }
 
-// Method to heal the building
+    /// <summary>
+    /// Heals the building by the specified amount.
+    /// </summary>
+    /// <param name="amount">The amount of health to restore.</param>
     public virtual void Heal(int amount)
     {
         if (amount <= 0 || _currentHealth >= MaxHealth)
@@ -279,7 +400,12 @@ public abstract class Building : MonoBehaviour, ITargetable
         SetCurrentHealth(newHealth);
     }
 
-    // ITargetable implementation
+    /// <summary>
+    /// Gets the target point for this building (ITargetable implementation).
+    /// </summary>
     public Transform TargetPoint => transform;
+    /// <summary>
+    /// Gets the GameObject for this building (ITargetable implementation).
+    /// </summary>
     public GameObject GameObject => gameObject;
 }

@@ -3,27 +3,58 @@ using System.Collections;
 using UnityEngine.UI;
 using TMPro;
 
+/// <summary>
+/// Represents a building controlled by enemy AI.
+/// Features health visualization, damage effects, and team-specific visual feedback.
+/// </summary>
 public class EnemyBuilding : Building
 {
     [Header("Visual Feedback")]
+    /// <summary>
+    /// Prefab for the health bar UI element.
+    /// </summary>
     [SerializeField] private GameObject healthBarPrefab;
+    /// <summary>
+    /// Vertical offset for health bar positioning.
+    /// </summary>
     [SerializeField] private float healthBarOffset = 1.5f;
+    /// <summary>
+    /// Whether to display the health bar.
+    /// </summary>
     [SerializeField] private bool showHealthBar = true;
 
-    // Health bar components
+    /// <summary>
+    /// Instance of the health bar GameObject.
+    /// </summary>
     private GameObject healthBarInstance;
+    /// <summary>
+    /// Slider component for health bar.
+    /// </summary>
     private Slider healthBarSlider;
+    /// <summary>
+    /// Text component for health display.
+    /// </summary>
     private TextMeshProUGUI healthText;
 
 
 
-    // Effects for damage and destruction
     [Header("Effects")]
+    /// <summary>
+    /// Visual effect prefab for damage events.
+    /// </summary>
     [SerializeField] private GameObject damageVFXPrefab;
+    /// <summary>
+    /// Audio clip for damage sound effects.
+    /// </summary>
     [SerializeField] private AudioClip damageSound;
+    /// <summary>
+    /// Audio clip for destruction sound effects.
+    /// </summary>
     [SerializeField] private AudioClip destructionSound;
 
-    // Audio source for SFX
+    /// <summary>
+    /// Audio source component for playing sound effects.
+    /// </summary>
     private AudioSource audioSource;
 
     protected override IEnumerator Start()
@@ -52,7 +83,11 @@ public class EnemyBuilding : Building
         Debug.Log($"[ENEMY BUILDING] {gameObject.name} initialized as {Team} team and ready for combat!");
     }
 
-// Also add this to visualize the team change
+    /// <summary>
+    /// Handles visual changes when the building's team changes.
+    /// Applies red tinting for enemy team affiliation.
+    /// </summary>
+    /// <param name="newTeam">The new team this building belongs to.</param>
     protected override void OnTeamChanged(TeamType newTeam)
     {
         base.OnTeamChanged(newTeam);
@@ -75,6 +110,9 @@ public class EnemyBuilding : Building
         }
     }
 
+    /// <summary>
+    /// Creates and initializes the health bar UI element.
+    /// </summary>
     private void CreateHealthBar()
     {
         // Instantiate the health bar
@@ -92,6 +130,9 @@ public class EnemyBuilding : Building
         UpdateHealthBar();
     }
 
+    /// <summary>
+    /// Updates the health bar display with current health values.
+    /// </summary>
     private void UpdateHealthBar()
     {
         if (healthBarSlider != null)
@@ -106,7 +147,12 @@ public class EnemyBuilding : Building
         }
     }
 
-    // Event handler for damage
+    /// <summary>
+    /// Handles damage events for this building specifically.
+    /// </summary>
+    /// <param name="building">The building that was damaged.</param>
+    /// <param name="newHealth">The new health value.</param>
+    /// <param name="damage">The amount of damage taken.</param>
     private void OnAnyBuildingDamaged(Building building, int newHealth, int damage)
     {
         // Only respond to events for this building
@@ -119,6 +165,10 @@ public class EnemyBuilding : Building
         PlayDamageEffects(damage);
     }
 
+    /// <summary>
+    /// Plays visual and audio effects for damage events.
+    /// </summary>
+    /// <param name="damage">The amount of damage taken.</param>
     private void PlayDamageEffects(int damage)
     {
         // Play damage sound
@@ -144,6 +194,10 @@ public class EnemyBuilding : Building
         ShowDamageNumber(damage);
     }
 
+    /// <summary>
+    /// Shows floating damage numbers (placeholder implementation).
+    /// </summary>
+    /// <param name="damage">The amount of damage to display.</param>
     private void ShowDamageNumber(int damage)
     {
         // You would implement floating damage text here
@@ -151,7 +205,9 @@ public class EnemyBuilding : Building
         Debug.Log($"[ENEMY BUILDING] {gameObject.name} took {damage} damage!");
     }
 
-    // Override die method to add special effects
+    /// <summary>
+    /// Handles the destruction of the enemy building with special effects.
+    /// </summary>
     protected override void Die()
     {
         Debug.Log($"[ENEMY BUILDING] {gameObject.name} has been destroyed!");
@@ -165,6 +221,9 @@ public class EnemyBuilding : Building
         base.Die();
     }
 
+    /// <summary>
+    /// Cleans up event subscriptions when the building is destroyed.
+    /// </summary>
     public override void OnDestroy()
     {
         // Unsubscribe from events

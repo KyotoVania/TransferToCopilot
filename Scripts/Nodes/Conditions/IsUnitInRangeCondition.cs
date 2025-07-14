@@ -6,35 +6,48 @@ using UnityEngine;
 using Unity.Properties;
 using ScriptableObjects; 
 
+/// <summary>
+/// Unity Behavior Graph condition node that checks if a unit is within interaction range of another unit.
+/// Handles both standard single-tile units and multi-tile boss units with special range checking logic.
+/// </summary>
 [Serializable, GeneratePropertyBag]
 [Condition(name: "Is Unit In Range",
            story: "Is Unit In Range",
            category: "My Conditions",
-           id: "a0a3a7d2-7b19-4b8a-9c7c-1e6e9f1e1f1e")] // GUID unique pour cette nouvelle version
+           id: "a0a3a7d2-7b19-4b8a-9c7c-1e6e9f1e1f1e")]
 public partial class IsInUnitInteractionRangeCondition : Unity.Behavior.Condition
 {
-    // Les noms des variables du Blackboard restent les mêmes
+    // BLACKBOARD VARIABLE NAMES
+    /// <summary>Blackboard variable name for the unit performing the range check.</summary>
     private const string SELF_UNIT_VAR = "SelfUnit";
+    /// <summary>Blackboard variable name for the target unit to check range against.</summary>
     private const string TARGET_UNIT_VAR = "InteractionTargetUnit";
 
-    // Cache pour les références aux variables du Blackboard
+    // CACHED BLACKBOARD VARIABLES
+    /// <summary>Cached blackboard reference to the unit performing the range check.</summary>
     private BlackboardVariable<Unit> bbSelfUnit;
+    /// <summary>Cached blackboard reference to the target unit.</summary>
     private BlackboardVariable<Unit> bbTargetUnit;
+    /// <summary>Whether blackboard variables have been successfully cached.</summary>
     private bool blackboardVariablesCached = false;
+    /// <summary>Cached reference to the behavior graph agent.</summary>
     private BehaviorGraphAgent agent;
 
+    /// <summary>
+    /// Initializes the condition node and resets variable cache.
+    /// </summary>
     public override void OnStart()
     {
         if (agent == null && GameObject != null)
         {
             agent = GameObject.GetComponent<BehaviorGraphAgent>();
         }
-        // Réinitialiser le cache pour obtenir les données les plus récentes
+        // Reset cache to get the most recent data
         blackboardVariablesCached = false;
     }
 
     /// <summary>
-    /// Met en cache les variables du Blackboard pour un accès plus rapide.
+    /// Caches blackboard variables for faster access.
     /// </summary>
     private void CacheBlackboardVariables()
     {
@@ -42,7 +55,7 @@ public partial class IsInUnitInteractionRangeCondition : Unity.Behavior.Conditio
 
         if (agent == null || agent.BlackboardReference == null)
         {
-            Debug.LogError("[IsInUnitInteractionRangeCondition] BehaviorGraphAgent ou Blackboard non trouvé.", GameObject);
+            Debug.LogError("[IsInUnitInteractionRangeCondition] BehaviorGraphAgent or Blackboard not found.", GameObject);
             return;
         }
         var blackboard = agent.BlackboardReference;
@@ -50,16 +63,16 @@ public partial class IsInUnitInteractionRangeCondition : Unity.Behavior.Conditio
         bool foundAll = true;
         if (!blackboard.GetVariable(SELF_UNIT_VAR, out bbSelfUnit))
         {
-            Debug.LogWarning($"[IsInUnitInteractionRangeCondition] La variable Blackboard '{SELF_UNIT_VAR}' est introuvable.", GameObject);
+            Debug.LogWarning($"[IsInUnitInteractionRangeCondition] Blackboard variable '{SELF_UNIT_VAR}' not found.", GameObject);
             foundAll = false;
         }
         if (!blackboard.GetVariable(TARGET_UNIT_VAR, out bbTargetUnit))
         {
-            Debug.LogWarning($"[IsInUnitInteractionRangeCondition] La variable Blackboard '{TARGET_UNIT_VAR}' est introuvable.", GameObject);
+            Debug.LogWarning($"[IsInUnitInteractionRangeCondition] Blackboard variable '{TARGET_UNIT_VAR}' not found.", GameObject);
             foundAll = false;
         }
         
-        // Le cache est considéré comme réussi uniquement si les deux variables essentielles sont trouvées
+        // Cache is considered successful only if both essential variables are found
         if (foundAll)
         {
             blackboardVariablesCached = true;
@@ -67,17 +80,18 @@ public partial class IsInUnitInteractionRangeCondition : Unity.Behavior.Conditio
     }
 
     /// <summary>
-    /// Évalue la condition.
+    /// Evaluates the condition to determine if the unit is within range.
     /// </summary>
+    /// <returns>True if the unit is within interaction range of the target.</returns>
     public override bool IsTrue()
     {
-        // Tente de mettre les variables en cache si ce n'est pas déjà fait
+        // Attempt to cache variables if not already done
         if (!blackboardVariablesCached)
         {
             CacheBlackboardVariables();
         }
 
-        // Si, après la tentative de cache, les références sont toujours nulles, la condition échoue
+        // If references are still null after cache attempt, condition fails
         if (bbSelfUnit == null || bbTargetUnit == null)
         {
             return false;
@@ -86,27 +100,27 @@ public partial class IsInUnitInteractionRangeCondition : Unity.Behavior.Conditio
         var selfUnit = bbSelfUnit.Value;
         var targetUnit = bbTargetUnit.Value;
 
-        // Échoue proprement si les unités ne sont pas définies dans le Blackboard
+        // Fail gracefully if units are not defined in the blackboard
         if (selfUnit == null || targetUnit == null)
         {
             return false;
         }
 
-        // --- LOGIQUE FUSIONNÉE ---
-        // Pour les unités de type Boss, nous utilisons une vérification spéciale qui itère sur toutes leurs tuiles.
-        // Pour les unités standards, nous nous fions à la méthode originale et stable IsUnitInRange.
+        // --- MERGED LOGIC ---
+        // For Boss type units, we use special verification that iterates over all their tiles.
+        // For standard units, we rely on the original and stable IsUnitInRange method.
         if (targetUnit.GetUnitType() == UnitType.Boss)
         {
-            // C'est la logique robuste de V2, maintenant utilisée spécifiquement pour les boss multi-tuiles.
+            // Robust logic for multi-tile boss targets
             Tile selfTile = selfUnit.GetOccupiedTile();
-            List<Tile> targetTiles = targetUnit.GetOccupiedTiles(); // Récupère correctement toutes les tuiles du boss
+            List<Tile> targetTiles = targetUnit.GetOccupiedTiles(); // Gets all boss tiles correctly
 
             if (selfTile == null || targetTiles.Count == 0 || HexGridManager.Instance == null)
             {
                 return false;
             }
 
-            // Vérifie la distance par rapport à chaque tuile du boss
+            // Check distance to each boss tile
             foreach (var targetTile in targetTiles)
             {
                 if (targetTile != null)
@@ -114,27 +128,30 @@ public partial class IsInUnitInteractionRangeCondition : Unity.Behavior.Conditio
                     int distance = HexGridManager.Instance.HexDistance(selfTile.column, selfTile.row, targetTile.column, targetTile.row);
                     if (distance <= selfUnit.AttackRange)
                     {
-                        return true; // Succès dès qu'une partie du boss est à portée
+                        return true; // Success as soon as any part of the boss is in range
                     }
                 }
             }
-            return false; // Aucune partie du boss n'était à portée
+            return false; // No part of the boss was in range
         }
         else
         {
             bool isInRange = selfUnit.IsUnitInRange(targetUnit);
             if (!isInRange)
             {
-                Debug.LogWarning($"[IsInUnitInteractionRangeCondition] {selfUnit.name} n'est pas dans la portée de {targetUnit.name}.", GameObject);
+                Debug.LogWarning($"[IsInUnitInteractionRangeCondition] {selfUnit.name} is not in range of {targetUnit.name}.", GameObject);
             }
             
             return selfUnit.IsUnitInRange(targetUnit);
         }
     }
 
+    /// <summary>
+    /// Cleans up the condition node state for the next execution.
+    /// </summary>
     public override void OnEnd()
     {
-        // Réinitialise l'état pour la prochaine exécution du nœud
+        // Reset state for next node execution
         blackboardVariablesCached = false;
         bbSelfUnit = null;
         bbTargetUnit = null;

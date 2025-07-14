@@ -6,51 +6,106 @@ using Unity.Behavior;
 using Unity.Behavior.GraphFramework;
 using Gameplay;
 
+/// <summary>
+/// Represents an allied unit controlled by the player.
+/// Uses Unity's Behavior Graph system for AI-driven behavior and responds to banner commands.
+/// Supports defensive positioning at player buildings and objective-based gameplay.
+/// </summary>
 public class AllyUnit : Unit, IBannerObserver
 {
     // --- Behavior Graph Agent Reference ---
     [Header("Behavior Graph")]
+    /// <summary>
+    /// The Behavior Graph Agent component for AI decision making.
+    /// </summary>
     [Tooltip("Assign the Behavior Graph Agent component from this GameObject here.")]
     [SerializeField] private BehaviorGraphAgent m_Agent;
+    
+    /// <summary>
+    /// Gets the blackboard reference for AI communication.
+    /// </summary>
     public BlackboardReference Blackboard => m_Agent?.BlackboardReference;
 
     // --- Blackboard Variable Cache ---
-    // Clés pour le Blackboard
+    // Blackboard Keys
+    /// <summary>Blackboard key for banner target availability.</summary>
     private const string BB_HAS_BANNER_TARGET = "HasBannerTarget";
+    /// <summary>Blackboard key for banner target position.</summary>
     private const string BB_BANNER_TARGET_POSITION = "BannerTargetPosition";
-    private const string BB_FINAL_DESTINATION_POSITION = "FinalDestinationPosition"; // Utilisé par FindSmartStepNode
+    /// <summary>Blackboard key for final destination position used by pathfinding.</summary>
+    private const string BB_FINAL_DESTINATION_POSITION = "FinalDestinationPosition";
+    /// <summary>Blackboard key for initial target building.</summary>
     private const string BB_INITIAL_TARGET_BUILDING = "InitialTargetBuilding";
+    /// <summary>Blackboard key for initial objective set status.</summary>
     private const string BB_HAS_INITIAL_OBJECTIVE_SET = "HasInitialObjectiveSet";
+    /// <summary>Blackboard key for attacking state.</summary>
     private const string BB_IS_ATTACKING = "IsAttacking";
+    /// <summary>Blackboard key for capturing state.</summary>
     private const string BB_IS_CAPTURING = "IsCapturing";
-    private const string BB_IS_DEFENDING = "IsDefending"; 
-    private const string BB_IS_OBJECTIVE_COMPLETED = "IsObjectiveCompleted"; // Pour signaler la fin de l'objectif
+    /// <summary>Blackboard key for defending state.</summary>
+    private const string BB_IS_DEFENDING = "IsDefending";
+    /// <summary>Blackboard key for objective completion status.</summary>
+    private const string BB_IS_OBJECTIVE_COMPLETED = "IsObjectiveCompleted";
 
-    // Variables Blackboard mises en cache
+    // Cached Blackboard Variables
+    /// <summary>Cached blackboard variable for banner target availability.</summary>
     private BlackboardVariable<bool> bbHasBannerTarget;
+    /// <summary>Cached blackboard variable for banner target position.</summary>
     private BlackboardVariable<Vector2Int> bbBannerTargetPosition;
+    /// <summary>Cached blackboard variable for final destination position.</summary>
     private BlackboardVariable<Vector2Int> bbFinalDestinationPosition;
+    /// <summary>Cached blackboard variable for initial target building.</summary>
     private BlackboardVariable<Building> bbInitialTargetBuilding;
+    /// <summary>Cached blackboard variable for initial objective set status.</summary>
     private BlackboardVariable<bool> bbHasInitialObjectiveSet;
+    /// <summary>Cached blackboard variable for attacking state.</summary>
     private BlackboardVariable<bool> bbIsAttacking;
+    /// <summary>Cached blackboard variable for capturing state.</summary>
     private BlackboardVariable<bool> bbIsCapturing;
+    /// <summary>Cached blackboard variable for objective completion status.</summary>
     private BlackboardVariable<bool> bbIsObjectiveCompleted;
-    private BlackboardVariable<bool> bbIsDefending; 
-    // Nouvelle variable Blackboard pour la défense
+    /// <summary>Cached blackboard variable for defending state.</summary>
+    private BlackboardVariable<bool> bbIsDefending;
+    /// <summary>Cached blackboard variable for defended building attack status.</summary>
     private BlackboardVariable<bool> bbDefendedBuildingIsUnderAttack;
-    // Nouvelle variable Blackboard pour l'ennemi détecté
+    /// <summary>Cached blackboard variable for detected enemy unit.</summary>
     private BlackboardVariable<Unit> bbDetectedEnemyUnit;
 
     [Header("Ally Settings")]
-    [SerializeField] public bool enableVerboseLogging = true; // Public pour que les nœuds puissent vérifier
+    /// <summary>
+    /// Enable verbose logging for debugging. Public so nodes can check this value.
+    /// </summary>
+    [SerializeField] public bool enableVerboseLogging = true;
 
+    /// <summary>
+    /// Direct reference to the initial objective building instance.
+    /// </summary>
     private Building initialObjectiveBuildingInstance;
+    
+    /// <summary>
+    /// Whether the initial objective has been set during this unit's lifetime.
+    /// </summary>
     private bool hasInitialObjectiveBeenSetThisLife = false;
+    
+    /// <summary>
+    /// Component for handling unit spawn feedback.
+    /// </summary>
     private UnitSpawnFeedback spawnFeedbackPlayer;
+    
+    /// <summary>
+    /// The player building this unit is currently defending.
+    /// </summary>
     public PlayerBuilding currentReserveBuilding;
+    
+    /// <summary>
+    /// The tile this unit is defending at the player building.
+    /// </summary>
     public Tile currentReserveTile;
 
-	public float MomentumGainOnObjectiveComplete; 
+    /// <summary>
+    /// Amount of momentum gained when this unit completes its objective.
+    /// </summary>
+    public float MomentumGainOnObjectiveComplete; 
 
     protected override IEnumerator Start()
     {
@@ -204,27 +259,35 @@ public class AllyUnit : Unit, IBannerObserver
         
     }
 
+    /// <summary>
+    /// Gets the target position for this unit's movement.
+    /// Returns null if the unit is currently attacking or capturing.
+    /// </summary>
     protected override Vector2Int? TargetPosition
     {
         get
         {
-            // Si l'unité est en train d'attaquer ou de capturer, elle ne devrait pas avoir de
-            // cible de mouvement active via cette propriété. Le Behavior Graph gère cela.
+            // If the unit is attacking or capturing, it shouldn't have an active movement target.
+            // The Behavior Graph handles this.
             bool isCurrentlyAttacking = bbIsAttacking?.Value ?? false;
             bool isCurrentlyCapturing = bbIsCapturing?.Value ?? false;
 
             if (isCurrentlyAttacking || isCurrentlyCapturing)
             {
-                // Si une action est en cours, la cible de mouvement n'est pas pertinente via cette propriété.
-                // Le nœud d'action spécifique (Attack, Capture) gère la position de l'unité.
+                // If an action is in progress, the movement target is not relevant via this property.
+                // The specific action node (Attack, Capture) handles the unit's position.
                 return null;
             }
 
             return bbFinalDestinationPosition.Value;
-
         }
     }
 
+    /// <summary>
+    /// Called when a banner is placed by the player. Updates the unit's banner target.
+    /// </summary>
+    /// <param name="column">The column position of the banner.</param>
+    /// <param name="row">The row position of the banner.</param>
     public void OnBannerPlaced(int column, int row)
     {
         if (m_Agent == null || bbHasBannerTarget == null || bbBannerTargetPosition == null)
@@ -236,24 +299,18 @@ public class AllyUnit : Unit, IBannerObserver
         bbHasBannerTarget.Value = true;
         bbBannerTargetPosition.Value = newBannerPosition;
 
-        // Si l'objectif initial n'a pas encore été fixé pour cette unité (durant sa vie actuelle)
+        // If the initial objective hasn't been set for this unit yet (during its current lifetime)
         if (!hasInitialObjectiveBeenSetThisLife)
     	{
         	LogAlly($"Définition de l'objectif initial à la position de la bannière: ({newBannerPosition.x},{newBannerPosition.y})");
-        	//SetInitialObjectiveFromPosition(newBannerPosition);
     	}
     	else
 		{
-            //Log ally la valeur dans le BB
             LogAlly($"bbHasInitialObjectiveSet : {bbHasInitialObjectiveSet.Value}, bbInitialTargetBuilding : {bbInitialTargetBuilding.Value?.name ?? "null"}");
         	LogAlly($"Bannière déplacée vers ({newBannerPosition.x},{newBannerPosition.y}) mais objectif déjà fixé - ignoré.");
     	}
-        // Si l'objectif initial a déjà été fixé, le Behavior Graph décidera s'il doit
-        // abandonner l'objectif initial pour suivre la nouvelle position de la bannière.
-        // Pour l'instant, FindSmartStepNode utilise toujours FinalDestinationPosition,
-        // qui est lié à InitialTargetBuilding. On pourrait ajouter une logique ici ou dans le graph
-        // pour redéfinir FinalDestinationPosition si la bannière bouge de manière significative
-        // par rapport à l'objectif initial, ou si l'objectif initial est complété/détruit.
+        // If the initial objective has already been set, the Behavior Graph will decide
+        // whether to abandon the initial objective to follow the new banner position.
     }
 
     private void SetInitialObjectiveFromPosition(Vector2Int position)
@@ -373,6 +430,10 @@ public class AllyUnit : Unit, IBannerObserver
     }
 
     // --- Helper Methods (Called by Custom Nodes) ---
+    /// <summary>
+    /// Finds the nearest enemy unit within detection range.
+    /// </summary>
+    /// <returns>The nearest enemy unit, or null if none found.</returns>
     public Unit FindNearestEnemyUnit()
     {
         if (occupiedTile == null || HexGridManager.Instance == null) return null;
@@ -397,6 +458,10 @@ public class AllyUnit : Unit, IBannerObserver
         // Seule la signature est importante pour la compilation.
     }
 
+    /// <summary>
+    /// Finds the nearest enemy building within detection range.
+    /// </summary>
+    /// <returns>The nearest enemy building, or null if none found.</returns>
     public Building FindNearestEnemyBuilding()
     {
         if (occupiedTile == null || HexGridManager.Instance == null) return null;
@@ -438,13 +503,29 @@ public class AllyUnit : Unit, IBannerObserver
         return targetTile?.currentUnit;
     }
 
+    /// <summary>
+    /// Determines if another unit is a valid target for this ally unit.
+    /// </summary>
+    /// <param name="otherUnit">The unit to check.</param>
+    /// <returns>True if the unit is an enemy unit.</returns>
     public override bool IsValidUnitTarget(Unit otherUnit) => otherUnit is EnemyUnit;
+    
+    /// <summary>
+    /// Determines if a building is a valid target for this ally unit.
+    /// </summary>
+    /// <param name="building">The building to check.</param>
+    /// <returns>True if the building belongs to the enemy team.</returns>
     public override bool IsValidBuildingTarget(Building building)
     {
         if (building == null || !building.IsTargetable) return false;
 
         return building.Team == TeamType.Enemy;
     }
+    /// <summary>
+    /// Determines if a building is a valid capture target for this ally unit.
+    /// </summary>
+    /// <param name="building">The building to check.</param>
+    /// <returns>True if the building can be captured by allied units.</returns>
     public bool IsValidCaptureTarget(Building building)
     {
         if (building == null) return false;

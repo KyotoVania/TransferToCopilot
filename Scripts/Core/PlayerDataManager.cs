@@ -6,74 +6,162 @@ using System.Linq;
 using ScriptableObjects;
 using Newtonsoft.Json;
 
+/// <summary>
+/// Represents the progression data for a character including level and experience.
+/// </summary>
 [System.Serializable]
 public class CharacterProgress
 {
+    /// <summary>
+    /// The current level of the character.
+    /// </summary>
     public int CurrentLevel = 1;
+    
+    /// <summary>
+    /// The current experience points of the character.
+    /// </summary>
     public int CurrentXP = 0;
 }
 
 /// <summary>
-/// Structure pour stocker les données de sauvegarde du joueur.
+/// Data structure for storing player save data including progress, settings, and inventory.
 /// </summary>
 [System.Serializable]
 public class PlayerSaveData
 {
+    /// <summary>
+    /// The player's current currency amount.
+    /// </summary>
     public int Currency = 0;
+    
+    /// <summary>
+    /// The player's current experience points.
+    /// </summary>
     public int Experience = 0;
+    
+    /// <summary>
+    /// List of character IDs that have been unlocked by the player.
+    /// </summary>
     public List<string> UnlockedCharacterIDs = new List<string>();
+    
+    /// <summary>
+    /// Dictionary mapping level IDs to their completion status (star rating).
+    /// </summary>
     public Dictionary<string, int> CompletedLevels = new Dictionary<string, int>();
+    
+    /// <summary>
+    /// List of character IDs currently in the player's active team.
+    /// </summary>
     public List<string> ActiveTeamCharacterIDs = new List<string>();
+    
+    /// <summary>
+    /// List of equipment IDs that have been unlocked by the player.
+    /// </summary>
     public List<string> UnlockedEquipmentIDs = new List<string>();
 
+    /// <summary>
+    /// Dictionary mapping character IDs to their equipped items.
+    /// </summary>
     public Dictionary<string, List<string>> EquippedItems = new Dictionary<string, List<string>>();
+    
+    /// <summary>
+    /// Dictionary mapping character IDs to their progression data.
+    /// </summary>
     public Dictionary<string, CharacterProgress> CharacterProgressData = new Dictionary<string, CharacterProgress>();
 
-    // Options du jeu
+    // Game options
+    /// <summary>
+    /// Music volume setting (0.0 to 1.0).
+    /// </summary>
     public float MusicVolume = 0.7f;
+    
+    /// <summary>
+    /// Sound effects volume setting (0.0 to 1.0).
+    /// </summary>
     public float SfxVolume = 0.75f;
+    
+    /// <summary>
+    /// Whether haptic feedback/vibration is enabled.
+    /// </summary>
     public bool VibrationEnabled = true;
-    public bool ShowBeatIndicator = false; // Ajout de la nouvelle variable
+    
+    /// <summary>
+    /// Whether the beat indicator is shown in gameplay.
+    /// </summary>
+    public bool ShowBeatIndicator = false;
 }
 
 /// <summary>
-/// Manager persistant (Singleton) pour gérer les données du joueur (sauvegarde, chargement, accès).
-/// Déclenche des événements lors des modifications.
+/// Persistent singleton manager for handling player data (save, load, access).
+/// Manages player progression, currency, team composition, and game settings.
+/// Triggers events when data is modified to notify other systems.
 /// </summary>
 public class PlayerDataManager : SingletonPersistent<PlayerDataManager>
 {
-    // --- Événements Statiques ---
-    public static event Action<int> OnCurrencyChanged;
-    public static event Action<string> OnCharacterUnlocked;
-    public static event Action<int> OnExperienceGained;
+    // --- Static Events ---
     /// <summary>
-    /// Déclenché après le chargement initial des données ou la création de nouvelles données par défaut.
-    /// Utile pour les autres managers qui dépendent de ces données (ex: TeamManager).
+    /// Triggered when the player's currency amount changes.
+    /// </summary>
+    public static event Action<int> OnCurrencyChanged;
+    
+    /// <summary>
+    /// Triggered when a new character is unlocked.
+    /// </summary>
+    public static event Action<string> OnCharacterUnlocked;
+    
+    /// <summary>
+    /// Triggered when the player gains experience points.
+    /// </summary>
+    public static event Action<int> OnExperienceGained;
+    
+    /// <summary>
+    /// Triggered after initial data loading or creation of new default data.
+    /// Useful for other managers that depend on this data (e.g., TeamManager).
     /// </summary>
     public static event Action OnPlayerDataLoaded;
 
-    // --- Propriétés ---
+    // --- Properties ---
+    /// <summary>
+    /// Gets the player's save data.
+    /// </summary>
     public PlayerSaveData Data { get; private set; }
 
-    // --- Variables Privées ---
+    // --- Private Variables ---
+    /// <summary>
+    /// The file path where save data is stored.
+    /// </summary>
     private string _saveFilePath;
+    
+    /// <summary>
+    /// The name of the save file.
+    /// </summary>
     private const string SAVE_FILE_NAME = "playerData.json";
-    private bool _isDataLoaded = false; // Pour s'assurer que OnPlayerDataLoaded n'est appelé qu'une fois
+    
+    /// <summary>
+    /// Flag to ensure OnPlayerDataLoaded is only called once.
+    /// </summary>
+    private bool _isDataLoaded = false;
 
-    // --- Méthodes Unity ---
+    // --- Unity Methods ---
 
+    /// <summary>
+    /// Initializes the PlayerDataManager singleton and loads player data.
+    /// </summary>
     protected override void Awake()
     {
-        base.Awake(); // Gère le pattern Singleton et DontDestroyOnLoad
+        base.Awake(); // Handles Singleton pattern and DontDestroyOnLoad
         _saveFilePath = Path.Combine(Application.persistentDataPath, SAVE_FILE_NAME);
         Debug.Log($"[PlayerDataManager] Chemin de sauvegarde : {_saveFilePath}");
         LoadData();
     }
 
+    /// <summary>
+    /// Triggers the OnPlayerDataLoaded event after all singletons have been initialized.
+    /// </summary>
     private void Start()
     {
-        // Déclencher l'événement OnPlayerDataLoaded ici, après que Awake ait pu s'exécuter sur tous les singletons
-        // et que les données soient garanties d'être chargées ou créées.
+        // Trigger the OnPlayerDataLoaded event here, after Awake has been executed on all singletons
+        // and data is guaranteed to be loaded or created.
         if (!_isDataLoaded)
         {
              Debug.Log("[PlayerDataManager] Déclenchement de OnPlayerDataLoaded.");
@@ -82,8 +170,11 @@ public class PlayerDataManager : SingletonPersistent<PlayerDataManager>
         }
     }
 
-    // --- Sauvegarde / Chargement ---
+    // --- Save / Load ---
 
+    /// <summary>
+    /// Saves the current player data to the persistent data path.
+    /// </summary>
     public void SaveData()
     {
         try
@@ -98,6 +189,9 @@ public class PlayerDataManager : SingletonPersistent<PlayerDataManager>
         }
     }
 
+    /// <summary>
+    /// Loads player data from the save file, or creates default data if no save file exists.
+    /// </summary>
     public void LoadData()
     {
         if (File.Exists(_saveFilePath))
@@ -107,7 +201,7 @@ public class PlayerDataManager : SingletonPersistent<PlayerDataManager>
                 string json = File.ReadAllText(_saveFilePath);
                 Data = JsonConvert.DeserializeObject<PlayerSaveData>(json);
 
-                // Sécurité : S'assurer que les listes ne sont pas null après désérialisation
+                // Safety: Ensure lists are not null after deserialization
                 if (Data.UnlockedCharacterIDs == null) Data.UnlockedCharacterIDs = new List<string>();
                 if (Data.CompletedLevels == null) Data.CompletedLevels = new Dictionary<string, int>();
                 if (Data.ActiveTeamCharacterIDs == null) Data.ActiveTeamCharacterIDs = new List<string>();
@@ -125,24 +219,28 @@ public class PlayerDataManager : SingletonPersistent<PlayerDataManager>
         {
             Debug.Log("[PlayerDataManager] Aucun fichier de sauvegarde trouvé. Création de nouvelles données par défaut.");
             CreateDefaultData();
-            SaveData(); // Sauvegarder les nouvelles données par défaut
+            SaveData(); // Save the new default data
         }
-         _isDataLoaded = false; // Reset flag pour que Start puisse déclencher l'event
+         _isDataLoaded = false; // Reset flag so Start can trigger the event
     }
 
+    /// <summary>
+    /// Creates default player data when no save file exists.
+    /// Automatically unlocks default characters and sets up a starting team.
+    /// </summary>
     private void CreateDefaultData()
     {
         Data = new PlayerSaveData();
-        Data.Currency = 50; // Monnaie initiale
+        Data.Currency = 50; // Initial currency
         Data.Experience = 0;
         Data.UnlockedCharacterIDs = new List<string>();
         Data.ActiveTeamCharacterIDs = new List<string>();
         Data.CompletedLevels = new Dictionary<string, int>();
 
-        // Débloquer les personnages par défaut
-        // Important: Ceci nécessite que les assets CharacterData_SO soient accessibles,
-        // par exemple dans un dossier Resources ou via un Asset Database spécifique.
-        CharacterData_SO[] allCharacters = Resources.LoadAll<CharacterData_SO>("Data/Characters"); // Adapte le chemin si nécessaire
+        // Unlock default characters
+        // Important: This requires CharacterData_SO assets to be accessible,
+        // for example in a Resources folder or via a specific Asset Database.
+        CharacterData_SO[] allCharacters = Resources.LoadAll<CharacterData_SO>("Data/Characters"); // Adapt path if necessary
 
         Debug.Log($"[PlayerDataManager] Recherche des personnages par défaut parmi {allCharacters.Length} assets CharacterData_SO trouvés dans Resources/Data/Characters.");
 
@@ -155,9 +253,9 @@ public class PlayerDataManager : SingletonPersistent<PlayerDataManager>
                 {
                     Data.UnlockedCharacterIDs.Add(charData.CharacterID);
                     Debug.Log($"[PlayerDataManager] Personnage par défaut débloqué : {charData.CharacterID}");
-                    //Donne 10 XP initial pour chaque personnage débloqué par défaut
+                    // Give 50 initial XP for each character unlocked by default
                     AddXPToCharacter(charData.CharacterID, 50); 
-                    // Ajouter les premiers persos débloqués à l'équipe par défaut (jusqu'à 4)
+                    // Add the first unlocked characters to the default team (up to 4)
                     if (defaultTeam.Count < 4)
                     {
                         defaultTeam.Add(charData.CharacterID);
@@ -166,7 +264,7 @@ public class PlayerDataManager : SingletonPersistent<PlayerDataManager>
             }
         }
 
-         // Si aucun perso n'est débloqué par défaut, ajoutons le premier trouvé comme perso initial (sécurité)
+         // If no character is unlocked by default, add the first one found as initial character (safety)
          if (Data.UnlockedCharacterIDs.Count == 0 && allCharacters.Length > 0)
          {
              CharacterData_SO firstChar = allCharacters[0];
@@ -179,12 +277,18 @@ public class PlayerDataManager : SingletonPersistent<PlayerDataManager>
          }
 
 
-        // Définir l'équipe active par défaut
+        // Set the default active team
         Data.ActiveTeamCharacterIDs = defaultTeam;
         Debug.Log($"[PlayerDataManager] Équipe par défaut définie : {string.Join(", ", defaultTeam)}");
 
         Debug.Log("[PlayerDataManager] Nouvelles données par défaut créées.");
     }
+    /// <summary>
+    /// Marks a level as completed with the given star rating.
+    /// Only updates if the new rating is better than the existing one.
+    /// </summary>
+    /// <param name="levelID">The ID of the level to mark as completed.</param>
+    /// <param name="stars">The star rating (0-3) achieved in the level.</param>
     public void CompleteLevel(string levelID, int stars)
     {
         if (string.IsNullOrEmpty(levelID)) return;
@@ -206,8 +310,12 @@ public class PlayerDataManager : SingletonPersistent<PlayerDataManager>
         }
         SaveData();
     }
-    // --- Gestion de la Monnaie ---
+    // --- Currency Management ---
 
+    /// <summary>
+    /// Adds currency to the player's total and triggers the currency changed event.
+    /// </summary>
+    /// <param name="amount">The amount of currency to add (must be positive).</param>
     public void AddCurrency(int amount)
     {
         if (amount <= 0) return;
@@ -217,6 +325,11 @@ public class PlayerDataManager : SingletonPersistent<PlayerDataManager>
         SaveData();
     }
 
+    /// <summary>
+    /// Attempts to spend the specified amount of currency.
+    /// </summary>
+    /// <param name="amount">The amount of currency to spend (must be positive).</param>
+    /// <returns>True if the transaction was successful, false if insufficient funds.</returns>
     public bool SpendCurrency(int amount)
     {
         if (amount <= 0) return false;

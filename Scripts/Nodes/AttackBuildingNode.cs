@@ -5,36 +5,59 @@ using System.Collections;
 using System;
 using Unity.Properties;
 
+/// <summary>
+/// Unity Behavior Graph action node for attacking buildings.
+/// Handles rhythmic building attacks with delay management and objective completion tracking.
+/// </summary>
 [Serializable]
 [GeneratePropertyBag]
 [NodeDescription(
     name: "Attack Building",
     story: "Attack Building",
     category: "My Actions",
-    id: "YOUR_UNIQUE_ID_AttackBuilding" // Assurez-vous que c'est le bon GUID pour votre nœud
+    id: "YOUR_UNIQUE_ID_AttackBuilding"
 )]
 public class AttackBuildingNode : Unity.Behavior.Action
 {
+    // BLACKBOARD VARIABLE NAMES
+    /// <summary>Blackboard variable name for the attacking unit.</summary>
     private const string SELF_UNIT_VAR = "SelfUnit";
+    /// <summary>Blackboard variable name for the target building.</summary>
     private const string TARGET_BUILDING_VAR = "InteractionTargetBuilding";
+    /// <summary>Blackboard variable name for attacking state flag.</summary>
     private const string IS_ATTACKING_VAR = "IsAttacking";
+    /// <summary>Blackboard variable name for objective completion status.</summary>
     private const string IS_OBJECTIVE_COMPLETED_VAR = "IsObjectiveCompleted";
 
+    // CACHED BLACKBOARD VARIABLES
+    /// <summary>Cached blackboard reference to the attacking unit.</summary>
     private BlackboardVariable<Unit> bbSelfUnit;
+    /// <summary>Cached blackboard reference to the target building.</summary>
     private BlackboardVariable<Building> bbTargetBuilding;
+    /// <summary>Cached blackboard reference to attacking state flag.</summary>
     private BlackboardVariable<bool> bbIsAttackingBlackboard;
+    /// <summary>Cached blackboard reference to objective completion status.</summary>
     private BlackboardVariable<bool> bbIsObjectiveCompleted;
 
+    // INTERNAL NODE STATE
+    /// <summary>Cached reference to the attacking unit instance.</summary>
     private Unit selfUnitInstance = null;
-    private Building currentTargetBuildingForThisNode = null; // Cible au démarrage du nœud
+    /// <summary>Cached reference to the target building for this node.</summary>
+    private Building currentTargetBuildingForThisNode = null;
+    /// <summary>Whether blackboard variables have been successfully cached.</summary>
     private bool blackboardVariablesCached = false;
+    /// <summary>Coroutine handling the attack cycle execution.</summary>
     private Coroutine nodeManagedAttackCycleCoroutine = null;
 
+    /// <summary>Current beat counter for attack delay timing.</summary>
     private int currentAttackBeatCounter = 0;
+    /// <summary>Whether the node is currently waiting for attack delay.</summary>
     private bool isWaitingForAttackDelay = false;
+    /// <summary>Whether the node has subscribed to beat events for attack delay.</summary>
     private bool hasSubscribedToBeatForAttackDelay = false;
 
-    private string nodeInstanceIdForLog; // Pour le débogage
+    /// <summary>Unique identifier for this node instance for debugging.</summary>
+    private string nodeInstanceIdForLog;
 
     protected override Status OnStart()
     {

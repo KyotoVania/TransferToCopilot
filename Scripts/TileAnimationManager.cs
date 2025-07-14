@@ -1,37 +1,42 @@
-﻿// Fichier : Assets/Scripts/TileAnimationManager.cs (COMPLET ET CORRIGÉ)
 using UnityEngine;
 using System.Collections.Generic;
 
 /// <summary>
-/// Gestionnaire centralisé pour toutes les animations de tuiles.
-/// Version finale et corrigée : interface simplifiée, supporte position et scale,
-/// et inclut les méthodes de gestion nécessaires.
+/// Centralized manager for all tile animations.
+/// This final, corrected version has a simplified interface, supports position and scale,
+/// and includes necessary management methods.
 /// </summary>
 public class TileAnimationManager : MonoBehaviour
 {
+    /// <summary>
+    /// Singleton instance of the TileAnimationManager.
+    /// </summary>
     public static TileAnimationManager Instance { get; private set; }
 
+    /// <summary>
+    /// Represents the state of a single tile animation.
+    /// </summary>
     public struct TileAnimationState
     {
-        // Références
+        // References
         public Transform transform;
         public System.Action onCompleteCallback;
 
-        // Paramètres de l'animation
+        // Animation parameters
         public float startTime;
         public float duration;
 
-        // Mouvement de position
+        // Position movement
         public Vector3 startPosition;
         public Vector3 targetPosition;
         public AnimationCurve movementCurve;
 
-        // Mouvement de scale
+        // Scale movement
         public Vector3 startScale;
         public Vector3 targetScale;
         public AnimationCurve scaleCurve;
 
-        // Animation de type "Shake"
+        // "Shake" type animation
         public bool isShakeAnimation;
         public float shakeIntensity;
 
@@ -42,9 +47,11 @@ public class TileAnimationManager : MonoBehaviour
     private Queue<int> freeIndices = new Queue<int>(500);
     private int currentActiveAnimations = 0;
 
-    // Le cache de courbe que votre code utilise
     private Dictionary<string, AnimationCurve> curveCache = new Dictionary<string, AnimationCurve>();
 
+    /// <summary>
+    /// Unity's Awake method. Initializes the singleton instance and pre-allocates animation structures.
+    /// </summary>
     void Awake()
     {
         if (Instance != null && Instance != this)
@@ -54,7 +61,6 @@ public class TileAnimationManager : MonoBehaviour
         }
         Instance = this;
 
-        // Pré-allouer la capacité de la liste et de la file
         for (int i = 0; i < 500; i++)
         {
             activeAnimations.Add(new TileAnimationState());
@@ -63,25 +69,32 @@ public class TileAnimationManager : MonoBehaviour
     }
 
     /// <summary>
-    /// La méthode UNIQUE et flexible pour demander TOUS types d'animations.
+    /// The single, flexible method to request all types of animations.
     /// </summary>
+    /// <param name="tileTransform">The transform of the tile to animate.</param>
+    /// <param name="duration">The duration of the animation.</param>
+    /// <param name="onComplete">The callback to invoke when the animation is complete.</param>
+    /// <param name="targetPosition">The target position for movement animations.</param>
+    /// <param name="moveCurve">The animation curve for movement.</param>
+    /// <param name="targetScale">The target scale for scaling animations.</param>
+    /// <param name="scaleCurve">The animation curve for scaling.</param>
+    /// <param name="isShake">Whether this is a shake animation.</param>
+    /// <param name="shakeIntensity">The intensity of the shake.</param>
+    /// <returns>True if the animation was successfully requested, false otherwise.</returns>
     public bool RequestAnimation(
         Transform tileTransform,
         float duration,
         System.Action onComplete,
-        // Paramètres pour le mouvement
         Vector3? targetPosition = null,
         AnimationCurve moveCurve = null,
-        // Paramètres pour le scale
         Vector3? targetScale = null,
         AnimationCurve scaleCurve = null,
-        // Paramètres pour le shake
         bool isShake = false,
         float shakeIntensity = 0f)
     {
         if (freeIndices.Count == 0)
         {
-            Debug.LogWarning("[TileAnimationManager] Limite d'animations atteinte!");
+            Debug.LogWarning("[TileAnimationManager] Animation limit reached!");
             return false;
         }
 
@@ -94,17 +107,14 @@ public class TileAnimationManager : MonoBehaviour
             startTime = Time.time,
             duration = duration,
 
-            // Position (utilise la position actuelle si la cible est nulle)
             startPosition = tileTransform.position,
             targetPosition = targetPosition ?? tileTransform.position,
             movementCurve = moveCurve,
 
-            // Scale (utilise le scale actuel si la cible est nulle)
             startScale = tileTransform.localScale,
             targetScale = targetScale ?? tileTransform.localScale,
             scaleCurve = scaleCurve,
 
-            // Shake
             isShakeAnimation = isShake,
             shakeIntensity = shakeIntensity,
 
@@ -116,6 +126,9 @@ public class TileAnimationManager : MonoBehaviour
         return true;
     }
 
+    /// <summary>
+    /// Unity's Update method. Processes all active animations.
+    /// </summary>
     void Update()
     {
         if (currentActiveAnimations == 0) return;
@@ -125,13 +138,11 @@ public class TileAnimationManager : MonoBehaviour
         {
             if (!activeAnimations[i].isActive) continue;
 
-            // Il est plus sûr de travailler sur une copie
             var anim = activeAnimations[i];
             float progress = Mathf.Clamp01((currentTime - anim.startTime) / anim.duration);
 
             if (anim.isShakeAnimation)
             {
-                // Logique de Shake
                 float currentIntensity = Mathf.Lerp(anim.shakeIntensity, 0f, progress);
                 float shakeX = (Mathf.PerlinNoise(currentTime * 20f, 0f) * 2f - 1f) * currentIntensity;
                 float shakeZ = (Mathf.PerlinNoise(0f, currentTime * 20f) * 2f - 1f) * currentIntensity;
@@ -139,14 +150,12 @@ public class TileAnimationManager : MonoBehaviour
             }
             else
             {
-                // Logique de Position
                 if (anim.movementCurve != null)
                 {
                     float curveValue = anim.movementCurve.Evaluate(progress);
                     anim.transform.position = Vector3.LerpUnclamped(anim.startPosition, anim.targetPosition, curveValue);
                 }
 
-                // Logique de Scale
                 if (anim.scaleCurve != null && anim.targetScale != anim.startScale)
                 {
                     float scaleValue = anim.scaleCurve.Evaluate(progress);
@@ -160,35 +169,35 @@ public class TileAnimationManager : MonoBehaviour
             }
             else
             {
-                // Remettre la copie modifiée dans la liste (important car c'est une struct)
                 activeAnimations[i] = anim;
             }
         }
     }
 
+    /// <summary>
+    /// Completes an animation at a given index.
+    /// </summary>
+    /// <param name="index">The index of the animation to complete.</param>
     private void CompleteAnimation(int index)
     {
         var anim = activeAnimations[index];
-        if (!anim.isActive) return; // Sécurité pour éviter double complétion
+        if (!anim.isActive) return;
 
-        // Assurer l'état final
         anim.transform.position = anim.isShakeAnimation ? anim.startPosition : anim.targetPosition;
         anim.transform.localScale = anim.targetScale;
 
-        // Le callback fiable
         anim.onCompleteCallback?.Invoke();
 
-        // Recycler l'animation
         anim.isActive = false;
-        activeAnimations[index] = anim; // Mettre à jour la structure dans la liste
+        activeAnimations[index] = anim;
         freeIndices.Enqueue(index);
         currentActiveAnimations--;
     }
 
     /// <summary>
-    /// Arrête proprement toutes les animations pour une tuile donnée.
-    /// Méthode requise pour corriger l'erreur de compilation.
+    /// Stops all animations for a given tile transform.
     /// </summary>
+    /// <param name="tileTransform">The transform of the tile.</param>
     public void StopTileAnimations(Transform tileTransform)
     {
         if (tileTransform == null) return;
@@ -196,16 +205,16 @@ public class TileAnimationManager : MonoBehaviour
         {
             if (activeAnimations[i].isActive && activeAnimations[i].transform == tileTransform)
             {
-                // On appelle CompleteAnimation qui s'occupe de tout le nettoyage.
                 CompleteAnimation(i);
             }
         }
     }
 
     /// <summary>
-    /// Met en cache une courbe pour une utilisation future (si nécessaire).
-    /// Méthode requise pour corriger l'erreur de compilation.
+    /// Caches an animation curve for future use.
     /// </summary>
+    /// <param name="curveName">The name of the curve.</param>
+    /// <param name="curve">The animation curve to cache.</param>
     public void CacheAnimationCurve(string curveName, AnimationCurve curve)
     {
         if (curve == null || string.IsNullOrEmpty(curveName)) return;
@@ -213,52 +222,44 @@ public class TileAnimationManager : MonoBehaviour
     }
 
     /// <summary>
-    /// Nettoie toutes les animations actives. Utilisé lors des transitions de niveau
-    /// pour éviter que les animations d'un niveau continuent dans le suivant.
+    /// Clears all active animations. Used during level transitions.
     /// </summary>
     public void ClearAllAnimations()
     {
-        Debug.Log($"[TileAnimationManager] Nettoyage de {currentActiveAnimations} animations actives.");
+        Debug.Log($"[TileAnimationManager] Clearing {currentActiveAnimations} active animations.");
         
-        // Parcourir toutes les animations actives et les compléter proprement
         for (int i = 0; i < activeAnimations.Count; i++)
         {
             if (activeAnimations[i].isActive)
             {
                 var anim = activeAnimations[i];
                 
-                // Positionner les transforms à leur état final si ils existent encore
                 if (anim.transform != null)
                 {
                     anim.transform.position = anim.isShakeAnimation ? anim.startPosition : anim.targetPosition;
                     anim.transform.localScale = anim.targetScale;
                 }
                 
-                // Appeler le callback si il existe
                 try
                 {
                     anim.onCompleteCallback?.Invoke();
                 }
                 catch (System.Exception ex)
                 {
-                    Debug.LogWarning($"[TileAnimationManager] Erreur lors de l'appel du callback d'animation : {ex.Message}");
+                    Debug.LogWarning($"[TileAnimationManager] Error during animation callback: {ex.Message}");
                 }
                 
-                // Marquer comme inactif
                 anim.isActive = false;
                 activeAnimations[i] = anim;
                 
-                // Remettre l'index dans la queue des indices libres
                 freeIndices.Enqueue(i);
             }
         }
         
-        // Réinitialiser le compteur
         currentActiveAnimations = 0;
         
-        // Nettoyer aussi le cache de courbes si nécessaire
         curveCache.Clear();
         
-        Debug.Log("[TileAnimationManager] Toutes les animations ont été nettoyées.");
+        Debug.Log("[TileAnimationManager] All animations have been cleared.");
     }
 }

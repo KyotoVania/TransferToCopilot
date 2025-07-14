@@ -2,35 +2,65 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
+/// <summary>
+/// Implements the boss's area-of-effect (AoE) attack, including animations and damage logic.
+/// </summary>
 public class BossAttackSystem : MonoBehaviour, IAttack
 {
     [Header("Attack Settings")]
-    [Tooltip("Effet visuel à jouer lors de l'attaque (ex: une onde de choc). Optionnel.")]
+    /// <summary>
+    /// The visual effect to play during the attack (e.g., a shockwave). Optional.
+    /// </summary>
+    [Tooltip("Visual effect to play on attack (e.g., a shockwave). Optional.")]
     [SerializeField] private GameObject attackVFX;
-    [Tooltip("La distance de repoussement en nombre de cases.")]
+    /// <summary>
+    /// The knockback distance in number of tiles.
+    /// </summary>
+    [Tooltip("The knockback distance in number of tiles.")]
     [SerializeField] private int knockbackDistance = 2;
-    [Tooltip("Rotation fixe pour le VFX (pour corriger l'orientation du boss)")]
+    /// <summary>
+    /// Fixed rotation for the VFX (to correct the boss's orientation).
+    /// </summary>
+    [Tooltip("Fixed rotation for the VFX (to correct the boss's orientation)")]
     [SerializeField] private Vector3 vfxRotation = Vector3.zero;
 
     [Header("Animation Settings")]
-    [Tooltip("Hauteur du saut pendant la préparation.")]
+    /// <summary>
+    /// The height of the jump during the preparation animation.
+    /// </summary>
+    [Tooltip("The height of the jump during preparation.")]
     [SerializeField] private float jumpHeight = 1.5f;
-    [Tooltip("Multiplicateur d'échelle pour la compression (X, Y, Z).")]
+    /// <summary>
+    /// The scale multiplier for the squash effect (X, Y, Z).
+    /// </summary>
+    [Tooltip("Scale multiplier for the squash effect (X, Y, Z).")]
     [SerializeField] private Vector3 squashMultiplier = new Vector3(1.2f, 0.8f, 1.2f);
-    [Tooltip("Définit la vitesse de l'animation de chute. 1 = 100% de la durée du beat, 0.2 = 20% (très rapide).")]
+    /// <summary>
+    /// Defines the speed of the impact animation. 1 = 100% of beat duration, 0.2 = 20% (very fast).
+    /// </summary>
+    [Tooltip("Defines the speed of the impact animation. 1 = 100% of beat duration, 0.2 = 20% (very fast).")]
     [Range(0.1f, 1f)]
     [SerializeField] private float impactAnimationSpeed = 0.25f;
-    [Tooltip("Type d'assouplissement (easing) pour la préparation.")]
+    /// <summary>
+    /// The easing type for the preparation animation.
+    /// </summary>
+    [Tooltip("Easing type for the preparation animation.")]
     [SerializeField] private LeanTweenType prepEase = LeanTweenType.easeOutQuad;
-    [Tooltip("Type d'assouplissement (easing) pour l'impact.")]
+    /// <summary>
+    /// The easing type for the impact animation.
+    /// </summary>
+    [Tooltip("Easing type for the impact animation.")]
     [SerializeField] private LeanTweenType impactEase = LeanTweenType.easeInCubic;
 
     private Vector3 _originalScale;
     private Vector3 _originalPosition;
     
     /// <summary>
-    /// MODIFIÉ : Accepte maintenant la durée d'un beat pour une synchronisation parfaite.
+    /// Performs the preparation animation for the attack.
     /// </summary>
+    /// <param name="attacker">The transform of the attacker.</param>
+    /// <param name="beatDuration">The duration of a music beat for synchronization.</param>
+    /// <returns>An IEnumerator for the coroutine.</returns>
     public IEnumerator PerformPreparationAnimation(Transform attacker, float beatDuration)
     {
         _originalScale = attacker.localScale;
@@ -45,7 +75,6 @@ public class BossAttackSystem : MonoBehaviour, IAttack
 
         LTSeq sequence = LeanTween.sequence();
 
-        // L'animation totale dure maintenant exactement un beat.
         float halfBeat = beatDuration / 2f;
         sequence.append(LeanTween.scale(attacker.gameObject, targetSquashScale, halfBeat).setEase(prepEase));
         sequence.append(LeanTween.moveY(attacker.gameObject, _originalPosition.y + jumpHeight, halfBeat).setEase(prepEase));
@@ -55,15 +84,19 @@ public class BossAttackSystem : MonoBehaviour, IAttack
     }
     
     /// <summary>
-    /// MODIFIÉ : Accepte maintenant la durée d'un beat.
+    /// Performs the impact animation and applies damage.
     /// </summary>
+    /// <param name="attacker">The transform of the attacker.</param>
+    /// <param name="damage">The amount of damage to apply.</param>
+    /// <param name="bossUnit">The boss unit component.</param>
+    /// <param name="beatDuration">The duration of a music beat for synchronization.</param>
+    /// <returns>An IEnumerator for the coroutine.</returns>
     public IEnumerator PerformImpactAnimation(Transform attacker, int damage, Unit bossUnit, float beatDuration)
     {
         if (bossUnit == null) yield break;
 
         LeanTween.cancel(attacker.gameObject);
         
-        // --- MODIFIÉ : L'animation de chute est maintenant plus rapide ---
         float actualAnimationDuration = beatDuration * impactAnimationSpeed;
         
         LeanTween.moveY(attacker.gameObject, _originalPosition.y, actualAnimationDuration)
@@ -87,14 +120,16 @@ public class BossAttackSystem : MonoBehaviour, IAttack
                          });
             });
         
-        // Appliquer les dégâts au début de l'impact
         ApplyAoeDamage(damage, bossUnit);
         
-        // La coroutine dure toujours exactement un beat pour maintenir le rythme global.
         yield return new WaitForSeconds(beatDuration);
     }
     
-    // Logique de dégâts et knockback extraite dans sa propre méthode pour plus de clarté
+    /// <summary>
+    /// Applies AoE damage and knockback to units in the attack range.
+    /// </summary>
+    /// <param name="damage">The amount of damage to apply.</param>
+    /// <param name="bossUnit">The boss unit component.</param>
     private void ApplyAoeDamage(int damage, Unit bossUnit)
     {
         Tile centralTile = bossUnit.GetOccupiedTile();
@@ -115,8 +150,15 @@ public class BossAttackSystem : MonoBehaviour, IAttack
         }
     }
     
-    // Le reste du script (KnockbackUnit, PerformAttack, CanAttack) reste inchangé...
     #region Unchanged Methods
+    /// <summary>
+    /// Performs the full attack sequence, including preparation and impact.
+    /// </summary>
+    /// <param name="attacker">The transform of the attacker.</param>
+    /// <param name="target">The transform of the target (not used in this AoE attack).</param>
+    /// <param name="damage">The amount of damage to apply.</param>
+    /// <param name="animationDuration">The total duration of the attack animation.</param>
+    /// <returns>An IEnumerator for the coroutine.</returns>
     public IEnumerator PerformAttack(Transform attacker, Transform target, int damage, float animationDuration)
     {
         yield return StartCoroutine(PerformPreparationAnimation(attacker, animationDuration/2));
@@ -124,8 +166,21 @@ public class BossAttackSystem : MonoBehaviour, IAttack
         yield return StartCoroutine(PerformImpactAnimation(attacker, damage, attacker.GetComponent<Unit>(), animationDuration/2));
     }
     
+    /// <summary>
+    /// Checks if the attack can be performed.
+    /// </summary>
+    /// <param name="attacker">The transform of the attacker.</param>
+    /// <param name="target">The transform of the target.</param>
+    /// <param name="attackRange">The attack range.</param>
+    /// <returns>True, as the boss can always perform this attack.</returns>
     public bool CanAttack(Transform attacker, Transform target, float attackRange) => true;
 
+    /// <summary>
+    /// Knocks back a unit away from the boss.
+    /// </summary>
+    /// <param name="boss">The boss unit.</param>
+    /// <param name="unitToPush">The unit to knock back.</param>
+    /// <returns>An IEnumerator for the coroutine.</returns>
     private IEnumerator KnockbackUnit(Unit boss, AllyUnit unitToPush)
     {
         Tile startTile = unitToPush.GetOccupiedTile();

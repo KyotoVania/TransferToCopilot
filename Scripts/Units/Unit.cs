@@ -7,156 +7,409 @@ using ScriptableObjects;
 using System;
 using Random = UnityEngine.Random;
 
+/// <summary>
+/// Enumeration representing the different states a unit can be in.
+/// </summary>
 public enum UnitState
 {
+    /// <summary>Unit is idle and waiting for commands.</summary>
     Idle,
+    /// <summary>Unit is currently moving to a target location.</summary>
     Moving,
+    /// <summary>Unit is currently attacking a target.</summary>
     Attacking,
+    /// <summary>Unit is currently capturing a building.</summary>
     Capturing,
 }
 
+/// <summary>
+/// Abstract base class for all units in the game.
+/// Provides core functionality for movement, combat, state management, and rhythm-based gameplay.
+/// Implements tile reservation and targeting systems.
+/// </summary>
 public abstract class Unit : MonoBehaviour, ITileReservationObserver, ITargetable
 {
     // --- FEATURE DU FICHIER 1 : Événement de destruction ---
     /// <summary>
-    /// Événement déclenché juste avant la destruction de l'unité.
-    /// La bannière ou d'autres systèmes peuvent s'y abonner.
+    /// Event triggered just before the unit is destroyed.
+    /// Banners or other systems can subscribe to this event.
     /// </summary>
     public event Action OnUnitDestroyed;
 
+    /// <summary>
+    /// Gets the target position for this unit's movement. Must be implemented by derived classes.
+    /// </summary>
     protected abstract Vector2Int? TargetPosition { get; }
 
+    /// <summary>
+    /// Structure containing information about the last damage event.
+    /// </summary>
     public struct LastDamageEvent
     {
+        /// <summary>The unit that attacked this unit.</summary>
         public Unit Attacker;
+        /// <summary>The time when the attack occurred.</summary>
         public float Time;
     }
 
+    /// <summary>
+    /// Information about the last unit that attacked this unit.
+    /// </summary>
     public LastDamageEvent? LastAttackerInfo { get; private set; } = null;
 
     [Header("State & Core Mechanics")]
+    /// <summary>
+    /// Whether the unit is currently moving.
+    /// </summary>
     public bool IsMoving;
+    
+    /// <summary>
+    /// The tile this unit is currently occupying.
+    /// </summary>
     protected Tile occupiedTile;
-    [SerializeField] protected float yOffset = 0f; // Gardé 'protected' pour la flexibilité des classes enfants
+    
+    /// <summary>
+    /// Y offset for positioning the unit above the tile.
+    /// </summary>
+    [SerializeField] protected float yOffset = 0f;
+    
+    /// <summary>
+    /// Whether the unit is attached to a tile and ready for gameplay.
+    /// </summary>
     public bool isAttached = false;
+    
+    /// <summary>
+    /// The current level of this unit.
+    /// </summary>
     public int Level;
 
+    /// <summary>
+    /// The tile this unit has reserved for movement.
+    /// </summary>
     private Tile _reservedTile;
 
     [Header("Debugging")]
+    /// <summary>
+    /// Enable debug logging for unit movement.
+    /// </summary>
     [SerializeField] private bool debugUnitMovement = true;
+    
+    /// <summary>
+    /// Enable debug logging for unit combat.
+    /// </summary>
     [SerializeField] private bool debugUnitCombat = false;
 
     [Header("Stats & Systems")]
+    /// <summary>
+    /// The current runtime stats for this unit.
+    /// </summary>
     public RuntimeStats CurrentStats { get; private set; }
+    
+    /// <summary>
+    /// The base stats before any modifications.
+    /// </summary>
     private RuntimeStats baseStats;
+    
+    /// <summary>
+    /// The fever mode buffs configuration for this unit.
+    /// </summary>
     private FeverBuffs _feverBuffs;
+    
+    /// <summary>
+    /// Gets the active fever buffs for this unit.
+    /// </summary>
     public FeverBuffs ActiveFeverBuffs => _feverBuffs;
+    
+    /// <summary>
+    /// Whether this unit can receive fever buffs.
+    /// </summary>
     private bool _canReceiveFeverBuffs = false;
+    
+    /// <summary>
+    /// Whether fever mode is currently active for this unit.
+    /// </summary>
     public bool IsFeverActive { get; private set; } = false;
 
     // --- FEATURE DU FICHIER 2 : VFX pour le mode Fever ---
     [Header("Fever Aura VFX")]
+    /// <summary>
+    /// Prefab for the fever aura to instantiate under the unit when fever mode is active.
+    /// </summary>
     [Tooltip("Prefab de l'aura Fever à instancier sous l'unité quand le mode Fever est actif.")]
     [SerializeField] private GameObject feverAuraPrefab;
+    
+    /// <summary>
+    /// The currently active fever aura instance.
+    /// </summary>
     private GameObject _activeFeverAuraInstance;
 
-
+    /// <summary>
+    /// The character stat sheets containing base statistics.
+    /// </summary>
     public StatSheet_SO CharacterStatSheets;
+    
+    /// <summary>
+    /// The current health of this unit.
+    /// </summary>
     public int Health { get; protected set; }
 
+    /// <summary>
+    /// Gets the attack power of this unit.
+    /// </summary>
     public virtual int Attack => CurrentStats != null ? CurrentStats.Attack : 0;
+    
+    /// <summary>
+    /// Gets the defense value of this unit.
+    /// </summary>
     public virtual int Defense => CurrentStats != null ? CurrentStats.Defense : 0;
+    
+    /// <summary>
+    /// Gets the attack range of this unit in tiles.
+    /// </summary>
     public virtual int AttackRange => CurrentStats != null ? CurrentStats.AttackRange : 0;
+    
+    /// <summary>
+    /// Gets the number of beats this unit must wait between attacks.
+    /// </summary>
     public virtual int AttackDelay => CurrentStats != null ? CurrentStats.AttackDelay : 1;
+    
+    /// <summary>
+    /// Gets the number of beats this unit must wait between movements.
+    /// </summary>
     public virtual int MovementDelay => CurrentStats != null ? CurrentStats.MovementDelay : 1;
+    
+    /// <summary>
+    /// Gets the detection range of this unit in tiles.
+    /// </summary>
     public virtual int DetectionRange => CurrentStats != null ? CurrentStats.DetectionRange : 0;
 
 
+    /// <summary>
+    /// The movement system component for this unit.
+    /// </summary>
     [SerializeField] private MonoBehaviour movementSystemComponent;
+    
+    /// <summary>
+    /// The attack system component for this unit.
+    /// </summary>
     [SerializeField] private MonoBehaviour attackSystemComponent;
 
+    /// <summary>
+    /// The movement system interface for this unit.
+    /// </summary>
     public IMovement MovementSystem { get; private set; }
+    
+    /// <summary>
+    /// The attack system interface for this unit.
+    /// </summary>
     public IAttack AttackSystem { get; private set; }
+    /// <summary>
+    /// Represents an active buff applied to the unit.
+    /// </summary>
     protected class ActiveBuff
     {
+        /// <summary>The stat that is being buffed.</summary>
         public StatToBuff Stat;
+        /// <summary>The multiplier applied to the stat.</summary>
         public float Multiplier;
+        /// <summary>The remaining duration of the buff in seconds.</summary>
         public float DurationRemaining;
+        /// <summary>The coroutine handling the buff expiry.</summary>
         public Coroutine ExpiryCoroutine;
     }
+    
+    /// <summary>
+    /// Whether the unit is currently in spawning state.
+    /// </summary>
     public bool IsSpawning { get; private set; } = true;
+    
+    /// <summary>
+    /// Sets the spawning state of the unit.
+    /// </summary>
+    /// <param name="isCurrentlySpawning">Whether the unit is currently spawning.</param>
     public void SetSpawningState(bool isCurrentlySpawning)
     {
         IsSpawning = isCurrentlySpawning;
     }
 
 
+    /// <summary>
+    /// Counter for tracking beats for movement timing.
+    /// </summary>
     protected int _beatCounter = 0;
+    
+    /// <summary>
+    /// Counter for tracking beats for attack timing.
+    /// </summary>
     private int _attackBeatCounter = 0;
+    
+    /// <summary>
+    /// Counter for tracking how many times the unit has been stuck.
+    /// </summary>
     private int _stuckCount = 0;
+    
+    /// <summary>
+    /// Whether the unit is currently performing an attack.
+    /// </summary>
     protected bool _isAttacking = false;
 
+    /// <summary>
+    /// Delegate for unit attacked events.
+    /// </summary>
+    /// <param name="attacker">The attacking unit.</param>
+    /// <param name="target">The target unit.</param>
+    /// <param name="damage">The damage dealt.</param>
     public delegate void UnitAttackedHandler(Unit attacker, Unit target, int damage);
+    
+    /// <summary>
+    /// Event triggered when a unit attacks another unit.
+    /// </summary>
     public static event UnitAttackedHandler OnUnitAttacked;
+    
+    /// <summary>
+    /// Delegate for unit attacked building events.
+    /// </summary>
+    /// <param name="attacker">The attacking unit.</param>
+    /// <param name="target">The target building.</param>
+    /// <param name="damage">The damage dealt.</param>
     public delegate void UnitAttackedBuildingHandler(Unit attacker, Building target, int damage);
+    
+    /// <summary>
+    /// Event triggered when a unit attacks a building.
+    /// </summary>
     public static event UnitAttackedBuildingHandler OnUnitAttackedBuilding;
 
+    /// <summary>
+    /// VFX to play during the 'cheer and despawn' animation.
+    /// </summary>
     [Tooltip("VFX à jouer lors de l'animation de 'cheer and despawn'.")]
     [SerializeField] private GameObject cheerAndDespawnVFX; 
 
     /// <summary>
-    /// Déclenché lorsqu'une unité est tuée par une autre.
-    /// Param 1: Attaquant, Param 2: Victime.
+    /// Event triggered when a unit is killed by another unit.
     /// </summary>
+    /// <param name="attacker">The attacking unit.</param>
+    /// <param name="victim">The unit that was killed.</param>
     public static event Action<Unit, Unit> OnUnitKilled;
 
 [Header("Animation")]
+    /// <summary>
+    /// The animator component for this unit.
+    /// </summary>
     [SerializeField] protected Animator animator;
+    
+    /// <summary>
+    /// Whether to use animations for this unit.
+    /// </summary>
     [SerializeField] protected bool useAnimations = true;
 
+    /// <summary>
+    /// Animator parameter ID for idle state.
+    /// </summary>
     public readonly int IdleParamId = Animator.StringToHash("IsIdle");
+    
+    /// <summary>
+    /// Animator parameter ID for moving state.
+    /// </summary>
     public readonly int MovingParamId = Animator.StringToHash("IsMoving");
+    
+    /// <summary>
+    /// Animator trigger ID for attack animation.
+    /// </summary>
     public readonly int AttackTriggerId = Animator.StringToHash("Attack");
+    
+    /// <summary>
+    /// Animator trigger ID for capture animation.
+    /// </summary>
     public readonly int CaptureTriggerId = Animator.StringToHash("Capture");
+    
+    /// <summary>
+    /// Animator trigger ID for death animation.
+    /// </summary>
     public readonly int DieTriggerId = Animator.StringToHash("Die");
+    
+    /// <summary>
+    /// Animator trigger ID for cheer animation.
+    /// </summary>
     public readonly int CheerTriggerId = Animator.StringToHash("Cheer");
 
+    /// <summary>
+    /// The current state of this unit.
+    /// </summary>
     [SerializeField] protected UnitState currentState = UnitState.Idle;
 
+    /// <summary>
+    /// The unit this unit is currently targeting.
+    /// </summary>
     public Unit targetUnit = null;
+    
+    /// <summary>
+    /// The building this unit is currently targeting.
+    /// </summary>
     public Building targetBuilding = null;
+    
+    /// <summary>
+    /// Whether the unit is currently interacting with a building.
+    /// </summary>
     protected bool isInteractingWithBuilding = false;
+    
+    /// <summary>
+    /// The neutral building currently being captured by this unit.
+    /// </summary>
     protected NeutralBuilding buildingBeingCaptured = null;
+    
+    /// <summary>
+    /// Number of beats spent capturing the current building.
+    /// </summary>
     protected int beatsSpentCapturing = 0;
 
+    /// <summary>
+    /// List of active buffs applied to this unit.
+    /// </summary>
     protected List<ActiveBuff> activeBuffs = new List<ActiveBuff>();
 
+    /// <summary>
+    /// Gets the tile this unit is currently occupying.
+    /// </summary>
+    /// <returns>The occupied tile, or null if not on any tile.</returns>
     public Tile GetOccupiedTile() => occupiedTile;
 
     // --- FEATURE DU FICHIER 1 : Gestion des tuiles multiples ---
+    /// <summary>
+    /// Gets all tiles occupied by this unit. For base units, this is just the main tile.
+    /// Override in derived classes for units that occupy multiple tiles.
+    /// </summary>
+    /// <returns>List of tiles occupied by this unit.</returns>
     public virtual List<Tile> GetOccupiedTiles()
     {
-        // Pour une unité de base, on retourne une liste contenant uniquement sa tuile principale.
+        // For a base unit, return a list containing only its main tile.
         if (occupiedTile != null)
         {
             return new List<Tile> { occupiedTile };
         }
-        return new List<Tile>(); // Retourne une liste vide si l'unité n'est sur aucune tuile.
+        return new List<Tile>(); // Return empty list if unit is not on any tile.
     }
 
+    /// <summary>
+    /// Gets all tiles within the attack range of this unit.
+    /// </summary>
+    /// <returns>List of tiles within attack range.</returns>
     protected List<Tile> GetTilesInAttackRange()
     {
         if (occupiedTile == null || HexGridManager.Instance == null) return new List<Tile>();
         return HexGridManager.Instance.GetTilesWithinRange(occupiedTile.column, occupiedTile.row, Mathf.CeilToInt(AttackRange));
     }
 
+    /// <summary>
+    /// Initializes the unit with systems, stats, and fever mode integration.
+    /// </summary>
+    /// <returns>Coroutine for initialization process.</returns>
     protected virtual IEnumerator Start()
     {
         if (animator == null) { animator = GetComponent<Animator>(); }
         if (useAnimations && animator == null)
         {
-             Debug.LogWarning($"[{name}] Animator non trouvé/assigné, mais useAnimations est true. Animations désactivées.");
+             Debug.LogWarning($"[{name}] Animator not found/assigned, but useAnimations is true. Animations disabled.");
              useAnimations = false;
         }
 
@@ -175,14 +428,14 @@ public abstract class Unit : MonoBehaviour, ITileReservationObserver, ITargetabl
 
         if (FeverManager.Instance != null)
         {
-            // Si le mode Fever est déjà à son niveau maximum lors de l'apparition de l'unité,
-            // on applique les effets immédiatement.
+            // If fever mode is already at maximum level when unit spawns,
+            // apply effects immediately
             if (FeverManager.Instance.CurrentFeverLevel > 0 && FeverManager.Instance.CurrentFeverLevel == FeverManager.Instance.MaxFeverLevel)
             {
                 ApplyFeverEffects();
             }
 
-            // On s'abonne aux changements de niveau pour les futurs paliers ou la fin du mode Fever.
+            // Subscribe to level changes for future tiers or end of fever mode
             FeverManager.Instance.OnFeverLevelChanged += HandleFeverLevelChanged;
         }
 
@@ -197,10 +450,16 @@ public abstract class Unit : MonoBehaviour, ITileReservationObserver, ITargetabl
             Debug.LogWarning($"[{name}] TileReservationController not found. Tile reservation features might not work as expected.");
         }
     }
+    /// <summary>
+    /// Virtual Awake method that allows derived classes to override.
+    /// </summary>
     protected virtual void Awake()
     {
-        // Méthode Awake virtuelle pour permettre aux classes dérivées de l'override
+        // Virtual Awake method to allow derived classes to override
     }
+    /// <summary>
+    /// Subscribes to rhythm beat events when the unit is enabled.
+    /// </summary>
     protected virtual void OnEnable()
     {
        if (isAttached && MusicManager.Instance != null)
@@ -210,6 +469,9 @@ public abstract class Unit : MonoBehaviour, ITileReservationObserver, ITargetabl
        }
     }
 
+    /// <summary>
+    /// Unsubscribes from rhythm beat events and resets state when disabled.
+    /// </summary>
     protected virtual void OnDisable()
     {
        if (MusicManager.Instance != null)
@@ -222,6 +484,10 @@ public abstract class Unit : MonoBehaviour, ITileReservationObserver, ITargetabl
         if (currentState == UnitState.Capturing) StopCapturing();
     }
 
+    /// <summary>
+    /// Gets the type of this unit from its character stat sheets.
+    /// </summary>
+    /// <returns>The unit type, or Null if no stat sheets are assigned.</returns>
     public UnitType GetUnitType()
     {
         return CharacterStatSheets?.Type ?? UnitType.Null;
@@ -242,10 +508,14 @@ public abstract class Unit : MonoBehaviour, ITileReservationObserver, ITargetabl
     }
 #endif
 
-    // --- FEATURE DU FICHIER 2 : Logique du mode Fever améliorée ---
+    // --- FEVER MODE LOGIC ---
+    /// <summary>
+    /// Handles fever level changes and applies or removes fever effects.
+    /// </summary>
+    /// <param name="newFeverLevel">The new fever level.</param>
     private void HandleFeverLevelChanged(int newFeverLevel)
     {
-        // Si le mode Fever s'active (n'importe quel niveau > 0) ET que cette unité n'a pas encore ses buffs
+        // If fever mode activates (any level > 0) AND this unit doesn't have buffs yet
         if (newFeverLevel > 0 && !IsFeverActive)
         {
             ApplyFeverEffects();
@@ -257,6 +527,9 @@ public abstract class Unit : MonoBehaviour, ITileReservationObserver, ITargetabl
         }
     }
 
+    /// <summary>
+    /// Applies fever mode effects to the unit including stat buffs and VFX.
+    /// </summary>
     private void ApplyFeverEffects()
     {
         if (!_canReceiveFeverBuffs || baseStats == null)
@@ -268,11 +541,11 @@ public abstract class Unit : MonoBehaviour, ITileReservationObserver, ITargetabl
         IsFeverActive = true;
         if(debugUnitCombat) Debug.Log($"[{name}] Applying Fever effects.");
 
-        // Appliquer les buffs de stats
+        // Apply stat buffs
         CurrentStats.AttackDelay = Mathf.Max(1, (int)(baseStats.AttackDelay / _feverBuffs.AttackSpeedMultiplier));
         CurrentStats.Defense = (int)(baseStats.Defense * _feverBuffs.DefenseMultiplier);
 
-        // Activer le VFX
+        // Activate VFX
         if (_activeFeverAuraInstance == null && feverAuraPrefab != null)
         {
             _activeFeverAuraInstance = Instantiate(feverAuraPrefab, transform);
@@ -280,18 +553,21 @@ public abstract class Unit : MonoBehaviour, ITileReservationObserver, ITargetabl
         }
     }
 
+    /// <summary>
+    /// Removes fever mode effects from the unit and restores base stats.
+    /// </summary>
     private void RemoveFeverEffects()
     {
-        if (baseStats == null) return; // Sécurité
+        if (baseStats == null) return; // Safety check
 
         IsFeverActive = false;
         if(debugUnitCombat) Debug.Log($"[{name}] Removing Fever effects.");
 
-        // Restaurer les stats de base
+        // Restore base stats
         CurrentStats.AttackDelay = baseStats.AttackDelay;
         CurrentStats.Defense = baseStats.Defense;
 
-        // Détruire le VFX
+        // Destroy VFX
         if (_activeFeverAuraInstance != null)
         {
             Destroy(_activeFeverAuraInstance);
@@ -299,6 +575,10 @@ public abstract class Unit : MonoBehaviour, ITileReservationObserver, ITargetabl
         }
     }
 
+    /// <summary>
+    /// Coroutine that attaches the unit to the nearest available tile.
+    /// </summary>
+    /// <returns>Coroutine for tile attachment process.</returns>
     private IEnumerator AttachToNearestTile()
     {
         while (!isAttached)
@@ -348,6 +628,9 @@ public abstract class Unit : MonoBehaviour, ITileReservationObserver, ITargetabl
         }
     }
 
+    /// <summary>
+    /// Handles capture logic on each rhythm beat when in capturing state.
+    /// </summary>
     public virtual void OnCaptureBeat()
     {
         if (currentState != UnitState.Capturing) return;
@@ -359,6 +642,9 @@ public abstract class Unit : MonoBehaviour, ITileReservationObserver, ITargetabl
         }
     }
 
+    /// <summary>
+    /// Stops the current capturing process and resets to idle state.
+    /// </summary>
     public virtual void StopCapturing()
     {
         if (currentState == UnitState.Capturing)
@@ -373,11 +659,19 @@ public abstract class Unit : MonoBehaviour, ITileReservationObserver, ITargetabl
         }
     }
 
+    /// <summary>
+    /// Internal wrapper for rhythm beat events that calls the virtual OnRhythmBeat method.
+    /// </summary>
+    /// <param name="beatDuration">Duration of the current beat.</param>
     private void OnRhythmBeatInternal(float beatDuration)
     {
         OnRhythmBeat(beatDuration);
     }
 
+    /// <summary>
+    /// Handles rhythm beat events for this unit, managing movement, attack, and capture logic.
+    /// </summary>
+    /// <param name="beatDuration">Duration of the current beat.</param>
     protected virtual void OnRhythmBeat(float beatDuration)
     {
         HandleMovementOnBeat();
@@ -392,7 +686,10 @@ public abstract class Unit : MonoBehaviour, ITileReservationObserver, ITargetabl
         if (currentState == UnitState.Capturing) { HandleCaptureOnBeat(); }
     }
 
-    #region Unchanged Methods
+    #region Movement and Combat Methods
+    /// <summary>
+    /// Handles movement logic on rhythm beats, including pathfinding and stuck detection.
+    /// </summary>
     protected virtual void HandleMovementOnBeat()
     {
         if (IsMoving || currentState == UnitState.Capturing) return;
@@ -437,6 +734,9 @@ public abstract class Unit : MonoBehaviour, ITileReservationObserver, ITargetabl
         }
     }
 
+    /// <summary>
+    /// Handles attack logic on rhythm beats, finding targets and initiating attacks.
+    /// </summary>
     protected virtual void HandleAttackOnBeat()
     {
         if (_isAttacking || currentState == UnitState.Capturing || AttackSystem == null) return;
@@ -468,6 +768,9 @@ public abstract class Unit : MonoBehaviour, ITileReservationObserver, ITargetabl
         }
     }
 
+    /// <summary>
+    /// Handles building capture logic on rhythm beats.
+    /// </summary>
     protected virtual void HandleCaptureOnBeat()
     {
          if (buildingBeingCaptured == null || currentState != UnitState.Capturing) return;
@@ -477,6 +780,11 @@ public abstract class Unit : MonoBehaviour, ITileReservationObserver, ITargetabl
          }
     }
 
+    /// <summary>
+    /// Coroutine that moves the unit to a target tile with reservation management.
+    /// </summary>
+    /// <param name="targetTile">The tile to move to.</param>
+    /// <returns>Coroutine for movement process.</returns>
     public IEnumerator MoveToTile(Tile targetTile)
     {
         string context = $"[{name}/{GetInstanceID()}]";
@@ -592,11 +900,16 @@ public abstract class Unit : MonoBehaviour, ITileReservationObserver, ITargetabl
         }
     }
 
+    /// <summary>
+    /// Coroutine that performs an attack on a target unit.
+    /// </summary>
+    /// <param name="target">The unit to attack.</param>
+    /// <returns>Coroutine for attack process.</returns>
     public IEnumerator PerformAttackCoroutine(Unit target)
     {
         if (AttackSystem == null || target == null || target.Health <= 0)
         {
-            if (debugUnitCombat) Debug.LogWarning($"[{name}] PerformAttackCoroutine: Conditions non remplies (AttackSystem null, cible nulle ou cible morte). Cible: {(target?.name ?? "NULL")}, Cible PV: {target?.Health ?? -1}");
+            if (debugUnitCombat) Debug.LogWarning($"[{name}] PerformAttackCoroutine: Conditions not met (AttackSystem null, target null or dead). Target: {(target?.name ?? "NULL")}, Target HP: {target?.Health ?? -1}");
             _isAttacking = false;
             SetState(UnitState.Idle);
             yield break;
@@ -689,6 +1002,10 @@ public abstract class Unit : MonoBehaviour, ITileReservationObserver, ITargetabl
         SetState(UnitState.Idle);
     }
 
+    /// <summary>
+    /// Finds the closest attackable unit target within range.
+    /// </summary>
+    /// <returns>The closest valid unit target, or null if none found.</returns>
     protected virtual Unit FindAttackableUnitTarget()
     {
         if (occupiedTile == null || AttackSystem == null) return null;
@@ -714,6 +1031,10 @@ public abstract class Unit : MonoBehaviour, ITileReservationObserver, ITargetabl
         return closestValidTarget;
     }
 
+    /// <summary>
+    /// Finds the closest attackable building target within range.
+    /// </summary>
+    /// <returns>The closest valid building target, or null if none found.</returns>
     protected virtual Building FindAttackableBuildingTarget()
     {
         if (occupiedTile == null || AttackSystem == null) return null;
@@ -739,6 +1060,11 @@ public abstract class Unit : MonoBehaviour, ITileReservationObserver, ITargetabl
         return closestValidTarget;
     }
 
+    /// <summary>
+    /// Handles damage taken by the unit, including defense calculations and death.
+    /// </summary>
+    /// <param name="damage">The amount of damage to take.</param>
+    /// <param name="attacker">The unit that attacked this unit (optional).</param>
     public virtual void TakeDamage(int damage, Unit attacker = null)
     {
          if (debugUnitCombat) Debug.Log($"[{name}] TakeDamage called with {damage} damage from {attacker?.name ?? "unknown attacker"}.");
@@ -773,6 +1099,9 @@ public abstract class Unit : MonoBehaviour, ITileReservationObserver, ITargetabl
         }
     }
 
+    /// <summary>
+    /// Handles unit death, including cleanup and destruction.
+    /// </summary>
     protected virtual void Die()
     {
         if (debugUnitCombat) Debug.Log($"[{name}] Died.");
@@ -833,12 +1162,19 @@ public abstract class Unit : MonoBehaviour, ITileReservationObserver, ITargetabl
         else if (debugUnitMovement) Debug.LogWarning($"[{name}] Attached, but occupiedTile is unexpectedly null.");
     }
 
+    /// <summary>
+    /// Called when the unit completes a movement to a new tile.
+    /// </summary>
     public virtual void OnMovementComplete()
     {
         if (debugUnitMovement) Debug.Log($"[{name}] Movement complete. Now at ({occupiedTile?.column ?? -1}, {occupiedTile?.row ?? -1}).");
         _attackBeatCounter = 0;
     }
 
+    /// <summary>
+    /// Gets the next tile towards the unit's destination, considering tile reservations.
+    /// </summary>
+    /// <returns>The next tile to move to, or null if no valid tile is available.</returns>
     protected Tile GetNextTileTowardsDestination()
     {
         if (!TargetPosition.HasValue || occupiedTile == null || HexGridManager.Instance == null) return null;
@@ -859,6 +1195,11 @@ public abstract class Unit : MonoBehaviour, ITileReservationObserver, ITargetabl
         return null;
     }
 
+    /// <summary>
+    /// Gets the next tile towards a specific destination for Behavior Graph usage.
+    /// </summary>
+    /// <param name="finalDestination">The target destination coordinates.</param>
+    /// <returns>The next tile to move to, or null if no valid tile is available.</returns>
     public Tile GetNextTileTowardsDestinationForBG(Vector2Int finalDestination)
     {
         if (occupiedTile == null || HexGridManager.Instance == null)
@@ -886,6 +1227,11 @@ public abstract class Unit : MonoBehaviour, ITileReservationObserver, ITargetabl
         return nextTile;
     }
 
+     /// <summary>
+     /// Finds an alternative neighbor tile when the preferred tile is not available.
+     /// </summary>
+     /// <param name="originallyPreferredTilePos">The position of the originally preferred tile.</param>
+     /// <returns>The best alternative neighbor tile, or null if none found.</returns>
      private Tile FindAlternativeNeighbor(Vector2Int originallyPreferredTilePos)
      {
         if (occupiedTile?.Neighbors == null) return null;
@@ -922,6 +1268,11 @@ public abstract class Unit : MonoBehaviour, ITileReservationObserver, ITargetabl
         return bestAlternative;
      }
 
+    /// <summary>
+    /// Forces finding any available neighbor tile when the unit is stuck.
+    /// Shuffles neighbors to avoid predictable movement patterns.
+    /// </summary>
+    /// <returns>Any available neighbor tile, or null if all are occupied.</returns>
     private Tile ForceGetAnyAvailableNeighbor()
     {
         if (occupiedTile?.Neighbors == null || occupiedTile.Neighbors.Count == 0) return null;
@@ -940,6 +1291,11 @@ public abstract class Unit : MonoBehaviour, ITileReservationObserver, ITargetabl
         return null;
     }
 
+    /// <summary>
+    /// Calculates the rotation needed to face a target tile.
+    /// </summary>
+    /// <param name="targetTile">The tile to face.</param>
+    /// <returns>The rotation quaternion to face the target tile.</returns>
     protected Quaternion CalculateRotationToFaceTile(Tile targetTile)
     {
         if (targetTile == null || targetTile == occupiedTile) return transform.rotation;
@@ -948,6 +1304,12 @@ public abstract class Unit : MonoBehaviour, ITileReservationObserver, ITargetabl
         return (direction != Vector3.zero) ? Quaternion.LookRotation(direction) : transform.rotation;
     }
 
+    /// <summary>
+    /// Smoothly rotates the unit to face a target tile over time.
+    /// </summary>
+    /// <param name="targetTile">The tile to face.</param>
+    /// <param name="duration">The duration of the rotation in seconds.</param>
+    /// <returns>Coroutine for rotation process.</returns>
     protected IEnumerator RotateToFaceTile(Tile targetTile, float duration = 0.15f)
     {
         if (targetTile == null || targetTile == occupiedTile) yield break;
@@ -966,6 +1328,10 @@ public abstract class Unit : MonoBehaviour, ITileReservationObserver, ITargetabl
         transform.rotation = targetRotation;
     }
 
+    /// <summary>
+    /// Immediately faces the unit towards a target transform.
+    /// </summary>
+    /// <param name="targetTransform">The transform to face.</param>
     protected void FaceTarget(Transform targetTransform)
     {
         if (targetTransform == null) return;

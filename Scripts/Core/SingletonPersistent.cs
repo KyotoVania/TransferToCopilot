@@ -1,20 +1,28 @@
 using UnityEngine;
 
 /// <summary>
-/// Singleton persistant générique pour les Managers Globaux.
+/// Generic persistent singleton base class for global managers.
+/// Ensures only one instance exists across scene changes and persists throughout the game lifecycle.
 /// </summary>
-/// <typeparam name="T">Le type du manager.</typeparam>
+/// <typeparam name="T">The type of the manager that inherits from this singleton.</typeparam>
 public abstract class SingletonPersistent<T> : MonoBehaviour where T : Component
 {
+    /// <summary>
+    /// Gets the singleton instance of the manager.
+    /// </summary>
     public static T Instance { get; private set; }
 
+    /// <summary>
+    /// Initializes the singleton instance and ensures persistence across scenes.
+    /// Override this method in derived classes but always call base.Awake() first.
+    /// </summary>
     protected virtual void Awake()
     {
         if (Instance == null)
         {
             Instance = this as T;
-            // Assurer que l'objet n'est pas détruit au changement de scène
-            // et qu'il est à la racine pour que DontDestroyOnLoad fonctionne correctement.
+            // Ensure the object is not destroyed on scene change
+            // and that it's at the root for DontDestroyOnLoad to work correctly.
             if (transform.parent != null)
             {
                 transform.SetParent(null);

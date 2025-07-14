@@ -1,46 +1,117 @@
 using UnityEngine;
 using System.Collections;
 
+/// <summary>
+/// Manages the movement and visual behavior of a banner.
+/// The banner can be attached to a moving unit or placed at a fixed position in the world.
+/// It features a rhythmic swaying motion synchronized with the MusicManager.
+/// </summary>
 public class BannerMovement : MonoBehaviour
 {
-    // --- FEATURE FUSIONNÉE: Garde la référence à l'unité attachée ---
+    /// <summary>
+    /// Reference to the unit this banner is attached to. Null if the banner is static.
+    /// </summary>
     private Unit attachedUnit;
 
     [Header("Movement Settings")]
-    [Tooltip("Hauteur finale de la bannière au-dessus de son point de référence.")]
+    /// <summary>
+    /// Defines the final height of the banner above its reference point (the unit's base or its world position).
+    /// Configurable from the Unity Inspector.
+    /// </summary>
+    [Tooltip("Final height of the banner above its reference point.")]
     [SerializeField] private float finalHeightOffset = 4f;
 
     [Header("Rhythmic Movement")]
+    /// <summary>
+    /// Enables or disables the rhythmic swaying motion.
+    /// If true, the banner will sway in time with the beats detected by the MusicManager.
+    /// </summary>
     [SerializeField] private bool enableRhythmicMovement = true;
+    
+    /// <summary>
+    /// The amplitude of the swaying motion when `useRotationSway` is false.
+    /// </summary>
     [SerializeField] private float swayAmount = 0.1f;
+
+    /// <summary>
+    /// The speed at which the banner reaches its sway target. A higher value results in a sharper movement.
+    /// </summary>
     [SerializeField] private float swayTransitionSpeed = 2.0f;
 
     [Header("Sway Type")]
+    /// <summary>
+    /// Determines the type of sway. If true, the banner rotates. If false, it moves laterally.
+    /// </summary>
     [SerializeField] private bool useRotationSway = true;
+
+    /// <summary>
+    /// The maximum angle (in degrees) of the rotational sway.
+    /// </summary>
     [SerializeField] private float rotationSwayAmount = 10f;
+
+    /// <summary>
+    /// The height of the banner, used to calculate the pivot point for a natural rotation.
+    /// </summary>
     [SerializeField] private float bannerHeight = 2.0f;
+
+    /// <summary>
+    /// Defines the pivot point for the rotation as a ratio of the banner's height (0 = base, 0.5 = center, 1 = top).
+    /// </summary>
     [SerializeField] [Range(0f, 1f)] private float pivotOffsetRatio = 0f;
 
     [Header("Camera Facing")]
+    /// <summary>
+    /// If true, the banner will orient itself to face the main camera.
+    /// </summary>
     [SerializeField] private bool shouldFaceCamera = true;
 
-    // --- État Interne (fusionné) ---
+    // --- Internal State ---
+    /// <summary>
+    /// Cached reference to the main camera for orientation calculations.
+    /// </summary>
     private Camera mainCamera;
+    
+    /// <summary>
+    /// The base world position from which movement calculations (like swaying) are performed.
+    /// </summary>
     private Vector3 baseWorldPosition;
+
+    /// <summary>
+    /// The base rotation of the banner, usually oriented towards the camera.
+    /// </summary>
     private Quaternion baseWorldRotation;
+
+    /// <summary>
+    /// The target sway value (angle or position) for the current beat.
+    /// </summary>
     private float currentSwayTarget;
+
+    /// <summary>
+    /// The current sway value, interpolated towards `currentSwayTarget` for smooth movement.
+    /// </summary>
     private float currentSwayActual;
+
+    /// <summary>
+    /// The direction of the sway (1 for right/forward, -1 for left/backward).
+    /// </summary>
     private int swayDirection = 1;
+
+    /// <summary>
+    /// A flag to ensure the banner has been properly initialized before applying movements.
+    /// </summary>
     private bool isInitialized = false;
 
-    // --- Propriété publique pour l'accès externe ---
+    /// <summary>
+    /// Publicly exposes the `finalHeightOffset` value.
+    /// </summary>
     public float FinalHeightOffset => finalHeightOffset;
 
     #region Public Setup Methods
 
     /// <summary>
-    /// FEATURE DU FICHIER 1: Attache la bannière à une unité en mouvement.
+    /// Attaches the banner to a specific unit, making it follow its movements.
     /// </summary>
+    /// <param name="unit">The unit to which the banner should be attached.</param>
     public void AttachToUnit(Unit unit)
     {
         if (unit == null)
@@ -49,28 +120,28 @@ public class BannerMovement : MonoBehaviour
             return;
         }
 
-        // Si on était attaché à une autre unité, on se désabonne d'abord
+        // If already attached, unsubscribe from the old unit's death event.
         if (attachedUnit != null)
         {
             attachedUnit.OnUnitDestroyed -= HandleAttachedUnitDeath;
         }
 
         this.attachedUnit = unit;
-        transform.SetParent(unit.transform, false); // 'false' pour réinitialiser la position/rotation locale
+        transform.SetParent(unit.transform, false); // 'false' to keep the local position/rotation at zero.
 
-        // S'abonner à la mort de la nouvelle unité
+        // Subscribe to the new unit's death event to be destroyed cleanly.
         unit.OnUnitDestroyed += HandleAttachedUnitDeath;
 
-        // Initialiser la position et la rotation
         InitializeTransform(unit.transform.position + new Vector3(0, finalHeightOffset, 0));
     }
 
     /// <summary>
-    /// FEATURE DU FICHIER 2: Place la bannière à une position fixe dans le monde.
+    /// Places the banner at a static position in the world.
+    /// If the banner was previously attached to a unit, it is detached.
     /// </summary>
+    /// <param name="worldPosition">The world position where the banner should be placed.</param>
     public void PlaceAtWorldPosition(Vector3 worldPosition)
     {
-        // Si on était attaché à une unité, on se détache et on se désabonne
         if (attachedUnit != null)
         {
             attachedUnit.OnUnitDestroyed -= HandleAttachedUnitDeath;
@@ -81,7 +152,10 @@ public class BannerMovement : MonoBehaviour
         InitializeTransform(worldPosition);
     }
 
-    // Alias pour la compatibilité avec le BannerController existant
+    /// <summary>
+    /// Alias for `PlaceAtWorldPosition` to ensure compatibility with other scripts.
+    /// </summary>
+    /// <param name="newBaseWorldPosition">The new base position for the banner.</param>
     public void UpdatePosition(Vector3 newBaseWorldPosition)
     {
         PlaceAtWorldPosition(newBaseWorldPosition);
@@ -91,16 +165,24 @@ public class BannerMovement : MonoBehaviour
 
     #region Unity Lifecycle & Callbacks
 
+    /// <summary>
+    /// Unity lifecycle method. Called before the first frame.
+    /// Initializes the reference to the main camera.
+    /// </summary>
     void Awake()
     {
         mainCamera = Camera.main;
         if (mainCamera == null)
         {
-            Debug.LogError("[BannerMovement] Caméra principale non trouvée !", this);
+            Debug.LogError("[BannerMovement] Main camera not found!", this);
             enabled = false;
         }
     }
 
+    /// <summary>
+    /// Unity lifecycle method. Called when the object becomes active.
+    /// Subscribes to the OnBeat event of the MusicManager.
+    /// </summary>
     void OnEnable()
     {
         if (MusicManager.Instance != null)
@@ -108,32 +190,38 @@ public class BannerMovement : MonoBehaviour
             MusicManager.Instance.OnBeat += OnBeat;
         }
 
-        // Réinitialiser l'état du balancement
+        // Reset the sway state each time it's enabled.
         currentSwayTarget = 0;
         currentSwayActual = 0;
         swayDirection = 1;
     }
 
+    /// <summary>
+    /// Unity lifecycle method. Called when the object becomes inactive.
+    /// Unsubscribes from events to prevent memory leaks.
+    /// </summary>
     void OnDisable()
     {
         if (MusicManager.Instance != null)
         {
             MusicManager.Instance.OnBeat -= OnBeat;
         }
-        // Sécurité pour se désabonner si l'objet est désactivé
+        
         if (attachedUnit != null)
         {
             attachedUnit.OnUnitDestroyed -= HandleAttachedUnitDeath;
         }
     }
 
-    // LateUpdate est meilleur pour les suivis de position pour éviter les saccades
+    /// <summary>
+    /// Unity lifecycle method. Called every frame, after all Update methods.
+    /// Ideal for camera and tracking movements to avoid jitter.
+    /// </summary>
     void LateUpdate()
     {
-        // FEATURE FUSIONNÉE: Met à jour la position de base si attaché à une unité
+        // If attached to a unit, continuously update the base position.
         if (attachedUnit != null)
         {
-            // La position de base pour le balancement est mise à jour en permanence
             baseWorldPosition = attachedUnit.transform.position + new Vector3(0, finalHeightOffset, 0);
         }
 
@@ -145,26 +233,37 @@ public class BannerMovement : MonoBehaviour
         }
     }
 
+    /// <summary>
+    /// Method called by the MusicManager on each music beat.
+    /// </summary>
+    /// <param name="beatDuration">The duration of the beat (not used here, but required by the event signature).</param>
     private void OnBeat(float beatDuration)
     {
         if (!enableRhythmicMovement || !isInitialized) return;
 
-        swayDirection *= -1; // Inverser la direction du balancement
+        // Invert the sway direction on each beat.
+        swayDirection *= -1; 
         currentSwayTarget = useRotationSway ? (rotationSwayAmount * swayDirection) : (swayAmount * swayDirection);
     }
 
+    /// <summary>
+    /// Handles the destruction of the attached unit.
+    /// </summary>
     private void HandleAttachedUnitDeath()
     {
         if (this == null) return;
-        transform.SetParent(null);
-        // On peut ajouter un petit effet avant de détruire
-        Destroy(gameObject, 0.2f);
+        transform.SetParent(null); // Detach from the parent unit.
+        Destroy(gameObject, 0.2f); // Destroy the banner after a short delay.
     }
 
     #endregion
 
     #region Private Logic
 
+    /// <summary>
+    /// Initializes the position, rotation, and state of the banner.
+    /// </summary>
+    /// <param name="initialPosition">The initial world position for the banner.</param>
     private void InitializeTransform(Vector3 initialPosition)
     {
         baseWorldPosition = initialPosition;
@@ -179,13 +278,15 @@ public class BannerMovement : MonoBehaviour
     }
 
     /// <summary>
-    /// FEATURE DU FICHIER 2: Applique le balancement avancé basé sur un pivot.
+    /// Applies the swaying motion (rotation or position) to the banner.
     /// </summary>
     private void ApplySwaying()
     {
+        // Interpolate the current sway value towards the target for smooth movement.
         currentSwayActual = Mathf.Lerp(currentSwayActual, currentSwayTarget, Time.deltaTime * swayTransitionSpeed);
 
-        if (shouldFaceCamera && attachedUnit == null) // Pour les bannières statiques, on rafraîchit l'orientation
+        // For static banners, refresh the orientation towards the camera if needed.
+        if (shouldFaceCamera && attachedUnit == null) 
         {
             FaceCamera();
             baseWorldRotation = transform.rotation;
@@ -193,25 +294,29 @@ public class BannerMovement : MonoBehaviour
 
         if (useRotationSway)
         {
-            // Calcul du pivot pour une rotation naturelle
+            // Calculate the pivot point for a natural-looking rotation.
             float pivotYWorldOffset = bannerHeight * (pivotOffsetRatio - 0.5f);
             Vector3 pivotPoint = baseWorldPosition + transform.up * pivotYWorldOffset;
 
-            // Appliquer la rotation de base (vers la caméra) et la rotation de balancement
+            // Apply the base rotation (face camera) and then the sway rotation.
             transform.rotation = baseWorldRotation * Quaternion.AngleAxis(currentSwayActual, transform.right);
 
-            // Ajuster la position pour simuler la rotation autour du pivot
+            // Adjust the position to simulate the rotation around the pivot point.
+            // This is crucial so that the base of the banner doesn't move if the pivot is at the base.
             transform.position = baseWorldPosition;
             transform.RotateAround(pivotPoint, transform.right, currentSwayActual);
         }
         else
         {
-            // Balancement simple en position
+            // Apply a simple lateral position sway.
             Vector3 swayOffsetVector = transform.right * currentSwayActual;
             transform.position = baseWorldPosition + swayOffsetVector;
         }
     }
 
+    /// <summary>
+    /// Orients the banner to face the main camera.
+    /// </summary>
     private void FaceCamera()
     {
         if (mainCamera != null)
@@ -225,7 +330,8 @@ public class BannerMovement : MonoBehaviour
     #region Editor Gizmos
 
     /// <summary>
-    /// FEATURE DU FICHIER 2: Dessine des aides visuelles dans l'éditeur.
+    /// Draws visual aids in the Unity editor to facilitate configuration.
+    /// Displays the base point, pivot, and movement range.
     /// </summary>
     void OnDrawGizmosSelected()
     {
@@ -240,6 +346,7 @@ public class BannerMovement : MonoBehaviour
 
         if (useRotationSway)
         {
+            // Draw the pivot and the rotation arc.
             float pivotYOffset = bannerHeight * (pivotOffsetRatio - 0.5f);
             Vector3 pivotPointPreview = positionToDrawFrom + transform.up * pivotYOffset;
             Gizmos.color = Color.red;
@@ -253,6 +360,7 @@ public class BannerMovement : MonoBehaviour
         }
         else
         {
+            // Draw the line for the lateral sway movement.
             Gizmos.color = Color.green;
             Vector3 leftExtent = positionToDrawFrom - (transform.right * swayAmount);
             Vector3 rightExtent = positionToDrawFrom + (transform.right * swayAmount);

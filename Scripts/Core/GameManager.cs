@@ -5,17 +5,43 @@ using System.Collections;
 using System.Collections.Generic;
 using ScriptableObjects;
 
+/// <summary>
+/// Enumeration representing the different states of the game.
+/// </summary>
 public enum GameState { Boot, MainMenu, Hub, Loading, InLevel, EndGame }
 
+/// <summary>
+/// Enumeration representing the different input modes for the game.
+/// </summary>
 public enum InputMode { UI, Gameplay, Disabled }
 
+/// <summary>
+/// Configuration data for each game state, including music state, transition settings, and input mode.
+/// </summary>
 [System.Serializable]
 public class GameStateConfig
 {
+    /// <summary>
+    /// The music state to set when entering this game state.
+    /// </summary>
     public string musicState;
+    
+    /// <summary>
+    /// Whether the music transition should be immediate or gradual.
+    /// </summary>
     public bool immediateTransition;
+    
+    /// <summary>
+    /// The input mode to activate when entering this game state.
+    /// </summary>
     public InputMode inputMode;
 
+    /// <summary>
+    /// Initializes a new instance of the GameStateConfig class.
+    /// </summary>
+    /// <param name="musicState">The music state to set when entering this game state.</param>
+    /// <param name="immediateTransition">Whether the music transition should be immediate or gradual.</param>
+    /// <param name="inputMode">The input mode to activate when entering this game state.</param>
     public GameStateConfig(string musicState, bool immediateTransition, InputMode inputMode)
     {
         this.musicState = musicState;
@@ -24,25 +50,62 @@ public class GameStateConfig
     }
 }
 
+/// <summary>
+/// Central game manager that handles scene transitions, game state management, and coordinates other systems.
+/// Inherits from SingletonPersistent to ensure there's only one instance across scenes.
+/// </summary>
 public class GameManager : SingletonPersistent<GameManager>
 {
+    /// <summary>
+    /// Event triggered when the game state changes.
+    /// </summary>
     public static event Action<GameState> OnGameStateChanged;
 
+    /// <summary>
+    /// Gets the current game state.
+    /// </summary>
     public GameState CurrentState { get; private set; } = GameState.Boot;
 
+    /// <summary>
+    /// The name of the currently active scene.
+    /// </summary>
     private string _currentActiveSceneName = "";
+    
+    /// <summary>
+    /// Reference to the currently running scene loading coroutine.
+    /// </summary>
     private Coroutine _loadSceneCoroutine;
 
     [Header("Scene Data")]
+    /// <summary>
+    /// Configuration data for the main menu scene.
+    /// </summary>
     [SerializeField] private LevelData_SO mainMenuSceneData;
+    
+    /// <summary>
+    /// Configuration data for the hub scene.
+    /// </summary>
     [SerializeField] private LevelData_SO hubSceneData;
+    
+    /// <summary>
+    /// The level data for the currently loading or loaded level.
+    /// </summary>
     public static LevelData_SO CurrentLevelToLoad { get; private set; }
     
     [Header("Scene Loading")]
+    /// <summary>
+    /// The name of the loading scene to display during transitions.
+    /// </summary>
     [SerializeField] private string loadingSceneName = "LoadingScene";
+    
+    /// <summary>
+    /// Minimum time in seconds to display the loading screen.
+    /// </summary>
     [SerializeField] private float minLoadingTime = 2.0f;
 
-    // Configuration des états du jeu
+    /// <summary>
+    /// Configuration mapping for each game state, defining music state, transition settings, and input mode.
+    /// </summary>
     private static readonly Dictionary<GameState, GameStateConfig> _gameStateConfigs = new Dictionary<GameState, GameStateConfig>
     {
         { GameState.Boot, new GameStateConfig("", false, InputMode.Disabled) },
@@ -53,13 +116,20 @@ public class GameManager : SingletonPersistent<GameManager>
         { GameState.EndGame, new GameStateConfig("EndGame", false, InputMode.UI) } // EndGame music géré par WinLoseController
     };
 
+    /// <summary>
+    /// Initializes the GameManager singleton instance.
+    /// </summary>
     protected override void Awake()
     {
         base.Awake();
     }
 
+    /// <summary>
+    /// Handles initial game startup, including debug mode detection and scene loading.
+    /// </summary>
     private void Start()
     {
+        // Check if the game was launched from debug mode
         bool launchedFromDebug = PlayerPrefs.GetInt("DebugMode_LaunchedFromDebug", 0) == 1;
 
         if (launchedFromDebug)
@@ -118,9 +188,13 @@ public class GameManager : SingletonPersistent<GameManager>
         }
     }
 
+    /// <summary>
+    /// Loads the hub scene with the specified or default hub data.
+    /// </summary>
+    /// <param name="specificHubData">Optional specific hub data to use instead of the default.</param>
     public void LoadHub(LevelData_SO specificHubData = null)
     {
-        string sceneToLoad = "MainHub"; // Scène Hub par défaut
+        string sceneToLoad = "MainHub"; // Default hub scene name
         LevelData_SO dataToUse = specificHubData ?? hubSceneData;
 
         if (dataToUse != null && !string.IsNullOrEmpty(dataToUse.SceneName))
@@ -135,6 +209,10 @@ public class GameManager : SingletonPersistent<GameManager>
         LoadSceneByName(sceneToLoad, GameState.Hub);
     }
 
+    /// <summary>
+    /// Loads a specific level using the provided level data.
+    /// </summary>
+    /// <param name="levelData">The level data containing scene information and configuration.</param>
     public void LoadLevel(LevelData_SO levelData)
     {
         if (levelData == null || string.IsNullOrEmpty(levelData.SceneName))
@@ -147,6 +225,9 @@ public class GameManager : SingletonPersistent<GameManager>
         LoadSceneByName(levelData.SceneName, GameState.InLevel);
     }
 
+    /// <summary>
+    /// Loads the main menu scene using the configured main menu data.
+    /// </summary>
     public void LoadMainMenu()
     {
         string sceneToLoad = "MainMenu";
@@ -167,10 +248,15 @@ public class GameManager : SingletonPersistent<GameManager>
     /// </summary>
     /// <param name="levelID">L'ID du niveau à rechercher.</param>
     /// <returns>L'asset LevelData_SO ou null si non trouvé.</returns>
+    /// <summary>
+    /// Finds a LevelData_SO asset in the Resources folder using its ID.
+    /// </summary>
+    /// <param name="levelID">The ID of the level to search for.</param>
+    /// <returns>The LevelData_SO asset or null if not found.</returns>
     private LevelData_SO FindLevelDataByID(string levelID)
     {
-        // Charge tous les LevelData_SO depuis tous les sous-dossiers de "Resources".
-        // Assurez-vous que le chemin est correct. Par exemple, "Data/Levels"
+        // Load all LevelData_SO from all subfolders of "Resources".
+        // Make sure the path is correct. For example, "Data/Levels"
         LevelData_SO[] allLevels = Resources.LoadAll<LevelData_SO>("Data/Levels"); 
 
         Debug.Log($"[GameManager] Recherche de '{levelID}' parmi {allLevels.Length} niveaux trouvés dans Resources/Data/Levels.");
@@ -186,6 +272,11 @@ public class GameManager : SingletonPersistent<GameManager>
         // Si on ne trouve rien, on retourne null.
         return null;
     }
+    /// <summary>
+    /// Loads a scene by name and sets the target game state after loading.
+    /// </summary>
+    /// <param name="sceneName">The name of the scene to load.</param>
+    /// <param name="targetStateAfterLoad">The game state to set after the scene is loaded.</param>
     private void LoadSceneByName(string sceneName, GameState targetStateAfterLoad)
     {
         if (string.IsNullOrEmpty(sceneName))
@@ -459,12 +550,16 @@ public class GameManager : SingletonPersistent<GameManager>
         _loadSceneCoroutine = null;
     }
 
+    /// <summary>
+    /// Sets the current game state and handles all associated state transitions including music, input, and system resets.
+    /// </summary>
+    /// <param name="newState">The new game state to set.</param>
     public void SetState(GameState newState)
     {
-        if (CurrentState == newState && newState != GameState.Boot && newState != GameState.Loading) // Permettre la transition de Boot/Loading vers le même état final
+        if (CurrentState == newState && newState != GameState.Boot && newState != GameState.Loading) // Allow transition from Boot/Loading to the same final state
         {
              Debug.Log($"[GameManager] SetState: État '{newState}' demandé, mais déjà actif. La logique d'état sera quand même exécutée pour assurer la cohérence.");
-            // Ne pas return ici pour permettre au WinLoseController de se réinitialiser si nécessaire
+            // Don't return here to allow WinLoseController to reset if necessary
         }
 
         GameState previousState = CurrentState;

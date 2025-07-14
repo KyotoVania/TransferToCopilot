@@ -1,26 +1,62 @@
 using UnityEngine;
 using System;
 using System.Collections;
-using AK.Wwise; // Wwise Unity namespace
+using AK.Wwise;
 
+/// <summary>
+/// Singleton manager for music and audio control using Wwise.
+/// Handles music state transitions, beat synchronization, and audio events throughout the game.
+/// </summary>
 public class MusicManager : MonoBehaviour
 {
+    /// <summary>
+    /// Gets the singleton instance of the MusicManager.
+    /// </summary>
     public static MusicManager Instance { get; private set; }
 
     [Header("Wwise Configuration")]
+    /// <summary>
+    /// Wwise event for starting playback of the main Music Switch Container.
+    /// </summary>
     [Tooltip("Event Wwise pour démarrer la lecture du Music Switch Container principal (ex: Play_Level_Music).")]
     [SerializeField] private AK.Wwise.Event playMusicEvent;
 
-    [Header("Music Switches (doivent correspondre au groupe 'MusicState' dans Wwise)")]
+    [Header("Music Switches (must match 'MusicState' group in Wwise)")]
+    /// <summary>
+    /// Wwise switch for exploration music state.
+    /// </summary>
     public AK.Wwise.Switch explorationSwitch;
+    
+    /// <summary>
+    /// Wwise switch for combat music state.
+    /// </summary>
     public AK.Wwise.Switch combatSwitch;
+    
+    /// <summary>
+    /// Wwise switch for boss music state.
+    /// </summary>
     public AK.Wwise.Switch bossSwitch;
+    
+    /// <summary>
+    /// Wwise switch for silence state.
+    /// </summary>
     public AK.Wwise.Switch silenceSwitch;
     
+    /// <summary>
+    /// Wwise switch for main menu music.
+    /// </summary>
     [Tooltip("Switch Wwise pour la musique du menu principal.")]
     public AK.Wwise.Switch mainMenuSwitch;
+    
+    /// <summary>
+    /// Wwise switch for hub music.
+    /// </summary>
     [Tooltip("Switch Wwise pour la musique du Hub.")]
-    public AK.Wwise.Switch hubSwitch; 
+    public AK.Wwise.Switch hubSwitch;
+    
+    /// <summary>
+    /// Wwise switch for end game state (victory/defeat).
+    /// </summary>
     [Tooltip("Switch Wwise pour l'état de fin de partie (victoire/défaite).")]
     public AK.Wwise.Switch endGameSwitch;
     
@@ -28,45 +64,90 @@ public class MusicManager : MonoBehaviour
     
 
     [Header("Wwise RTPCs")]
+    /// <summary>
+    /// RTPC for fever mode intensity control.
+    /// </summary>
     [Tooltip("RTPC pour l'intensité du mode Fever.")]
     [SerializeField] private AK.Wwise.RTPC feverIntensityRTPC;
     
-    
     [Header("Settings")]
+    /// <summary>
+    /// Minimum time between beat events to prevent spam.
+    /// </summary>
     [SerializeField] private float minTimeBetweenBeats = 0.1f;
+    
+    /// <summary>
+    /// Initial music state when the manager starts.
+    /// </summary>
     [SerializeField] private string initialMusicState = "Exploration";
 
-    // --- ÉVÉNEMENTS PUBLICS ---
+    // --- PUBLIC EVENTS ---
     /// <summary>
-    /// Événement principal déclenché à chaque battement de la musique Wwise.
-    /// Fournit la durée exacte de ce battement en secondes.
+    /// Main event triggered on each beat of the Wwise music.
+    /// Provides the exact duration of this beat in seconds.
     /// </summary>
     public event Action<float> OnBeat;
+    
+    /// <summary>
+    /// Event triggered when the music state changes.
+    /// </summary>
     public event Action<string> OnMusicStateChanged;
 
-
-    // --- PROPRIÉTÉS PUBLIQUES (POUR COMPATIBILITÉ) ---
+    // --- PUBLIC PROPERTIES ---
     /// <summary>
-    /// Propriété indiquant si le dernier battement a été traité. Utile pour les coroutines attendant un beat.
+    /// Property indicating if the last beat was processed. Useful for coroutines waiting for a beat.
     /// </summary>
     public static bool LastBeatWasProcessed { get; private set; }
 
     /// <summary>
-    /// Propriété publique pour obtenir la durée du battement actuel en secondes.
+    /// Public property to get the current beat duration in seconds.
     /// </summary>
     public float BeatDuration => currentBeatDuration;
 
-    // --- VARIABLES PRIVÉES ---
+    // --- PRIVATE VARIABLES ---
+    /// <summary>
+    /// The current music state identifier.
+    /// </summary>
     private string currentMusicState;
+    
+    /// <summary>
+    /// The Wwise playing ID for the current music event.
+    /// </summary>
     private uint playingID_MusicEvent = AkUnitySoundEngine.AK_INVALID_PLAYING_ID;
+    
+    /// <summary>
+    /// The current beat duration in seconds.
+    /// </summary>
     private float currentBeatDuration = 0.5f;
+    
+    /// <summary>
+    /// Public counter for the number of beats processed.
+    /// </summary>
     public int PublicBeatCount { get; private set; } = 0;
+    
+    /// <summary>
+    /// Flag indicating if music is currently playing.
+    /// </summary>
     private bool musicPlaying = false;
+    
+    /// <summary>
+    /// Time of the last beat event.
+    /// </summary>
     private float lastBeatTime;
-    private bool beatOccurredThisFrame = false; // Flag interne pour LastBeatWasProcessed
+    
+    /// <summary>
+    /// Internal flag for LastBeatWasProcessed property.
+    /// </summary>
+    private bool beatOccurredThisFrame = false;
 
+    /// <summary>
+    /// Gets the current Wwise music state.
+    /// </summary>
     public string CurrentWwiseMusicState => currentMusicState;
 
+    /// <summary>
+    /// Initializes the MusicManager singleton instance.
+    /// </summary>
     private void Awake()
     {
         if (Instance == null)
@@ -85,11 +166,13 @@ public class MusicManager : MonoBehaviour
         }
     }
 
+    /// <summary>
+    /// Initializes the music system and sets the initial state.
+    /// </summary>
     private void Start()
     {
         if (AkUnitySoundEngine.IsInitialized())
         {
-         
             InitializeMusicAndSetState(initialMusicState);
         }
         else
@@ -98,6 +181,9 @@ public class MusicManager : MonoBehaviour
         }
     }
 
+    /// <summary>
+    /// Updates the Wwise audio engine each frame.
+    /// </summary>
     private void Update()
     {
         if (AkUnitySoundEngine.IsInitialized())
@@ -106,13 +192,19 @@ public class MusicManager : MonoBehaviour
         }
     }
 
-    // Mis dans LateUpdate pour s'assurer qu'il est réinitialisé après que tous les Update des autres scripts aient eu lieu.
+    /// <summary>
+    /// Updates the beat processing flag after all other Update calls.
+    /// </summary>
     private void LateUpdate()
     {
         LastBeatWasProcessed = beatOccurredThisFrame;
-        beatOccurredThisFrame = false; // Réinitialiser pour la prochaine frame
+        beatOccurredThisFrame = false;
     }
 
+    /// <summary>
+    /// Initializes the music system and sets the target state.
+    /// </summary>
+    /// <param name="targetState">The target music state to initialize with.</param>
     private void InitializeMusicAndSetState(string targetState)
     {
         if (!AkUnitySoundEngine.IsInitialized())
@@ -155,6 +247,12 @@ public class MusicManager : MonoBehaviour
     }
 
 
+    /// <summary>
+    /// Handles Wwise music callbacks for beat synchronization and event management.
+    /// </summary>
+    /// <param name="in_cookie">Cookie object passed to the callback.</param>
+    /// <param name="in_type">Type of the callback.</param>
+    /// <param name="in_info">Information about the callback.</param>
     private void OnMusicCallback(object in_cookie, AkCallbackType in_type, AkCallbackInfo in_info)
     {
         if (!AkUnitySoundEngine.IsInitialized()) return;
@@ -170,10 +268,10 @@ public class MusicManager : MonoBehaviour
                     lastBeatTime = Time.time;
                     PublicBeatCount++;
                     
-                    // Déclenchement de l'événement statique avec la durée du beat
+                    // Trigger the static event with beat duration
                     OnBeat?.Invoke(currentBeatDuration);
 
-                    // Mise à jour du flag pour LastBeatWasProcessed
+                    // Update flag for LastBeatWasProcessed
                     beatOccurredThisFrame = true;
                 }
             }
@@ -190,6 +288,11 @@ public class MusicManager : MonoBehaviour
         }
     }
 
+    /// <summary>
+    /// Sets the music state and handles appropriate Wwise switch changes.
+    /// </summary>
+    /// <param name="newState">The new music state to set.</param>
+    /// <param name="immediate">Whether the transition should be immediate.</param>
     public void SetMusicState(string newState, bool immediate = false)
     {
         if (!AkUnitySoundEngine.IsInitialized())
@@ -229,6 +332,10 @@ public class MusicManager : MonoBehaviour
         }
     }
 
+    /// <summary>
+    /// Applies the appropriate Wwise switch for the given state name.
+    /// </summary>
+    /// <param name="stateName">The name of the state to apply the switch for.</param>
     private void ApplyMusicSwitch(string stateName)
     {
         AK.Wwise.Switch targetSwitch = null;

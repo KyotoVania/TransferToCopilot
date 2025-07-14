@@ -120,11 +120,9 @@
                 characterPreview.ClearPreview();
             }
             
-            // ⚠️ On ne rend le contrôle au Hub QUE si on ne va pas vers un sous-panel
-            if (!_isTransitioningToSubPanel)
-            {
-                ReturnControlToHub();
-            }
+            // ⚠️ NE PAS rendre le contrôle au Hub quand on revient vers TeamManagementUI
+            // Le TeamManagementUI garde le contrôle via son système de mémorisation
+            // ReturnControlToHub() n'est appelé que depuis HidePanel() si on retourne vraiment au Hub
         }
 
         private void Update()
@@ -616,15 +614,16 @@
             
             if (teamManagementPanel != null)
             {
-                // ✨ RETOUR SIMPLE comme CharacterSelectionUI
+                // ✨ RETOUR SIMPLE - On ne rend PAS le contrôle au Hub
+                // Le TeamManagementUI garde le contrôle et va automatiquement restaurer le focus
                 teamManagementPanel.SetActive(true);
                 gameObject.SetActive(false);
-                
-                // Le TeamManagementUI va automatiquement restaurer le focus
             }
             else
             {
                 Debug.LogError("[EquipmentPanelUI] Référence teamManagementPanel manquante !");
+                // En cas d'erreur, rendre le contrôle au Hub
+                ReturnControlToHub();
             }
         }
 

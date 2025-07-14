@@ -3,55 +3,76 @@ using System.Collections.Generic;
 using System;
 using System.Linq;
 using ScriptableObjects;
-// Assure-toi que ce script est dans le bon dossier, par exemple Scripts/Core/
-// et qu'il hérite de SingletonPersistent<TeamManager>
+
+/// <summary>
+/// Persistent singleton manager for handling team composition and character availability.
+/// Manages the player's active team of up to 4 characters and tracks which characters are available.
+/// Syncs with PlayerDataManager to maintain persistence across sessions.
+/// </summary>
 public class TeamManager : SingletonPersistent<TeamManager>
 {
-    // --- Événements Statiques ---
+    // --- Static Events ---
     /// <summary>
-    /// Déclenché lorsque l'équipe active du joueur est modifiée.
-    /// Fournit la nouvelle liste de CharacterData_SO de l'équipe active.
+    /// Triggered when the player's active team composition is modified.
+    /// Provides the new list of CharacterData_SO for the active team.
     /// </summary>
     public static event Action<List<CharacterData_SO>> OnActiveTeamChanged;
 
-    // --- Listes Internes ---
-    private List<CharacterData_SO> _availableCharacters = new List<CharacterData_SO>();
-    private List<CharacterData_SO> _activeTeam = new List<CharacterData_SO>(new CharacterData_SO[4]); // Initialise avec 4 emplacements nulls
-
-    // --- Propriétés Publiques (Accesseurs) ---
+    // --- Internal Lists ---
     /// <summary>
-    /// Retourne une COPIE de la liste des personnages actuellement débloqués par le joueur.
+    /// List of characters currently unlocked and available to the player.
+    /// </summary>
+    private List<CharacterData_SO> _availableCharacters = new List<CharacterData_SO>();
+    
+    /// <summary>
+    /// List of characters forming the active team (initialized with 4 null slots).
+    /// </summary>
+    private List<CharacterData_SO> _activeTeam = new List<CharacterData_SO>(new CharacterData_SO[4]);
+
+    // --- Public Properties (Accessors) ---
+    /// <summary>
+    /// Returns a COPY of the list of characters currently unlocked by the player.
     /// </summary>
     public List<CharacterData_SO> AvailableCharacters => new List<CharacterData_SO>(_availableCharacters);
 
     /// <summary>
-    /// Retourne une COPIE de la liste des personnages formant l'équipe active (peut contenir des nulls si moins de 4 persos).
+    /// Returns a COPY of the list of characters forming the active team (may contain nulls if fewer than 4 characters).
     /// </summary>
     public List<CharacterData_SO> ActiveTeam => new List<CharacterData_SO>(_activeTeam);
 
-    // --- Méthodes Unity ---
+    // --- Unity Methods ---
+    /// <summary>
+    /// Initializes the TeamManager singleton and subscribes to PlayerDataManager events.
+    /// </summary>
     protected override void Awake()
     {
-        base.Awake(); // Gère le pattern Singleton et DontDestroyOnLoad
+        base.Awake(); // Handles Singleton pattern and DontDestroyOnLoad
 
-        // S'abonner aux événements du PlayerDataManager
-        // Ces abonnements se feront même si PlayerDataManager.Instance n'est pas encore prêt,
-        // car les events sont statiques. L'invocation se fera au bon moment.
+        // Subscribe to PlayerDataManager events
+        // These subscriptions will work even if PlayerDataManager.Instance isn't ready yet,
+        // because the events are static. The invocation will happen at the right time.
         PlayerDataManager.OnPlayerDataLoaded += HandlePlayerDataLoaded;
         PlayerDataManager.OnCharacterUnlocked += HandleCharacterUnlocked;
         Debug.Log("[TeamManager] Awake complété et abonné aux événements de PlayerDataManager.");
     }
 
+    /// <summary>
+    /// Unsubscribes from PlayerDataManager events to prevent memory leaks.
+    /// </summary>
     private void OnDestroy()
     {
-        // Toujours se désabonner pour éviter les fuites de mémoire
+        // Always unsubscribe to avoid memory leaks
         PlayerDataManager.OnPlayerDataLoaded -= HandlePlayerDataLoaded;
         PlayerDataManager.OnCharacterUnlocked -= HandleCharacterUnlocked;
         Debug.Log("[TeamManager] OnDestroy appelé et désabonné des événements.");
     }
 
-    // --- Logique d'Initialisation ---
+    // --- Initialization Logic ---
 
+    /// <summary>
+    /// Handles the PlayerDataManager's data loaded event to initialize team composition.
+    /// Updates available characters and active team based on player data.
+    /// </summary>
     private void HandlePlayerDataLoaded()
     {
         Debug.Log("[TeamManager] Réception de OnPlayerDataLoaded. Initialisation de l'équipe...");
@@ -123,6 +144,10 @@ public class TeamManager : SingletonPersistent<TeamManager>
         OnActiveTeamChanged?.Invoke(new List<CharacterData_SO>(_activeTeam));
     }
 
+    /// <summary>
+    /// Handles the character unlocked event to update available characters list.
+    /// </summary>
+    /// <param name="characterID">The ID of the newly unlocked character.</param>
     private void HandleCharacterUnlocked(string characterID)
     {
         CharacterData_SO character = FindCharacterDataByID(characterID);
@@ -132,7 +157,7 @@ public class TeamManager : SingletonPersistent<TeamManager>
             {
                 _availableCharacters.Add(character);
                 Debug.Log($"[TeamManager] Personnage '{character.DisplayName}' (ID: {characterID}) ajouté à la liste des disponibles.");
-                // Optionnel : Notifier un changement dans les personnages disponibles si l'UI doit se mettre à jour.
+                // Optional: Notify a change in available characters if UI needs to update.
                 // public static event Action<List<CharacterData_SO>> OnAvailableCharactersChanged;
                 // OnAvailableCharactersChanged?.Invoke(new List<CharacterData_SO>(_availableCharacters));
             }
@@ -143,13 +168,13 @@ public class TeamManager : SingletonPersistent<TeamManager>
         }
     }
 
-    // --- Gestion de l'Équipe Active ---
+    // --- Active Team Management ---
 
     /// <summary>
-    /// Définit la nouvelle équipe active du joueur.
+    /// Sets the new active team composition for the player.
     /// </summary>
-    /// <param name="newTeamComposition">Liste des CharacterData_SO pour la nouvelle équipe (taille max 4). Les éléments peuvent être null.</param>
-    /// <returns>True si l'équipe a été mise à jour, false sinon.</returns>
+    /// <param name="newTeamComposition">List of CharacterData_SO for the new team (max size 4). Elements can be null.</param>
+    /// <returns>True if the team was successfully updated, false otherwise.</returns>
     public bool SetActiveTeam(List<CharacterData_SO> newTeamComposition)
     {
         if (newTeamComposition == null)
@@ -198,14 +223,19 @@ public class TeamManager : SingletonPersistent<TeamManager>
         return true;
     }
 
-    // --- Méthodes Utilitaires ---
+    // --- Utility Methods ---
 
+    /// <summary>
+    /// Finds a CharacterData_SO by its ID from the Resources folder.
+    /// </summary>
+    /// <param name="id">The character ID to search for.</param>
+    /// <returns>The CharacterData_SO if found, null otherwise.</returns>
     private CharacterData_SO FindCharacterDataByID(string id)
     {
-        // Assure-toi que le chemin correspond à l'emplacement de tes SOs dans le dossier Resources
+        // Make sure the path matches your SO location in the Resources folder
         CharacterData_SO data = Resources.Load<CharacterData_SO>($"Data/Characters/{id}");
-        // Le nom du fichier SO doit correspondre exactement à son CharacterID pour que cela fonctionne.
-        // Par exemple, si CharacterID = "CD_Hero", le fichier doit être "CD_Hero.asset".
+        // The SO file name must exactly match its CharacterID for this to work.
+        // For example, if CharacterID = "CD_Hero", the file must be "CD_Hero.asset".
         if (data == null)
         {
             Debug.LogWarning($"[TeamManager] Impossible de charger CharacterData_SO depuis 'Resources/Data/Characters/{id}'. Vérifiez le chemin et le nom du fichier.");
@@ -213,14 +243,22 @@ public class TeamManager : SingletonPersistent<TeamManager>
         return data;
     }
 
+    /// <summary>
+    /// Finds a CharacterData_SO by its ID within a given list.
+    /// </summary>
+    /// <param name="list">The list to search in.</param>
+    /// <param name="id">The character ID to search for.</param>
+    /// <returns>The CharacterData_SO if found, null otherwise.</returns>
     private CharacterData_SO FindCharacterDataInList(List<CharacterData_SO> list, string id)
     {
         return list.Find(c => c != null && c.CharacterID == id);
     }
 
     /// <summary>
-    /// Vérifie si un personnage spécifique est dans l'équipe active.
+    /// Checks if a specific character is in the active team.
     /// </summary>
+    /// <param name="character">The character to check for.</param>
+    /// <returns>True if the character is in the active team, false otherwise.</returns>
     public bool IsCharacterInActiveTeam(CharacterData_SO character)
     {
         if (character == null) return false;
@@ -228,9 +266,10 @@ public class TeamManager : SingletonPersistent<TeamManager>
     }
 
     /// <summary>
-    /// Tente d'ajouter un personnage à la première place disponible dans l'équipe active.
+    /// Attempts to add a character to the first available slot in the active team.
     /// </summary>
-    /// <returns>True si le personnage a été ajouté, false sinon (équipe pleine ou personnage non dispo).</returns>
+    /// <param name="characterToAdd">The character to add to the active team.</param>
+    /// <returns>True if the character was added, false otherwise (team full or character not available).</returns>
     public bool TryAddCharacterToActiveTeam(CharacterData_SO characterToAdd)
     {
         if (characterToAdd == null || !_availableCharacters.Contains(characterToAdd) || IsCharacterInActiveTeam(characterToAdd))
@@ -253,8 +292,10 @@ public class TeamManager : SingletonPersistent<TeamManager>
     }
 
     /// <summary>
-    /// Tente de retirer un personnage de l'équipe active.
+    /// Attempts to remove a character from the active team.
     /// </summary>
+    /// <param name="characterToRemove">The character to remove from the active team.</param>
+    /// <returns>True if the character was removed, false otherwise.</returns>
     public bool TryRemoveCharacterFromActiveTeam(CharacterData_SO characterToRemove)
     {
         if (characterToRemove == null || !IsCharacterInActiveTeam(characterToRemove))

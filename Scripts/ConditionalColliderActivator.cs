@@ -1,37 +1,72 @@
 using UnityEngine;
 
 /// <summary>
-/// Activateur conditionnel qui peut contrôler les Colliders et/ou l'état IsTargetable d'un bâtiment.
-/// Remplace ConditionalColliderActivator avec plus de fonctionnalités.
+/// Defines the operating mode for the conditional activator.
 /// </summary>
 public enum ActivatorMode
 {
-    ColliderOnly,      // Contrôle uniquement le collider
-    TargetableOnly,    // Contrôle uniquement l'état IsTargetable
-    Both              // Contrôle les deux
+    /// <summary>
+    /// The activator will only control the enabled state of the Collider.
+    /// </summary>
+    ColliderOnly,
+
+    /// <summary>
+    /// The activator will only control the "targetable" state (IsTargetable) of the building.
+    /// </summary>
+    TargetableOnly,
+
+    /// <summary>
+    /// The activator will control both the Collider and the "targetable" state.
+    /// </summary>
+    Both
 }
 
-public class ConditionalActivator : MonoBehaviour, IScenarioTriggerable
+/// <summary>
+/// Activates or deactivates components (Collider) or states (IsTargetable of a Building)
+/// in response to a scenario event, implementing the IScenarioTriggerable interface.
+/// </summary>
+public class ConditionalColliderActivator : MonoBehaviour, IScenarioTriggerable
 {
     [Header("Settings")]
-    [Tooltip("Mode de fonctionnement de l'activateur")]
+    /// <summary>
+    /// Determines which components or states this script should control.
+    /// </summary>
+    [Tooltip("Operating mode of the activator")]
     [SerializeField] private ActivatorMode mode = ActivatorMode.ColliderOnly;
 
-    [Tooltip("Le Collider à activer ou désactiver (requis si mode = ColliderOnly ou Both)")]
+    /// <summary>
+    /// The Collider component to activate or deactivate. Required if the mode is `ColliderOnly` or `Both`.
+    /// If not assigned, the script will try to find a Collider on the same GameObject.
+    /// </summary>
+    [Tooltip("The Collider to activate or deactivate (required if mode = ColliderOnly or Both)")]
     [SerializeField] private Collider targetCollider;
 
-    [Tooltip("Le Building dont on veut contrôler l'état IsTargetable (requis si mode = TargetableOnly ou Both)")]
+    /// <summary>
+    /// The Building component whose `IsTargetable` state should be modified. Required if the mode is `TargetableOnly` or `Both`.
+    /// If not assigned, the script will try to find a Building on the same GameObject.
+    /// </summary>
+    [Tooltip("The Building whose IsTargetable state is to be controlled (required if mode = TargetableOnly or Both)")]
     [SerializeField] private Building targetBuilding;
 
-    [Tooltip("L'état dans lequel mettre la cible lorsque l'action est déclenchée")]
+    /// <summary>
+    /// The desired state for the target (Collider or Building) when the action is triggered.
+    /// If `true`, the target will be enabled/targetable. If `false`, it will be disabled/non-targetable.
+    /// </summary>
+    [Tooltip("The state to set the target to when the action is triggered")]
     [SerializeField] private bool shouldBeEnabled = true;
 
     [Header("Debug")]
+    /// <summary>
+    /// Enables log messages for debugging.
+    /// </summary>
     [SerializeField] private bool debugMode = false;
 
+    /// <summary>
+    /// Unity lifecycle method. Called on initialization.
+    /// Validates references and tries to find them automatically if they are not assigned.
+    /// </summary>
     private void Awake()
     {
-        // Validation et auto-détection
         if (mode == ActivatorMode.ColliderOnly || mode == ActivatorMode.Both)
         {
             if (targetCollider == null)
@@ -39,7 +74,7 @@ public class ConditionalActivator : MonoBehaviour, IScenarioTriggerable
                 targetCollider = GetComponent<Collider>();
                 if (targetCollider == null && debugMode)
                 {
-                    Debug.LogWarning($"[ConditionalActivator] sur {gameObject.name}: Aucun Collider assigné et aucun trouvé sur cet objet.", this);
+                    Debug.LogWarning($"[ConditionalActivator] on {gameObject.name}: No Collider assigned and none found on this object.", this);
                 }
             }
         }
@@ -51,14 +86,15 @@ public class ConditionalActivator : MonoBehaviour, IScenarioTriggerable
                 targetBuilding = GetComponent<Building>();
                 if (targetBuilding == null && debugMode)
                 {
-                    Debug.LogWarning($"[ConditionalActivator] sur {gameObject.name}: Aucun Building assigné et aucun trouvé sur cet objet.", this);
+                    Debug.LogWarning($"[ConditionalActivator] on {gameObject.name}: No Building assigned and none found on this object.", this);
                 }
             }
         }
     }
 
     /// <summary>
-    /// Exécute l'action de changement d'état selon le mode configuré.
+    /// Triggers the main action of the script based on the configured mode.
+    /// This method is called by the LevelScenarioManager.
     /// </summary>
     public void TriggerAction()
     {
@@ -79,6 +115,9 @@ public class ConditionalActivator : MonoBehaviour, IScenarioTriggerable
         }
     }
 
+    /// <summary>
+    /// Modifies the `enabled` state of the `targetCollider`.
+    /// </summary>
     private void SetColliderState()
     {
         if (targetCollider != null)
@@ -86,15 +125,18 @@ public class ConditionalActivator : MonoBehaviour, IScenarioTriggerable
             targetCollider.enabled = shouldBeEnabled;
             if (debugMode)
             {
-                Debug.Log($"[ConditionalActivator] sur {gameObject.name}: Collider mis à l'état 'enabled = {shouldBeEnabled}'.", this);
+                Debug.Log($"[ConditionalActivator] on {gameObject.name}: Collider set to state 'enabled = {shouldBeEnabled}'.", this);
             }
         }
         else if (debugMode)
         {
-            Debug.LogWarning($"[ConditionalActivator] sur {gameObject.name}: Impossible de modifier le Collider car targetCollider est null.", this);
+            Debug.LogWarning($"[ConditionalActivator] on {gameObject.name}: Cannot modify Collider because targetCollider is null.", this);
         }
     }
 
+    /// <summary>
+    /// Modifies the `IsTargetable` state of the `targetBuilding`.
+    /// </summary>
     private void SetTargetableState()
     {
         if (targetBuilding != null)
@@ -102,17 +144,18 @@ public class ConditionalActivator : MonoBehaviour, IScenarioTriggerable
             targetBuilding.SetTargetable(shouldBeEnabled);
             if (debugMode)
             {
-                Debug.Log($"[ConditionalActivator] sur {gameObject.name}: Building IsTargetable mis à l'état '{shouldBeEnabled}'.", this);
+                Debug.Log($"[ConditionalActivator] on {gameObject.name}: Building IsTargetable set to state '{shouldBeEnabled}'.", this);
             }
         }
         else if (debugMode)
         {
-            Debug.LogWarning($"[ConditionalActivator] sur {gameObject.name}: Impossible de modifier IsTargetable car targetBuilding est null.", this);
+            Debug.LogWarning($"[ConditionalActivator] on {gameObject.name}: Cannot modify IsTargetable because targetBuilding is null.", this);
         }
     }
 
     /// <summary>
-    /// Méthode utilitaire pour inverser l'état actuel
+    /// Toggles the current state (`shouldBeEnabled`) and triggers the action.
+    /// Useful for switches or reversible actions.
     /// </summary>
     public void ToggleState()
     {
@@ -121,8 +164,9 @@ public class ConditionalActivator : MonoBehaviour, IScenarioTriggerable
     }
 
     /// <summary>
-    /// Méthode pour forcer un état spécifique via code
+    /// Forces a specific state (enabled or disabled) and triggers the action.
     /// </summary>
+    /// <param name="enabled">The state to apply. `true` to enable, `false` to disable.</param>
     public void SetState(bool enabled)
     {
         shouldBeEnabled = enabled;

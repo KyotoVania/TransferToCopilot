@@ -1,14 +1,20 @@
 using UnityEngine;
 
 /// <summary>
-/// Composant de données pour les projectiles qui doivent infliger des dégâts en pourcentage aux boss.
-/// S'ajoute dynamiquement aux projectiles tirés par les tours.
+/// Data component for projectiles that should inflict percentage-based damage to bosses.
+/// This is dynamically added to projectiles fired by towers.
 /// </summary>
 public class BossProjectileData : MonoBehaviour
 {
-    [Tooltip("Pourcentage de dégâts à infliger au boss (0-100).")]
+    /// <summary>
+    /// The percentage of damage to inflict on the boss (0-100).
+    /// </summary>
+    [Tooltip("Percentage of damage to inflict on the boss (0-100).")]
     public float damagePercentage = 1f;
     
-    [Tooltip("Indique si ce projectile vient d'une tour (pour les logs).")]
+    /// <summary>
+    /// Indicates if this projectile comes from a tower (for logging purposes).
+    /// </summary>
+    [Tooltip("Indicates if this projectile comes from a tower (for logs).")]
     public bool isFromTower = false;
 }
